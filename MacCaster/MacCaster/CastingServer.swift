@@ -3,47 +3,68 @@ import Combine
 import Network
 
 final class CastingServer: ObservableObject {
+    let port: UInt16
     @Published private(set) var isRunning = false
-    @Published private(set) var clientCount = 0
     @Published private(set) var lastError: String?
-
-    var port: UInt16 = 8318
-    var onNewClient: (() -> Void)?
+    var onClientCountChanged: ((Int) -> Void)?
 
     private var listener: NWListener?
     private var connections: [NWConnection] = []
+    private var clientResolutions: [ObjectIdentifier: (Int, Int)] = [:]
     private var pendingSends: [ObjectIdentifier: Int] = [:]
     private var lastConfig: Data?
 
-    var localIPs: [String] { Self.currentIPs() }
+    var maxRemoteResolution: (width: Int, height: Int)? {
+        let vals = clientResolutions.values
+        guard !vals.isEmpty else { return nil }
+        let maxW = vals.map(\.0).max()!
+        let maxH = vals.map(\.1).max()!
+        return (maxW, maxH)
+    }
 
-    @Published private(set) var remoteScreenSize: (width: Int, height: Int)?
+    static var localIPs: [String] {
+        var addresses: [String] = []
+        var ifaddr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return addresses }
+        var pointer: UnsafeMutablePointer<ifaddrs>? = first
+        while let current = pointer {
+            let iface = current.pointee
+            let family = iface.ifa_addr.pointee.sa_family
+            if family == UInt8(AF_INET), (iface.ifa_flags & UInt32(IFF_UP)) != 0, (iface.ifa_flags & UInt32(IFF_LOOPBACK)) == 0 {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                if getnameinfo(iface.ifa_addr, socklen_t(iface.ifa_addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
+                    let name = String(cString: host)
+                    if !name.hasPrefix("127.") { addresses.append(name) }
+                }
+            }
+            pointer = iface.ifa_next
+        }
+        freeifaddrs(ifaddr)
+        return addresses
+    }
+
+    init(port: UInt16) {
+        self.port = port
+    }
 
     func start() {
         guard listener == nil else { return }
         lastError = nil
         do {
-            let listener = try NWListener(using: .tcp, on: NWEndpoint.Port(rawValue: port)!)
-            listener.stateUpdateHandler = { [weak self] state in
+            let l = try NWListener(using: .tcp, on: NWEndpoint.Port(rawValue: port)!)
+            l.stateUpdateHandler = { [weak self] state in
                 DispatchQueue.main.async {
                     guard let self else { return }
                     switch state {
-                    case .ready:
-                        self.isRunning = true
-                    case .failed(let error):
-                        self.lastError = error.localizedDescription
-                        self.isRunning = false
-                        self.listener = nil
-                    default:
-                        break
+                    case .ready: self.isRunning = true
+                    case .failed(let e): self.lastError = e.localizedDescription; self.isRunning = false; self.listener = nil
+                    default: break
                     }
                 }
             }
-            listener.newConnectionHandler = { [weak self] connection in
-                self?.accept(connection)
-            }
-            listener.start(queue: .main)
-            self.listener = listener
+            l.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
+            l.start(queue: .main)
+            listener = l
         } catch {
             lastError = error.localizedDescription
         }
@@ -53,26 +74,31 @@ final class CastingServer: ObservableObject {
         connections.forEach { $0.cancel() }
         connections.removeAll()
         pendingSends.removeAll()
+        clientResolutions.removeAll()
         listener?.cancel()
         listener = nil
         isRunning = false
-        clientCount = 0
+        DispatchQueue.main.async { [weak self] in self?.onClientCountChanged?(0) }
     }
 
-    private func accept(_ connection: NWConnection) {
-        connection.stateUpdateHandler = { [weak self] state in
-            if case .failed = state {
-                self?.drop(connection)
-            }
+    private func accept(_ conn: NWConnection) {
+        conn.stateUpdateHandler = { [weak self] state in
+            if case .failed = state { self?.drop(conn) }
         }
-        connection.start(queue: .main)
-        connections.append(connection)
-        clientCount = connections.count
+        conn.start(queue: .main)
+        connections.append(conn)
+        DispatchQueue.main.async { [weak self] in self?.onClientCountChanged?(self?.connections.count ?? 0) }
         if let config = lastConfig {
-            send(type: 0, payload: config, to: connection)
+            send(type: 0, payload: config, to: conn)
         }
-        readResolution(from: connection)
-        onNewClient?()
+        readResolution(from: conn)
+    }
+
+    private func drop(_ conn: NWConnection) {
+        connections.removeAll { $0 === conn }
+        pendingSends[ObjectIdentifier(conn)] = nil
+        clientResolutions[ObjectIdentifier(conn)] = nil
+        DispatchQueue.main.async { [weak self] in self?.onClientCountChanged?(self?.connections.count ?? 0) }
     }
 
     private func readResolution(from conn: NWConnection) {
@@ -83,87 +109,49 @@ final class CastingServer: ObservableObject {
             guard type == 2, length == 8, data.count >= 13 else { return }
             let w = Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: UInt32.self).bigEndian })
             let h = Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: UInt32.self).bigEndian })
-            DispatchQueue.main.async { self.remoteScreenSize = (w, h) }
+            self.clientResolutions[ObjectIdentifier(conn)] = (w, h)
         }
     }
 
-    private func drop(_ connection: NWConnection) {
-        connections.removeAll { $0 === connection }
-        clientCount = connections.count
-        pendingSends[ObjectIdentifier(connection)] = nil
-    }
-
-    func sendConfig(codec: UInt8, parameterSets: [Data]) {
+    func sendConfig(_ serializedFD: Data) {
         var payload = Data()
-        payload.append(codec)
-        for ps in parameterSets {
-            payload.append(uint32: ps.count)
-            payload.append(ps)
-        }
+        payload.append(UInt8(3))
+        payload.append(uint32: serializedFD.count)
+        payload.append(serializedFD)
         DispatchQueue.main.async {
             self.lastConfig = payload
             self.broadcast(type: 0, payload: payload)
         }
     }
 
-    func sendFrame(_ data: Data, isKey: Bool) {
-        DispatchQueue.main.async {
-            self.broadcast(type: 1, payload: data)
-        }
+    func sendFrame(_ data: Data) {
+        DispatchQueue.main.async { self.broadcast(type: 1, payload: data) }
     }
 
     private func broadcast(type: UInt8, payload: Data) {
-        for connection in connections {
-            send(type: type, payload: payload, to: connection)
-        }
+        for conn in connections { send(type: type, payload: payload, to: conn) }
     }
 
-    private func send(type: UInt8, payload: Data, to connection: NWConnection) {
-        var message = Data()
-        message.append(uint32: payload.count)
-        message.append(type)
-        message.append(payload)
-        let key = ObjectIdentifier(connection)
+    private func send(type: UInt8, payload: Data, to conn: NWConnection) {
+        var msg = Data()
+        msg.append(uint32: payload.count)
+        msg.append(type)
+        msg.append(payload)
+        let key = ObjectIdentifier(conn)
         let pending = pendingSends[key] ?? 0
         guard pending < 8 else { return }
         pendingSends[key] = pending + 1
-        connection.send(content: message, completion: .contentProcessed { [weak self] _ in
+        conn.send(content: msg, completion: .contentProcessed { [weak self] _ in
             DispatchQueue.main.async {
                 self?.pendingSends[key] = max(0, (self?.pendingSends[key] ?? 1) - 1)
             }
         })
     }
-
-    static func currentIPs() -> [String] {
-        var addresses: [String] = []
-        var ifaddr: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&ifaddr) == 0, let first = ifaddr else { return addresses }
-        var pointer: UnsafeMutablePointer<ifaddrs>? = first
-        while let current = pointer {
-            let interface = current.pointee
-            let family = interface.ifa_addr.pointee.sa_family
-            if family == UInt8(AF_INET),
-               (interface.ifa_flags & UInt32(IFF_UP)) != 0,
-               (interface.ifa_flags & UInt32(IFF_LOOPBACK)) == 0 {
-                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                if getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
-                               &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 {
-                    let name = String(cString: host)
-                    if !name.hasPrefix("127.") {
-                        addresses.append(name)
-                    }
-                }
-            }
-            pointer = interface.ifa_next
-        }
-        freeifaddrs(ifaddr)
-        return addresses
-    }
 }
 
 private extension Data {
     mutating func append(uint32: Int) {
-        var value = UInt32(uint32).bigEndian
-        append(contentsOf: Swift.withUnsafeBytes(of: &value) { Array($0) })
+        var v = UInt32(uint32).bigEndian
+        Swift.withUnsafeBytes(of: &v) { append(contentsOf: $0) }
     }
 }

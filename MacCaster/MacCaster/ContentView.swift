@@ -1,231 +1,232 @@
 import SwiftUI
 import ScreenCaptureKit
-import AppKit
 
 struct ContentView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
-    @EnvironmentObject private var server: CastingServer
+    @State private var showAddSheet = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(spacing: 0) {
             header
+            Divider().padding(.vertical, 4)
 
-            Divider()
+            StreamListView(streamer: streamer, onAdd: { showAddSheet = true })
 
-            switch streamer.phase {
-            case .failed(let message):
-                errorPanel(message)
-            case .streaming(let name):
-                streamingPanel(name: name)
-            default:
-                sourcePanel()
-            }
+            Divider().padding(.vertical, 4)
 
-            Divider()
-
-            serverPanel
+            defaultSettingsPanel
         }
-        .padding(20)
-        .frame(minWidth: 600, minHeight: 460)
-        .task {
-            server.start()
-            streamer.bind(server: server)
-            streamer.loadShareableContent()
+        .padding(16)
+        .frame(minWidth: 640, minHeight: 480)
+        .sheet(isPresented: $showAddSheet) {
+            AddStreamSheet(streamer: streamer, isPresented: $showAddSheet)
         }
+        .task { streamer.loadShareableContent() }
     }
 
     private var header: some View {
         HStack {
-            Image(systemName: "display.2")
-                .font(.title)
-                .foregroundStyle(.blue)
-            Text("Mac 投屏到 iPad")
-                .font(.title2)
-                .bold()
+            Image(systemName: "display.2").font(.title)
+            Text("投屏控制台").font(.title2.bold())
             Spacer()
-            if case .streaming = streamer.phase {
-                Label("正在投屏", systemImage: "dot.radiowaves.left.and.right")
-                    .foregroundStyle(.green)
-            }
+            Text("\(streamer.sessions.count) 个流运行中")
+                .font(.caption).foregroundStyle(.secondary)
         }
     }
 
-    @ViewBuilder
-    private func sourcePanel() -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("选择要投屏的应用或窗口")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    streamer.loadShareableContent()
-                } label: {
-                    Label("刷新列表", systemImage: "arrow.clockwise")
-                }
+    private var defaultSettingsPanel: some View {
+        HStack(spacing: 16) {
+            Text("新建流默认设置").font(.caption).foregroundStyle(.secondary)
+            Toggle("H264", isOn: $streamer.defaultUseH264)
+                .toggleStyle(.switch).controlSize(.small)
+            HStack(spacing: 4) {
+                Text("码率").font(.caption)
+                Slider(value: Binding(get: { Double(streamer.defaultBitrate)/1_000_000 }, set: { streamer.defaultBitrate = Int($0 * 1_000_000) }), in: 8...100, step: 2)
+                    .frame(width: 100)
+                Text("\(Int(Double(streamer.defaultBitrate)/1_000_000))M").font(.caption).foregroundStyle(.secondary)
             }
-            if case .preparing = streamer.phase {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("正在获取屏幕内容…")
-                        .foregroundStyle(.secondary)
-                }
-            } else if streamer.appGroups.isEmpty {
-                Text("没有找到可投屏的窗口。请先打开一个应用窗口，或在 系统设置 → 隐私与安全性 → 屏幕录制 中允许本 App 后点击刷新。")
-                    .foregroundStyle(.secondary)
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(streamer.appGroups) { group in
-                            AppGroupRow(group: group, display: streamer.displays.first) { filter, name in
-                                streamer.start(filter: filter, name: name)
-                            }
-                        }
-                    }
-                }
+            HStack(spacing: 4) {
+                Text("FPS").font(.caption)
+                Picker("", selection: $streamer.defaultFPS) {
+                    Text("30").tag(30)
+                    Text("60").tag(60)
+                }.pickerStyle(.segmented).frame(width: 80)
             }
+            Spacer()
+            Text("端口范围 \(streamer.sessions.first?.port ?? 8318)–\(streamer.sessions.isEmpty ? 8318 : streamer.sessions.first!.port + UInt16(streamer.sessions.count - 1))")
+                .font(.caption).foregroundStyle(.tertiary)
         }
     }
+}
 
-    private func errorPanel(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("出错：\(message)")
-                .foregroundStyle(.red)
-            Text("提示：如果提示屏幕录制权限，请在 系统设置 → 隐私与安全性 → 屏幕录制 中允许本 App，然后重新打开窗口。")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Button("重新加载") {
-                streamer.loadShareableContent()
-            }
-        }
-    }
+private struct StreamListView: View {
+    @ObservedObject var streamer: ScreenStreamer
+    let onAdd: () -> Void
 
-    private func streamingPanel(name: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("正在投屏：\(name)")
-                        .bold()
-                    if server.clientCount > 0 {
-                        Text("已连接 \(server.clientCount) 台设备 · 帧率 \(Int(streamer.currentFPS)) fps")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Text("等待 iPad 连接…（在 iPad 上输入本机 IP 并连接）")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 6) {
+                ForEach(streamer.sessions) { session in
+                    SessionRow(session: session, onStop: { streamer.removeSession(session) })
                 }
-                Spacer()
-                Button("停止投屏") {
-                    streamer.stop()
+                Button(action: onAdd) {
+                    Label("添加投屏流", systemImage: "plus.circle.fill")
+                        .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.red)
-            }
-            HStack(spacing: 8) {
-                Text("FPS: \(Int(streamer.currentFPS))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Toggle("H264 编码", isOn: $streamer.useH264)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-            }
-            .font(.caption)
-            if streamer.useH264 {
-                HStack(spacing: 8) {
-                    Text("码率")
-                        .font(.caption)
-                    Slider(value: Binding(
-                        get: { Double(streamer.h264Bitrate) / 1_000_000 },
-                        set: { streamer.h264Bitrate = Int($0 * 1_000_000) }
-                    ), in: 8...100, step: 4)
-                    Text("\(Int(Double(streamer.h264Bitrate) / 1_000_000)) Mbps")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.08)))
-    }
-
-    private var serverPanel: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 10) {
-                Circle()
-                    .fill(server.isRunning ? Color.green : Color.red)
-                    .frame(width: 10, height: 10)
-                Text(server.isRunning ? "投屏服务运行中（端口 \(server.port)，TCP）" : "投屏服务已停止")
-                    .font(.callout)
-                Spacer()
-                Button(server.isRunning ? "停止服务" : "启动服务") {
-                    server.isRunning ? server.stop() : server.start()
-                }
-                .controlSize(.small)
-            }
-            Text("iPad 连接地址：\(server.localIPs.joined(separator: "、")) : \(server.port)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let error = server.lastError {
-                Text("服务错误：\(error)")
-                    .font(.caption)
-                    .foregroundStyle(.red)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .padding(.top, 4)
             }
         }
     }
 }
 
-struct AppGroupRow: View {
-    let group: ScreenStreamer.AppGroup
-    let display: SCDisplay?
-    let onStart: (SCContentFilter, String) -> Void
+private struct SessionRow: View {
+    @ObservedObject var session: StreamSession
+    let onStop: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                if let icon = group.icon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .frame(width: 20, height: 20)
-                } else {
-                    Image(systemName: "app")
-                        .foregroundStyle(.secondary)
-                }
-                Text(group.application.applicationName)
-                    .font(.callout)
-                    .bold()
-                Spacer()
-                if group.windows.count > 1, let display {
-                    Button("投屏整个应用") {
-                        onStart(
-                            SCContentFilter(display: display, including: [group.application], exceptingWindows: []),
-                            group.application.applicationName
-                        )
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            }
-            ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
+        HStack(spacing: 8) {
+            statusDot
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.contentName).font(.callout.bold()).lineLimit(1)
                 HStack(spacing: 8) {
-                    Image(systemName: "rectangle.on.rectangle")
-                        .foregroundStyle(.secondary)
-                    Text((window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? "")
-                        .font(.caption)
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Button("投屏") {
-                        let title = (window.title ?? "").isEmpty ? group.application.applicationName : window.title ?? ""
-                        onStart(SCContentFilter(desktopIndependentWindow: window), title)
+                    Label("\(session.port)", systemImage: "antenna.radiowaves.left.and.right").font(.caption2)
+                    Label(session.useH264 ? "H264" : "JPEG", systemImage: session.useH264 ? "play.rectangle" : "photo").font(.caption2)
+                    Label("\(Int(Double(session.bitrate)/1_000_000))M", systemImage: "speedometer").font(.caption2)
+                    if session.useH264 {
+                        Label("\(session.encWidth)×\(session.encHeight)", systemImage: "rectangle.on.rectangle").font(.caption2)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
                 }
-                .padding(.leading, 28)
+                HStack(spacing: 12) {
+                    Label("\(Int(session.currentFPS)) fps", systemImage: "gauge.with.dots.needle.33percent").font(.caption2)
+                    Label("\(session.clientCount) 设备", systemImage: "ipad").font(.caption2)
+                    Toggle("光标", isOn: $session.showsCursor).toggleStyle(.switch).controlSize(.mini)
+                }
             }
+            Spacer()
+            Button(action: onStop) {
+                Image(systemName: "stop.circle.fill").font(.title2).foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.08)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.06)))
+    }
+
+    private var statusDot: some View {
+        Circle().fill(session.phase == .streaming ? Color.green : Color.red).frame(width: 10, height: 10)
+    }
+}
+
+private struct AddStreamSheet: View {
+    @ObservedObject var streamer: ScreenStreamer
+    @Binding var isPresented: Bool
+
+    @State private var selectedFilter: SCContentFilter?
+    @State private var selectedName: String = ""
+    @State private var useH264: Bool
+    @State private var bitrate: Int
+    @State private var fps: Int
+    @State private var showsCursor: Bool = true
+
+    init(streamer: ScreenStreamer, isPresented: Binding<Bool>) {
+        self.streamer = streamer
+        self._isPresented = isPresented
+        self._useH264 = State(initialValue: streamer.defaultUseH264)
+        self._bitrate = State(initialValue: streamer.defaultBitrate)
+        self._fps = State(initialValue: streamer.defaultFPS)
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("添加投屏流").font(.title2.bold())
+                Spacer()
+                Button("取消") { isPresented = false }
+            }
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 6) {
+                    ForEach(streamer.displays, id: \.displayID) { display in
+                        contentButton(
+                            name: "显示器 \(Int(display.width))×\(Int(display.height))",
+                            filter: SCContentFilter(display: display, excludingWindows: []),
+                            icon: "display"
+                        )
+                    }
+                    ForEach(streamer.appGroups) { group in
+                        VStack(spacing: 2) {
+                            if group.windows.count > 1, let display = streamer.displays.first {
+                                contentButton(
+                                    name: "\(group.application.applicationName)（整个应用）",
+                                    filter: SCContentFilter(display: display, including: [group.application], exceptingWindows: []),
+                                    icon: "app"
+                                )
+                            }
+                            ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
+                                let title = (window.title ?? "").isEmpty ? group.application.applicationName : window.title ?? ""
+                                contentButton(
+                                    name: title,
+                                    filter: SCContentFilter(desktopIndependentWindow: window),
+                                    icon: "rectangle.on.rectangle"
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            if let _ = selectedFilter {
+                Divider()
+
+                HStack(spacing: 16) {
+                    Toggle("H264", isOn: $useH264).toggleStyle(.switch)
+                    HStack(spacing: 4) {
+                        Text("码率").font(.caption)
+                        Slider(value: Binding(get: { Double(bitrate)/1_000_000 }, set: { bitrate = Int($0 * 1_000_000) }), in: 8...100, step: 2).frame(width: 100)
+                        Text("\(Int(Double(bitrate)/1_000_000))M").font(.caption)
+                    }
+                    Picker("FPS", selection: $fps) {
+                        Text("30").tag(30)
+                        Text("60").tag(60)
+                    }.pickerStyle(.segmented).frame(width: 80)
+                    Toggle("光标", isOn: $showsCursor).toggleStyle(.switch)
+                }
+
+                HStack {
+                    Spacer()
+                    Button("开始投屏") {
+                        streamer.addSession(filter: selectedFilter!, name: selectedName, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                        isPresented = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedFilter == nil)
+                }
+            }
+        }
+        .padding(20)
+        .frame(width: 600, height: 560)
+    }
+
+    private func contentButton(name: String, filter: SCContentFilter, icon: String) -> some View {
+        Button(action: {
+            selectedFilter = filter
+            selectedName = name
+        }) {
+            HStack {
+                Image(systemName: icon).frame(width: 20)
+                Text(name).lineLimit(1)
+                Spacer()
+                if selectedFilter === filter {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.blue)
+                }
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 6).fill(selectedFilter === filter ? Color.blue.opacity(0.1) : Color.clear))
+        }
+        .buttonStyle(.plain)
     }
 }

@@ -20,59 +20,27 @@ final class ScreenStreamer: NSObject, ObservableObject {
         }
     }
 
-    enum Phase: Equatable {
-        case idle
-        case preparing
-        case streaming(String)
-        case failed(String)
-    }
-
-    @Published var phase: Phase = .idle
     @Published var appGroups: [AppGroup] = []
     @Published var displays: [SCDisplay] = []
-    @Published var currentFPS: Double = 0
-    @Published var useH264: Bool { didSet { UserDefaults.standard.set(useH264, forKey: "useH264") } }
-    @Published var h264Bitrate: Int {
-        didSet {
-            UserDefaults.standard.set(h264Bitrate, forKey: "h264Bitrate")
-            applyBitrate()
-        }
-    }
+    @Published var sessions: [StreamSession] = []
+    @Published var defaultUseH264: Bool { didSet { UserDefaults.standard.set(defaultUseH264, forKey: "defaultUseH264") } }
+    @Published var defaultBitrate: Int { didSet { UserDefaults.standard.set(defaultBitrate, forKey: "defaultBitrate") } }
+    @Published var defaultFPS: Int { didSet { UserDefaults.standard.set(defaultFPS, forKey: "defaultFPS") } }
+
+    private var nextPort: UInt16 = 8318
 
     override init() {
-        let ud = UserDefaults.standard
-        self.useH264 = ud.object(forKey: "useH264") as? Bool ?? false
-        self.h264Bitrate = ud.object(forKey: "h264Bitrate") as? Int ?? 30_000_000
+        let u = UserDefaults.standard
+        self.defaultUseH264 = u.object(forKey: "defaultUseH264") as? Bool ?? false
+        self.defaultBitrate = u.object(forKey: "defaultBitrate") as? Int ?? 30_000_000
+        self.defaultFPS = u.object(forKey: "defaultFPS") as? Int ?? 60
         super.init()
     }
 
-    private var stream: SCStream?
-    private let workQueue = DispatchQueue(label: "ScreenStreamer.work", qos: .userInitiated)
-    private var framesThisSecond = 0
-    private var fpsTimerStart = Date()
-    private weak var server: CastingServer?
-
-    private var compressionSession: VTCompressionSession?
-    private var needKeyFrame = true
-    private var ptsCounter: CMTimeValue = 0
-
-    func bind(server: CastingServer) {
-        self.server = server
-        server.onNewClient = { [weak self] in
-            self?.needKeyFrame = true
-        }
-    }
-
     func loadShareableContent() {
-        phase = .preparing
         SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { [weak self] content, error in
             DispatchQueue.main.async {
-                guard let self else { return }
-                if let error {
-                    self.phase = .failed(error.localizedDescription)
-                    return
-                }
-                guard let content else { self.phase = .failed("无法获取屏幕内容"); return }
+                guard let self, let content else { return }
                 var grouped: [SCRunningApplication: [SCWindow]] = [:]
                 for window in content.windows {
                     if let app = window.owningApplication { grouped[app, default: []].append(window) }
@@ -80,20 +48,72 @@ final class ScreenStreamer: NSObject, ObservableObject {
                 self.appGroups = grouped.map { AppGroup(application: $0.key, windows: $0.value) }
                     .sorted { $0.application.applicationName.localizedStandardCompare($1.application.applicationName) == .orderedAscending }
                 self.displays = content.displays
-                if self.appGroups.isEmpty {
-                    self.phase = .failed("没有找到可投屏的窗口")
-                } else {
-                    self.phase = .idle
-                }
             }
         }
     }
 
-    func start(filter: SCContentFilter, name: String) {
-        stopStream()
+    func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool) {
+        let port = nextPort
+        nextPort += 1
+        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+        session.start()
+        sessions.append(session)
+    }
+
+    func removeSession(_ session: StreamSession) {
+        session.stop()
+        sessions.removeAll { $0.id == session.id }
+    }
+}
+
+final class StreamSession: NSObject, ObservableObject, Identifiable {
+    let id = UUID()
+    let port: UInt16
+    let contentName: String
+
+    @Published var phase: Phase = .idle
+    @Published var currentFPS: Double = 0
+    @Published var clientCount: Int = 0
+    @Published var useH264: Bool
+    @Published var bitrate: Int
+    @Published var showsCursor: Bool
+    @Published var encWidth: Int = 0
+    @Published var encHeight: Int = 0
+
+    enum Phase: Equatable {
+        case idle
+        case streaming
+        case failed(String)
+    }
+
+    private let server: CastingServer
+    private var stream: SCStream?
+    private var compressionSession: VTCompressionSession?
+    private let workQueue = DispatchQueue(label: "stream.\(UUID().uuidString.prefix(8))", qos: .userInitiated)
+    private var needKeyFrame = true
+    private var ptsCounter: CMTimeValue = 0
+    private var framesThisSecond = 0
+    private var fpsTimerStart = Date()
+    private let filter: SCContentFilter
+    private let targetFPS: Int
+
+    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool) {
+        self.port = port
+        self.filter = filter
+        self.contentName = name
+        self.useH264 = useH264
+        self.bitrate = bitrate
+        self.targetFPS = fps
+        self.showsCursor = showsCursor
+        self.server = CastingServer(port: port)
+        super.init()
+    }
+
+    func start() {
+        guard stream == nil else { return }
         let nativeW = filter.contentRect.width * CGFloat(filter.pointPixelScale)
         let nativeH = filter.contentRect.height * CGFloat(filter.pointPixelScale)
-        let padRes = server?.remoteScreenSize
+        let padRes = server.maxRemoteResolution
         let targetW: Int
         let targetH: Int
         if let padRes {
@@ -114,37 +134,48 @@ final class ScreenStreamer: NSObject, ObservableObject {
         let config = SCStreamConfiguration()
         config.width = targetW
         config.height = targetH
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(targetFPS))
         config.queueDepth = 4
-        config.showsCursor = true
+        config.showsCursor = showsCursor
         config.capturesAudio = false
         config.pixelFormat = kCVPixelFormatType_32BGRA
 
+        encWidth = targetW
+        encHeight = targetH
+
+        server.start()
+        server.onClientCountChanged = { [weak self] count in
+            DispatchQueue.main.async { self?.clientCount = count }
+        }
+
         do {
-            let newStream = SCStream(filter: filter, configuration: config, delegate: self)
-            try newStream.addStreamOutput(self, type: .screen, sampleHandlerQueue: workQueue)
-            try newStream.startCapture()
-            stream = newStream
-            if useH264 { compressionSession = nil; needKeyFrame = true; ptsCounter = 0 }
-            framesThisSecond = 0; fpsTimerStart = Date()
-            phase = .streaming(name)
+            let s = SCStream(filter: filter, configuration: config, delegate: self)
+            try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: workQueue)
+            try s.startCapture()
+            stream = s
+            compressionSession = nil
+            needKeyFrame = true
+            ptsCounter = 0
+            framesThisSecond = 0
+            fpsTimerStart = Date()
+            phase = .streaming
         } catch {
             phase = .failed(error.localizedDescription)
         }
     }
 
-    func stop() { stopStream(); phase = .idle }
-
-    private func stopStream() {
-        stream?.stopCapture(); stream = nil
+    func stop() {
+        stream?.stopCapture()
+        stream = nil
         if let s = compressionSession { VTCompressionSessionInvalidate(s); compressionSession = nil }
+        server.stop()
+        phase = .idle
     }
 
-    private func applyBitrate() {
+    func applyBitrate() {
         guard let s = compressionSession else { return }
-        let v = h264Bitrate as CFNumber
-        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: v)
-        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_DataRateLimits, value: [h264Bitrate * 3 / 8, 1] as CFArray)
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
+        VTSessionSetProperty(s, key: kVTCompressionPropertyKey_DataRateLimits, value: [bitrate * 3 / 8, 1] as CFArray)
     }
 
     private func reportFPS() {
@@ -157,14 +188,14 @@ final class ScreenStreamer: NSObject, ObservableObject {
     }
 }
 
-extension ScreenStreamer: SCStreamOutput {
+extension StreamSession: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .screen, let ib = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         if useH264 { encodeH264(ib) } else { encodeJPEG(ib) }
     }
 }
 
-extension ScreenStreamer: SCStreamDelegate {
+extension StreamSession: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         DispatchQueue.main.async { if case .streaming = self.phase { self.phase = .failed(error.localizedDescription) } }
     }
@@ -173,17 +204,17 @@ extension ScreenStreamer: SCStreamDelegate {
 private let ciCtx = CIContext(options: [.workingColorSpace: NSNull(), .highQualityDownsample: false])
 private let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
 
-extension ScreenStreamer {
+extension StreamSession {
     private func encodeJPEG(_ pixelBuffer: CVPixelBuffer) {
         let ci = CIImage(cvPixelBuffer: pixelBuffer)
         let q = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
         guard let d = ciCtx.jpegRepresentation(of: ci, colorSpace: srgb, options: [q: 0.92]), d.count >= 64 else { return }
-        server?.sendFrame(d, isKey: true)
+        server.sendFrame(d)
         reportFPS()
     }
 }
 
-extension ScreenStreamer {
+extension StreamSession {
     private func createH264Session(_ w: Int, _ h: Int) -> Bool {
         if compressionSession != nil { return true }
         var s: VTCompressionSession?
@@ -191,11 +222,11 @@ extension ScreenStreamer {
         let p: [CFString: Any] = [
             kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_Main_AutoLevel,
             kVTCompressionPropertyKey_RealTime: true,
-            kVTCompressionPropertyKey_AverageBitRate: h264Bitrate,
-            kVTCompressionPropertyKey_DataRateLimits: [h264Bitrate * 3 / 8, 1] as [Any],
-            kVTCompressionPropertyKey_ExpectedFrameRate: 60,
+            kVTCompressionPropertyKey_AverageBitRate: bitrate,
+            kVTCompressionPropertyKey_DataRateLimits: [bitrate * 3 / 8, 1] as [Any],
+            kVTCompressionPropertyKey_ExpectedFrameRate: targetFPS,
             kVTCompressionPropertyKey_AllowFrameReordering: false,
-            kVTCompressionPropertyKey_MaxKeyFrameInterval: 120,
+            kVTCompressionPropertyKey_MaxKeyFrameInterval: targetFPS * 2,
         ]
         VTSessionSetProperties(s, propertyDictionary: p as CFDictionary)
         VTCompressionSessionPrepareToEncodeFrames(s)
@@ -208,7 +239,7 @@ extension ScreenStreamer {
         guard createH264Session(w, h), let ses = compressionSession else { return }
         var fp: CFDictionary?
         if needKeyFrame { fp = [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue] as CFDictionary }
-        ptsCounter += 600 / 60
+        ptsCounter += 600 / CMTimeValue(targetFPS)
         let pts = CMTime(value: ptsCounter, timescale: 600)
         VTCompressionSessionEncodeFrame(ses, imageBuffer: pb, presentationTimeStamp: pts, duration: .invalid, frameProperties: fp, infoFlagsOut: nil) { [weak self] st, _, sb in
             guard let self, st == noErr, let sb else { return }
@@ -217,13 +248,13 @@ extension ScreenStreamer {
     }
 
     private func handleEncoded(_ sb: CMSampleBuffer) {
-        guard let srv = server, let fmt = CMSampleBufferGetFormatDescription(sb) else { return }
+        guard let fmt = CMSampleBufferGetFormatDescription(sb) else { return }
         guard let (data, isKey) = h264ToAnnexB(sb) else { return }
         if isKey, let fd = serializeFormatDescription(fmt) {
-            srv.sendConfig(codec: 3, parameterSets: [fd])
+            server.sendConfig(fd)
             needKeyFrame = false
         }
-        srv.sendFrame(data, isKey: isKey)
+        server.sendFrame(data)
         reportFPS()
     }
 
