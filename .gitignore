@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+*.swp
+
+# Xcode
+*.xcuserdata
+*.xcworkspace/xcuserdata/
+DerivedData/
+*.xcuserstate
+*.xcbkptlist
+build/
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.pbxuser
+!default.pbxuser
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+xcuserdata/
+
+# Build products
+*.app
+*.ipa
+*.dSYM.zip
+*.dSYM
