@@ -131,7 +131,9 @@ private struct AddStreamSheet: View {
     @Binding var isPresented: Bool
 
     @State private var selected: Set<String> = []
-    @State private var selectedItems: [(String, SCContentFilter)] = []
+    @State private var selectedApps: [(String, SCRunningApplication)] = []
+    @State private var selectedWindows: [(String, SCWindow)] = []
+    @State private var selectedDisplays: [(String, SCDisplay)] = []
     @State private var useH264: Bool
     @State private var bitrate: Int
     @State private var fps: Int
@@ -160,12 +162,19 @@ private struct AddStreamSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("显示器").font(.caption).foregroundStyle(.secondary)
                     ForEach(streamer.displays, id: \.displayID) { display in
-                        selectableRow(
-                            key: "display-\(display.displayID)",
-                            filter: SCContentFilter(display: display, excludingWindows: []),
-                            icon: "display",
-                            label: "显示器 \(Int(display.width))×\(Int(display.height))"
-                        )
+                        let key = "display-\(display.displayID)"
+                        HStack(spacing: 8) {
+                            Image(systemName: "display").frame(width: 20)
+                            Text("显示器 \(Int(display.width))×\(Int(display.height))").font(.callout)
+                            Spacer()
+                            Button(selected.contains(key) ? "已选" : "选择") {
+                                toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
+                            }
+                            .buttonStyle(.bordered).controlSize(.small)
+                            .tint(selected.contains(key) ? .blue : nil)
+                        }
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 6).fill(selected.contains(key) ? Color.blue.opacity(0.12) : Color.clear))
                     }
 
                     Text("应用与窗口").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
@@ -182,9 +191,8 @@ private struct AddStreamSheet: View {
                                 Spacer()
                                 if group.windows.count > 1, let display = streamer.displays.first {
                                     let key = "app-\(group.application.bundleIdentifier ?? "")-\(display.displayID)"
-                                    let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
                                     Button(selected.contains(key) ? "已选" : "投屏整个应用") {
-                                        toggle(key: key, name: group.application.applicationName, filter: filter)
+                                        toggleApp(key: key, name: group.application.applicationName, app: group.application)
                                     }
                                     .buttonStyle(.bordered).controlSize(.small)
                                     .tint(selected.contains(key) ? .blue : nil)
@@ -193,13 +201,12 @@ private struct AddStreamSheet: View {
                             ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
                                 let title = (window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? ""
                                 let key = "window-\(window.windowID)"
-                                let filter = SCContentFilter(desktopIndependentWindow: window)
                                 HStack(spacing: 8) {
                                     Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
                                     Text(title).font(.caption).lineLimit(1)
                                     Spacer()
                                     Button(selected.contains(key) ? "已选" : "选择") {
-                                        toggle(key: key, name: title, filter: filter)
+                                        toggleWindow(key: key, name: title, window: window)
                                     }
                                     .buttonStyle(.bordered).controlSize(.small)
                                     .tint(selected.contains(key) ? .blue : nil)
@@ -216,7 +223,8 @@ private struct AddStreamSheet: View {
             if !selected.isEmpty {
                 Divider()
 
-                Text("已选：\(selectedItems.map(\.0).joined(separator: "、"))").font(.callout).lineLimit(2)
+                let allNames = selectedApps.map(\.0) + selectedWindows.map(\.0) + selectedDisplays.map(\.0)
+                Text("已选：\(allNames.joined(separator: "、"))").font(.callout).lineLimit(2)
 
                 HStack(spacing: 16) {
                     Toggle("H264", isOn: $useH264).toggleStyle(.switch)
@@ -235,16 +243,28 @@ private struct AddStreamSheet: View {
                 HStack {
                     Spacer()
                     Button("开始投屏 (\(selected.count)个)") {
-                        for (name, filter) in selectedItems {
-                            streamer.addSession(filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                        if !selectedApps.isEmpty, let display = streamer.displays.first {
+                            let apps = selectedApps.map(\.1)
+                            let name = selectedApps.map(\.0).joined(separator: " + ")
+                            streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                        }
+                        for (name, window) in selectedWindows {
+                            streamer.addSession(filter: SCContentFilter(desktopIndependentWindow: window), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                        }
+                        for (name, display) in selectedDisplays {
+                            streamer.addSession(filter: SCContentFilter(display: display, excludingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
                         }
                         selected.removeAll()
-                        selectedItems.removeAll()
+                        selectedApps.removeAll()
+                        selectedWindows.removeAll()
+                        selectedDisplays.removeAll()
                     }
                     .buttonStyle(.borderedProminent)
                     Button("清除选择") {
                         selected.removeAll()
-                        selectedItems.removeAll()
+                        selectedApps.removeAll()
+                        selectedWindows.removeAll()
+                        selectedDisplays.removeAll()
                     }
                     .buttonStyle(.bordered)
                 }
@@ -254,28 +274,33 @@ private struct AddStreamSheet: View {
         .frame(minWidth: 560, minHeight: 500)
     }
 
-    private func toggle(key: String, name: String, filter: SCContentFilter) {
+    private func toggleApp(key: String, name: String, app: SCRunningApplication) {
         if selected.contains(key) {
             selected.remove(key)
-            selectedItems.removeAll { $0.0 == name }
+            selectedApps.removeAll { $0.1 === app }
         } else {
             selected.insert(key)
-            selectedItems.append((name, filter))
+            selectedApps.append((name, app))
         }
     }
 
-    private func selectableRow(key: String, filter: SCContentFilter, icon: String, label: String) -> some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon).frame(width: 20)
-            Text(label).font(.callout)
-            Spacer()
-            Button(selected.contains(key) ? "已选" : "选择") {
-                toggle(key: key, name: label, filter: filter)
-            }
-            .buttonStyle(.bordered).controlSize(.small)
-            .tint(selected.contains(key) ? .blue : nil)
+    private func toggleWindow(key: String, name: String, window: SCWindow) {
+        if selected.contains(key) {
+            selected.remove(key)
+            selectedWindows.removeAll { $0.1 === window }
+        } else {
+            selected.insert(key)
+            selectedWindows.append((name, window))
         }
-        .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(selected.contains(key) ? Color.blue.opacity(0.12) : Color.clear))
+    }
+
+    private func toggleDisplay(key: String, name: String, display: SCDisplay) {
+        if selected.contains(key) {
+            selected.remove(key)
+            selectedDisplays.removeAll { $0.1 === display }
+        } else {
+            selected.insert(key)
+            selectedDisplays.append((name, display))
+        }
     }
 }
