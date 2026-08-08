@@ -143,7 +143,7 @@ private struct AddStreamSheet: View {
             HStack {
                 Text("添加投屏流").font(.title2.bold())
                 Spacer()
-                Button("取消") { isPresented = false }
+                Button("完成") { isPresented = false }
             }
 
             Divider()
@@ -226,7 +226,8 @@ private struct AddStreamSheet: View {
                     Spacer()
                     Button("开始投屏") {
                         streamer.addSession(filter: selectedFilter!, name: selectedName, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
-                        isPresented = false
+                        selectedFilter = nil
+                        selectedName = ""
                     }
                     .buttonStyle(.borderedProminent)
                 }
