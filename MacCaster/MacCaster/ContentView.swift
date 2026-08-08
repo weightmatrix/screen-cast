@@ -139,7 +139,7 @@ struct ContentView: View {
                     Slider(value: Binding(
                         get: { Double(streamer.h264Bitrate) / 1_000_000 },
                         set: { streamer.h264Bitrate = Int($0 * 1_000_000) }
-                    ), in: 8...50, step: 2)
+                    ), in: 8...100, step: 4)
                     Text("\(Int(Double(streamer.h264Bitrate) / 1_000_000)) Mbps")
                         .font(.caption)
                         .foregroundStyle(.secondary)

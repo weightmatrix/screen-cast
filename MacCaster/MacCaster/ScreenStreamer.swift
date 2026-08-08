@@ -42,7 +42,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
     override init() {
         let ud = UserDefaults.standard
         self.useH264 = ud.object(forKey: "useH264") as? Bool ?? false
-        self.h264Bitrate = ud.object(forKey: "h264Bitrate") as? Int ?? 20_000_000
+        self.h264Bitrate = ud.object(forKey: "h264Bitrate") as? Int ?? 30_000_000
         super.init()
     }
 
@@ -118,7 +118,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
         config.queueDepth = 4
         config.showsCursor = true
         config.capturesAudio = false
-        config.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        config.pixelFormat = kCVPixelFormatType_32BGRA
 
         do {
             let newStream = SCStream(filter: filter, configuration: config, delegate: self)
@@ -187,7 +187,7 @@ extension ScreenStreamer {
     private func createH264Session(_ w: Int, _ h: Int) -> Bool {
         if compressionSession != nil { return true }
         var s: VTCompressionSession?
-        guard VTCompressionSessionCreate(allocator: nil, width: Int32(w), height: Int32(h), codecType: kCMVideoCodecType_H264, encoderSpecification: nil, imageBufferAttributes: nil, compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &s) == noErr, let s else { return false }
+        guard VTCompressionSessionCreate(allocator: nil, width: Int32(w), height: Int32(h), codecType: kCMVideoCodecType_H264, encoderSpecification: nil, imageBufferAttributes: [kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA] as CFDictionary, compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &s) == noErr, let s else { return false }
         let p: [CFString: Any] = [
             kVTCompressionPropertyKey_ProfileLevel: kVTProfileLevel_H264_Main_AutoLevel,
             kVTCompressionPropertyKey_RealTime: true,
