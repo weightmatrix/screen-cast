@@ -96,6 +96,8 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private var fpsTimerStart = Date()
     private let filter: SCContentFilter
     private let targetFPS: Int
+    private var encodeWidth: Int = 0
+    private var encodeHeight: Int = 0
 
     init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool) {
         self.port = port
@@ -215,7 +217,13 @@ extension StreamSession {
 }
 
 extension StreamSession {
-    private func createH264Session(_ w: Int, _ h: Int) -> Bool {
+    private func ensureH264Session(_ w: Int, _ h: Int) -> Bool {
+        if w != encodeWidth || h != encodeHeight {
+            if let s = compressionSession { VTCompressionSessionInvalidate(s); compressionSession = nil }
+            encodeWidth = w
+            encodeHeight = h
+            DispatchQueue.main.async { self.encWidth = w; self.encHeight = h }
+        }
         if compressionSession != nil { return true }
         var s: VTCompressionSession?
         guard VTCompressionSessionCreate(allocator: nil, width: Int32(w), height: Int32(h), codecType: kCMVideoCodecType_H264, encoderSpecification: nil, imageBufferAttributes: [kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_32BGRA] as CFDictionary, compressedDataAllocator: nil, outputCallback: nil, refcon: nil, compressionSessionOut: &s) == noErr, let s else { return false }
@@ -236,7 +244,7 @@ extension StreamSession {
 
     private func encodeH264(_ pb: CVPixelBuffer) {
         let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
-        guard createH264Session(w, h), let ses = compressionSession else { return }
+        guard ensureH264Session(w, h), let ses = compressionSession else { return }
         var fp: CFDictionary?
         if needKeyFrame { fp = [kVTEncodeFrameOptionKey_ForceKeyFrame: kCFBooleanTrue] as CFDictionary }
         ptsCounter += 600 / CMTimeValue(targetFPS)
