@@ -25,12 +25,19 @@ struct ContentView: View {
     }
 
     private var header: some View {
-        HStack {
-            Image(systemName: "display.2").font(.title)
-            Text("投屏控制台").font(.title2.bold())
-            Spacer()
-            Text("\(streamer.sessions.count) 个流运行中")
-                .font(.caption).foregroundStyle(.secondary)
+        VStack(spacing: 2) {
+            HStack {
+                Image(systemName: "display.2").font(.title)
+                Text("投屏控制台").font(.title2.bold())
+                Spacer()
+                Text("\(streamer.sessions.count) 个流运行中")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            HStack {
+                Text("本机 IP：\(CastingServer.localIPs.joined(separator: "、"))")
+                    .font(.caption).foregroundStyle(.blue)
+                Spacer()
+            }
         }
     }
 
