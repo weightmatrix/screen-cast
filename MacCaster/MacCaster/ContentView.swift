@@ -149,38 +149,64 @@ private struct AddStreamSheet: View {
             Divider()
 
             ScrollView {
-                VStack(spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("显示器").font(.caption).foregroundStyle(.secondary)
                     ForEach(streamer.displays, id: \.displayID) { display in
-                        contentButton(
-                            name: "显示器 \(Int(display.width))×\(Int(display.height))",
+                        contentCard(
+                            title: "显示器 \(Int(display.width))×\(Int(display.height))",
+                            subtitle: nil,
                             filter: SCContentFilter(display: display, excludingWindows: []),
                             icon: "display"
                         )
                     }
+
+                    Text("应用与窗口").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+
                     ForEach(streamer.appGroups) { group in
-                        VStack(spacing: 2) {
-                            if group.windows.count > 1, let display = streamer.displays.first {
-                                contentButton(
-                                    name: "\(group.application.applicationName)（整个应用）",
-                                    filter: SCContentFilter(display: display, including: [group.application], exceptingWindows: []),
-                                    icon: "app"
-                                )
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                if let icon = group.icon {
+                                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                                } else {
+                                    Image(systemName: "app").foregroundStyle(.secondary)
+                                }
+                                Text(group.application.applicationName).font(.callout).bold()
+                                Spacer()
+                                if group.windows.count > 1, let display = streamer.displays.first {
+                                    Button("投屏整个应用") {
+                                        selectedFilter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
+                                        selectedName = group.application.applicationName
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .tint(selectedFilterIdentity(selectedFilter) == appGroupIdentity(display: display, app: group.application) ? .blue : nil)
+                                }
                             }
                             ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
-                                let title = (window.title ?? "").isEmpty ? group.application.applicationName : window.title ?? ""
-                                contentButton(
-                                    name: title,
-                                    filter: SCContentFilter(desktopIndependentWindow: window),
-                                    icon: "rectangle.on.rectangle"
-                                )
+                                let title = (window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? ""
+                                HStack(spacing: 8) {
+                                    Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
+                                    Text(title).font(.caption).lineLimit(1)
+                                    Spacer()
+                                    Button("选择") {
+                                        selectedFilter = SCContentFilter(desktopIndependentWindow: window)
+                                        selectedName = title
+                                    }
+                                    .buttonStyle(.bordered).controlSize(.small)
+                                    .tint(selectedFilterIdentity(selectedFilter) == windowIdentity(window) ? .blue : nil)
+                                }
+                                .padding(.leading, 28)
                             }
                         }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.06)))
                     }
                 }
             }
 
-            if let _ = selectedFilter {
+            if selectedFilter != nil {
                 Divider()
+
+                Text("已选择：\(selectedName)").font(.callout).lineLimit(1)
 
                 HStack(spacing: 16) {
                     Toggle("H264", isOn: $useH264).toggleStyle(.switch)
@@ -203,30 +229,44 @@ private struct AddStreamSheet: View {
                         isPresented = false
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(selectedFilter == nil)
                 }
             }
         }
         .padding(20)
-        .frame(width: 600, height: 560)
+        .frame(minWidth: 560, minHeight: 500)
     }
 
-    private func contentButton(name: String, filter: SCContentFilter, icon: String) -> some View {
-        Button(action: {
-            selectedFilter = filter
-            selectedName = name
-        }) {
-            HStack {
-                Image(systemName: icon).frame(width: 20)
-                Text(name).lineLimit(1)
-                Spacer()
-                if selectedFilter === filter {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.blue)
-                }
+    private func contentCard(title: String, subtitle: String?, filter: SCContentFilter, icon: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).frame(width: 20)
+            VStack(alignment: .leading) {
+                Text(title).font(.callout)
+                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
             }
-            .padding(8)
-            .background(RoundedRectangle(cornerRadius: 6).fill(selectedFilter === filter ? Color.blue.opacity(0.1) : Color.clear))
+            Spacer()
+            Button("选择") {
+                selectedFilter = filter
+                selectedName = title
+            }
+            .buttonStyle(.bordered).controlSize(.small)
+            .tint(selectedFilterIdentity(selectedFilter) == displayIdentity(filter) ? .blue : nil)
         }
-        .buttonStyle(.plain)
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 6).fill(selectedFilterIdentity(selectedFilter) == displayIdentity(filter) ? Color.blue.opacity(0.1) : Color.clear))
+    }
+
+    private func selectedFilterIdentity(_ f: SCContentFilter?) -> String {
+        guard let f else { return "" }
+        return "\(Unmanaged.passUnretained(f).toOpaque())"
+    }
+
+    private func displayIdentity(_ f: SCContentFilter) -> String {
+        "\(Unmanaged.passUnretained(f).toOpaque())"
+    }
+
+    private func windowIdentity(_ w: SCWindow) -> String { "\(w.windowID)" }
+
+    private func appGroupIdentity(display: SCDisplay, app: SCRunningApplication) -> String {
+        "app-\(app.bundleIdentifier)-\(display.displayID)"
     }
 }
