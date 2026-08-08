@@ -130,8 +130,8 @@ private struct AddStreamSheet: View {
     @ObservedObject var streamer: ScreenStreamer
     @Binding var isPresented: Bool
 
-    @State private var selectedFilter: SCContentFilter?
-    @State private var selectedName: String = ""
+    @State private var selected: Set<String> = []
+    @State private var selectedItems: [(String, SCContentFilter)] = []
     @State private var useH264: Bool
     @State private var bitrate: Int
     @State private var fps: Int
@@ -150,6 +150,7 @@ private struct AddStreamSheet: View {
             HStack {
                 Text("添加投屏流").font(.title2.bold())
                 Spacer()
+                Text("已选 \(selected.count) 个").font(.callout).foregroundStyle(.blue)
                 Button("完成") { isPresented = false }
             }
 
@@ -159,11 +160,11 @@ private struct AddStreamSheet: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("显示器").font(.caption).foregroundStyle(.secondary)
                     ForEach(streamer.displays, id: \.displayID) { display in
-                        contentCard(
-                            title: "显示器 \(Int(display.width))×\(Int(display.height))",
-                            subtitle: nil,
+                        selectableRow(
+                            key: "display-\(display.displayID)",
                             filter: SCContentFilter(display: display, excludingWindows: []),
-                            icon: "display"
+                            icon: "display",
+                            label: "显示器 \(Int(display.width))×\(Int(display.height))"
                         )
                     }
 
@@ -180,26 +181,28 @@ private struct AddStreamSheet: View {
                                 Text(group.application.applicationName).font(.callout).bold()
                                 Spacer()
                                 if group.windows.count > 1, let display = streamer.displays.first {
-                                    Button("投屏整个应用") {
-                                        selectedFilter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
-                                        selectedName = group.application.applicationName
+                                    let key = "app-\(group.application.bundleIdentifier ?? "")-\(display.displayID)"
+                                    let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
+                                    Button(selected.contains(key) ? "已选" : "投屏整个应用") {
+                                        toggle(key: key, name: group.application.applicationName, filter: filter)
                                     }
                                     .buttonStyle(.bordered).controlSize(.small)
-                                    .tint(selectedFilterIdentity(selectedFilter) == appGroupIdentity(display: display, app: group.application) ? .blue : nil)
+                                    .tint(selected.contains(key) ? .blue : nil)
                                 }
                             }
                             ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
                                 let title = (window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? ""
+                                let key = "window-\(window.windowID)"
+                                let filter = SCContentFilter(desktopIndependentWindow: window)
                                 HStack(spacing: 8) {
                                     Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
                                     Text(title).font(.caption).lineLimit(1)
                                     Spacer()
-                                    Button("选择") {
-                                        selectedFilter = SCContentFilter(desktopIndependentWindow: window)
-                                        selectedName = title
+                                    Button(selected.contains(key) ? "已选" : "选择") {
+                                        toggle(key: key, name: title, filter: filter)
                                     }
                                     .buttonStyle(.bordered).controlSize(.small)
-                                    .tint(selectedFilterIdentity(selectedFilter) == windowIdentity(window) ? .blue : nil)
+                                    .tint(selected.contains(key) ? .blue : nil)
                                 }
                                 .padding(.leading, 28)
                             }
@@ -210,10 +213,10 @@ private struct AddStreamSheet: View {
                 }
             }
 
-            if selectedFilter != nil {
+            if !selected.isEmpty {
                 Divider()
 
-                Text("已选择：\(selectedName)").font(.callout).lineLimit(1)
+                Text("已选：\(selectedItems.map(\.0).joined(separator: "、"))").font(.callout).lineLimit(2)
 
                 HStack(spacing: 16) {
                     Toggle("H264", isOn: $useH264).toggleStyle(.switch)
@@ -231,12 +234,19 @@ private struct AddStreamSheet: View {
 
                 HStack {
                     Spacer()
-                    Button("开始投屏") {
-                        streamer.addSession(filter: selectedFilter!, name: selectedName, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
-                        selectedFilter = nil
-                        selectedName = ""
+                    Button("开始投屏 (\(selected.count)个)") {
+                        for (name, filter) in selectedItems {
+                            streamer.addSession(filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                        }
+                        selected.removeAll()
+                        selectedItems.removeAll()
                     }
                     .buttonStyle(.borderedProminent)
+                    Button("清除选择") {
+                        selected.removeAll()
+                        selectedItems.removeAll()
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -244,37 +254,28 @@ private struct AddStreamSheet: View {
         .frame(minWidth: 560, minHeight: 500)
     }
 
-    private func contentCard(title: String, subtitle: String?, filter: SCContentFilter, icon: String) -> some View {
+    private func toggle(key: String, name: String, filter: SCContentFilter) {
+        if selected.contains(key) {
+            selected.remove(key)
+            selectedItems.removeAll { $0.0 == name }
+        } else {
+            selected.insert(key)
+            selectedItems.append((name, filter))
+        }
+    }
+
+    private func selectableRow(key: String, filter: SCContentFilter, icon: String, label: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon).frame(width: 20)
-            VStack(alignment: .leading) {
-                Text(title).font(.callout)
-                if let subtitle { Text(subtitle).font(.caption).foregroundStyle(.secondary) }
-            }
+            Text(label).font(.callout)
             Spacer()
-            Button("选择") {
-                selectedFilter = filter
-                selectedName = title
+            Button(selected.contains(key) ? "已选" : "选择") {
+                toggle(key: key, name: label, filter: filter)
             }
             .buttonStyle(.bordered).controlSize(.small)
-            .tint(selectedFilterIdentity(selectedFilter) == displayIdentity(filter) ? .blue : nil)
+            .tint(selected.contains(key) ? .blue : nil)
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 6).fill(selectedFilterIdentity(selectedFilter) == displayIdentity(filter) ? Color.blue.opacity(0.1) : Color.clear))
-    }
-
-    private func selectedFilterIdentity(_ f: SCContentFilter?) -> String {
-        guard let f else { return "" }
-        return "\(Unmanaged.passUnretained(f).toOpaque())"
-    }
-
-    private func displayIdentity(_ f: SCContentFilter) -> String {
-        "\(Unmanaged.passUnretained(f).toOpaque())"
-    }
-
-    private func windowIdentity(_ w: SCWindow) -> String { "\(w.windowID)" }
-
-    private func appGroupIdentity(display: SCDisplay, app: SCRunningApplication) -> String {
-        "app-\(app.bundleIdentifier)-\(display.displayID)"
+        .background(RoundedRectangle(cornerRadius: 6).fill(selected.contains(key) ? Color.blue.opacity(0.12) : Color.clear))
     }
 }
