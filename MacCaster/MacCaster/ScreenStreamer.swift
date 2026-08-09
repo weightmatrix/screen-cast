@@ -234,7 +234,8 @@ extension StreamSession {
             kVTCompressionPropertyKey_DataRateLimits: [bitrate * 3 / 8, 1] as [Any],
             kVTCompressionPropertyKey_ExpectedFrameRate: targetFPS,
             kVTCompressionPropertyKey_AllowFrameReordering: false,
-            kVTCompressionPropertyKey_MaxKeyFrameInterval: targetFPS * 2,
+            kVTCompressionPropertyKey_AllowOpenGOP: false,
+            kVTCompressionPropertyKey_MaxKeyFrameInterval: max(targetFPS / 2, 15),
         ]
         VTSessionSetProperties(s, propertyDictionary: p as CFDictionary)
         VTCompressionSessionPrepareToEncodeFrames(s)
