@@ -171,7 +171,7 @@ private struct AddStreamSheet: View {
                 Text("添加投屏流").font(.title2.bold())
                 Spacer()
                 Text("已选 \(selected.count) 个").font(.callout).foregroundStyle(.blue)
-                Button("完成") { isPresented = false }
+                Button("取消") { isPresented = false }
             }
 
             Divider()
@@ -241,6 +241,7 @@ private struct AddStreamSheet: View {
                         selectedApps.removeAll()
                         selectedWindows.removeAll()
                         selectedDisplays.removeAll()
+                        isPresented = false
                     }
                     .buttonStyle(.borderedProminent)
                     Button("清除选择") {
