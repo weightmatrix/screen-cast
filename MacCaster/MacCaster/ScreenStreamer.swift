@@ -238,11 +238,37 @@ private let srgb = CGColorSpace(name: CGColorSpace.sRGB)!
 
 extension StreamSession {
     private func encodeJPEG(_ pixelBuffer: CVPixelBuffer) {
+        drawAnnotations(on: pixelBuffer)
         let ci = CIImage(cvPixelBuffer: pixelBuffer)
         let q = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
         guard let d = ciCtx.jpegRepresentation(of: ci, colorSpace: srgb, options: [q: 0.92]), d.count >= 64 else { return }
         server.sendFrame(d)
         reportFPS()
+    }
+
+    private func drawAnnotations(on pixelBuffer: CVPixelBuffer) {
+        guard annotationEngine.isActive else { return }
+        let w = CVPixelBufferGetWidth(pixelBuffer)
+        let h = CVPixelBufferGetHeight(pixelBuffer)
+        CVPixelBufferLockBaseAddress(pixelBuffer, [])
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
+        guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return }
+        let bpr = CVPixelBufferGetBytesPerRow(pixelBuffer)
+        guard let ctx = CGContext(data: base, width: w, height: h, bitsPerComponent: 8, bytesPerRow: bpr,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue
+        ) else { return }
+
+        let cr = filter.contentRect
+        let ps = CGFloat(filter.pointPixelScale)
+        let srcW = cr.width * ps
+        let srcH = cr.height * ps
+        let scaleX = CGFloat(w) / srcW
+        let scaleY = CGFloat(h) / srcH
+        ctx.translateBy(x: -cr.origin.x * ps * scaleX, y: -cr.origin.y * ps * scaleY)
+        ctx.scaleBy(x: scaleX, y: scaleY)
+
+        annotationEngine.drawStrokes(in: ctx, rect: CGRect(x: 0, y: 0, width: srcW, height: srcH))
     }
 }
 
@@ -274,6 +300,7 @@ extension StreamSession {
     }
 
     private func encodeH264(_ pb: CVPixelBuffer) {
+        drawAnnotations(on: pb)
         let w = CVPixelBufferGetWidth(pb), h = CVPixelBufferGetHeight(pb)
         guard ensureH264Session(w, h), let ses = compressionSession else { return }
         var fp: CFDictionary?
