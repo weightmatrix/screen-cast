@@ -151,6 +151,7 @@ private struct AddStreamSheet: View {
     @State private var selectedApps: [(String, SCRunningApplication)] = []
     @State private var selectedWindows: [(String, SCWindow)] = []
     @State private var selectedDisplays: [(String, SCDisplay)] = []
+    @State private var expandedApps: Set<String> = []
     @State private var useH264: Bool
     @State private var bitrate: Int
     @State private var fps: Int
@@ -197,42 +198,7 @@ private struct AddStreamSheet: View {
                     Text("应用与窗口").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
 
                     ForEach(streamer.appGroups) { group in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 8) {
-                                if let icon = group.icon {
-                                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
-                                } else {
-                                    Image(systemName: "app").foregroundStyle(.secondary)
-                                }
-                                Text(group.application.applicationName).font(.callout).bold()
-                                Spacer()
-                                if group.windows.count > 1, let display = streamer.displays.first {
-                                    let key = "app-\(group.application.bundleIdentifier ?? "")-\(display.displayID)"
-                                    Button(selected.contains(key) ? "已选" : "投屏整个应用") {
-                                        toggleApp(key: key, name: group.application.applicationName, app: group.application)
-                                    }
-                                    .buttonStyle(.bordered).controlSize(.small)
-                                    .tint(selected.contains(key) ? .blue : nil)
-                                }
-                            }
-                            ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
-                                let title = (window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? ""
-                                let key = "window-\(window.windowID)"
-                                HStack(spacing: 8) {
-                                    Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
-                                    Text(title).font(.caption).lineLimit(1)
-                                    Spacer()
-                                    Button(selected.contains(key) ? "已选" : "选择") {
-                                        toggleWindow(key: key, name: title, window: window)
-                                    }
-                                    .buttonStyle(.bordered).controlSize(.small)
-                                    .tint(selected.contains(key) ? .blue : nil)
-                                }
-                                .padding(.leading, 28)
-                            }
-                        }
-                        .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.06)))
+                        AppGroupPicker(group: group, selected: $selected, selectedApps: $selectedApps, selectedWindows: $selectedWindows, streamer: streamer)
                     }
                 }
             }
@@ -328,6 +294,7 @@ private struct EditStreamSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedName: String = ""
     @State private var selectedFilter: SCContentFilter?
+    @State private var expandedApps: Set<String> = []
 
     var body: some View {
         VStack(spacing: 12) {
@@ -351,30 +318,7 @@ private struct EditStreamSheet: View {
 
                     Text("应用与窗口").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
                     ForEach(streamer.appGroups) { group in
-                        VStack(spacing: 2) {
-                            HStack(spacing: 8) {
-                                if let icon = group.icon {
-                                    Image(nsImage: icon).resizable().frame(width: 16, height: 16)
-                                }
-                                Text(group.application.applicationName).font(.callout).bold()
-                                Spacer()
-                                if let display = streamer.displays.first {
-                                    let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
-                                    pickerRow(name: group.application.applicationName, filter: filter)
-                                }
-                            }
-                            ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
-                                let title = (window.title ?? "").isEmpty ? "未命名" : window.title ?? ""
-                                let filter = SCContentFilter(desktopIndependentWindow: window)
-                                HStack {
-                                    Text("  \(title)").font(.caption).lineLimit(1)
-                                    Spacer()
-                                    pickerRow(name: title, filter: filter)
-                                }
-                            }
-                        }
-                        .padding(8)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.05)))
+                        EditAppGroupPicker(group: group, selectedFilter: $selectedFilter, selectedName: $selectedName, streamer: streamer)
                     }
                 }
             }
@@ -399,6 +343,127 @@ private struct EditStreamSheet: View {
         Button("选择") {
             selectedFilter = filter
             selectedName = name
+        }
+        .buttonStyle(.bordered).controlSize(.small)
+        .tint(selectedFilter === filter ? .blue : nil)
+    }
+}
+
+private struct AppGroupPicker: View {
+    let group: ScreenStreamer.AppGroup
+    @Binding var selected: Set<String>
+    @Binding var selectedApps: [(String, SCRunningApplication)]
+    @Binding var selectedWindows: [(String, SCWindow)]
+    @ObservedObject var streamer: ScreenStreamer
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let icon = group.icon {
+                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                }
+                Text(group.application.applicationName).font(.callout).bold()
+                Spacer()
+                if group.windows.count > 1, let display = streamer.displays.first {
+                    let key = "app-\(group.application.bundleIdentifier ?? "")-\(display.displayID)"
+                    Button(selected.contains(key) ? "已选" : "投屏整个应用") {
+                        if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
+                        else { selected.insert(key); selectedApps.append((group.application.applicationName, group.application)) }
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .tint(selected.contains(key) ? .blue : nil)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation { isExpanded.toggle() } }
+
+            if isExpanded {
+                ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
+                    let title = (window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? ""
+                    let key = "window-\(window.windowID)"
+                    HStack(spacing: 8) {
+                        Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
+                        Text(title).font(.caption).lineLimit(1)
+                        Spacer()
+                        Button(selected.contains(key) ? "已选" : "选择") {
+                            if selected.contains(key) { selected.remove(key); selectedWindows.removeAll { $0.1 === window } }
+                            else { selected.insert(key); selectedWindows.append((title, window)) }
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .tint(selected.contains(key) ? .blue : nil)
+                    }
+                    .padding(.leading, 28)
+                }
+            }
+        }
+        .padding(10)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.gray.opacity(0.06)))
+    }
+}
+
+private struct EditAppGroupPicker: View {
+    let group: ScreenStreamer.AppGroup
+    @Binding var selectedFilter: SCContentFilter?
+    @Binding var selectedName: String
+    @ObservedObject var streamer: ScreenStreamer
+    @State private var isExpanded = false
+
+    var body: some View {
+        VStack(spacing: 2) {
+            HStack(spacing: 8) {
+                Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let icon = group.icon {
+                    Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                }
+                Text(group.application.applicationName).font(.callout).bold()
+                Spacer()
+                if let display = streamer.displays.first {
+                    let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
+                    Button("投屏整个应用") {
+                        selectedFilter = filter; selectedName = group.application.applicationName
+                    }
+                    .buttonStyle(.bordered).controlSize(.small)
+                    .tint(selectedFilter === filter ? .blue : nil)
+                }
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { withAnimation { isExpanded.toggle() } }
+
+            if isExpanded {
+                ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
+                    let title = (window.title ?? "").isEmpty ? "未命名" : window.title ?? ""
+                    let filter = SCContentFilter(desktopIndependentWindow: window)
+                    HStack {
+                        Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
+                        Text("  \(title)").font(.caption).lineLimit(1)
+                        Spacer()
+                        Button("选择") {
+                            selectedFilter = filter; selectedName = title
+                        }
+                        .buttonStyle(.bordered).controlSize(.small)
+                        .tint(selectedFilter === filter ? .blue : nil)
+                    }
+                }
+            }
+        }
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.05)))
+    }
+}
+
+private struct pickerRow: View {
+    var name: String
+    var filter: SCContentFilter
+    @Binding var selectedFilter: SCContentFilter?
+    @Binding var selectedName: String
+
+    var body: some View {
+        Button("选择") {
+            selectedFilter = filter; selectedName = name
         }
         .buttonStyle(.bordered).controlSize(.small)
         .tint(selectedFilter === filter ? .blue : nil)

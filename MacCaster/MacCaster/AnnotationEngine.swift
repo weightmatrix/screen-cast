@@ -82,12 +82,12 @@ final class AnnotationEngine: ObservableObject {
     private func buildDrawingWindow() {
         guard drawingWindow == nil, let screen = NSScreen.main else { return }
         let w = NSWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        w.level = .floating
+        w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
         w.isOpaque = false
         w.backgroundColor = .clear
         w.ignoresMouseEvents = true
         w.hasShadow = false
-        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
         let drawView = AnnotationView(frame: screen.frame)
         drawView.drawCallback = { [weak self] ctx, rect in self?.drawStrokes(in: ctx, rect: rect) }
@@ -104,13 +104,11 @@ final class AnnotationEngine: ObservableObject {
     @objc private func togglePen() {
         tool = (tool == .pen) ? .none : .pen
         updateButtonStates()
-        drawingWindow?.ignoresMouseEvents = (tool == .none)
     }
 
     @objc private func toggleEraser() {
         tool = (tool == .eraser) ? .none : .eraser
         updateButtonStates()
-        drawingWindow?.ignoresMouseEvents = (tool == .none)
     }
 
     @objc func clearAll() {
