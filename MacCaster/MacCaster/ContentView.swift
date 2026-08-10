@@ -232,7 +232,8 @@ private struct AddStreamSheet: View {
                             streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
                         }
                         for (name, window) in selectedWindows {
-                            streamer.addSession(filter: SCContentFilter(desktopIndependentWindow: window), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                            let origin = window.frame.origin
+                            streamer.addSession(filter: SCContentFilter(desktopIndependentWindow: window), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, screenOrigin: origin)
                         }
                         for (name, display) in selectedDisplays {
                             streamer.addSession(filter: SCContentFilter(display: display, excludingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)

@@ -53,10 +53,10 @@ final class ScreenStreamer: NSObject, ObservableObject {
         }
     }
 
-    func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool) {
+    func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero) {
         let port = nextPort
         nextPort += 1
-        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation)
+        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin)
         session.start()
         sessions.append(session)
     }
@@ -80,6 +80,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var showsCursor: Bool
     @Published var encWidth: Int = 0
     @Published var encHeight: Int = 0
+    private var screenOrigin: CGPoint = .zero
 
     enum Phase: Equatable {
         case idle
@@ -101,7 +102,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private var encodeHeight: Int = 0
     let annotationEngine: AnnotationEngine
 
-    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine) {
+    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine, screenOrigin: CGPoint = .zero) {
         self.port = port
         self.filter = filter
         self.contentName = name
@@ -110,6 +111,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         self.targetFPS = fps
         self.showsCursor = showsCursor
         self.annotationEngine = annotationEngine
+        self.screenOrigin = screenOrigin
         self.server = CastingServer(port: port)
         super.init()
     }
@@ -268,7 +270,9 @@ extension StreamSession {
 
         let scaleX = CGFloat(w) / srcW
         let scaleY = CGFloat(h) / srcH
-        ctx.translateBy(x: -cr.origin.x * ps * scaleX, y: -cr.origin.y * ps * scaleY)
+        let offsetX = -(cr.origin.x * ps + screenOrigin.x) * scaleX
+        let offsetY = -(cr.origin.y * ps + screenOrigin.y) * scaleY
+        ctx.translateBy(x: offsetX, y: offsetY)
         ctx.scaleBy(x: scaleX, y: scaleY)
 
         annotationEngine.drawStrokes(in: ctx, rect: CGRect(x: 0, y: 0, width: srcW, height: srcH))
