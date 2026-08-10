@@ -66,7 +66,7 @@ final class AnnotationEngine: ObservableObject {
         updateDrawingWindow()
     }
 
-    @objc private func clearAll() {
+    @objc func clearAll() {
         strokes.removeAll()
         currentStroke.removeAll()
         drawingWindow?.contentView?.needsDisplay = true
@@ -81,7 +81,7 @@ final class AnnotationEngine: ObservableObject {
         }
     }
 
-    private func ensureDrawingWindow() {
+    func ensureDrawingWindow() {
         guard drawingWindow == nil, let screen = NSScreen.main else { return }
         let w = NSWindow(
             contentRect: screen.frame,

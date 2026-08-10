@@ -56,7 +56,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
     func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool) {
         let port = nextPort
         nextPort += 1
-        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation)
         session.start()
         sessions.append(session)
     }
@@ -77,12 +77,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var clientCount: Int = 0
     @Published var useH264: Bool
     @Published var bitrate: Int
-    @Published var showsCursor: Bool {
-        didSet {
-            guard oldValue != showsCursor else { return }
-            restart()
-        }
-    }
+    @Published var showsCursor: Bool
     @Published var encWidth: Int = 0
     @Published var encHeight: Int = 0
 
@@ -104,8 +99,9 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private let targetFPS: Int
     private var encodeWidth: Int = 0
     private var encodeHeight: Int = 0
+    let annotationEngine: AnnotationEngine
 
-    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool) {
+    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine) {
         self.port = port
         self.filter = filter
         self.contentName = name
@@ -113,63 +109,18 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         self.bitrate = bitrate
         self.targetFPS = fps
         self.showsCursor = showsCursor
+        self.annotationEngine = annotationEngine
         self.server = CastingServer(port: port)
         super.init()
     }
 
     func start() {
         guard stream == nil else { return }
-        let nativeW = filter.contentRect.width * CGFloat(filter.pointPixelScale)
-        let nativeH = filter.contentRect.height * CGFloat(filter.pointPixelScale)
-        let padRes = server.maxRemoteResolution
-        let targetW: Int
-        let targetH: Int
-        if let padRes {
-            let padAspect = CGFloat(padRes.width) / CGFloat(padRes.height)
-            let srcAspect = nativeW / nativeH
-            if srcAspect > padAspect {
-                targetW = padRes.width
-                targetH = max(1, Int(CGFloat(padRes.width) / srcAspect))
-            } else {
-                targetH = padRes.height
-                targetW = max(1, Int(CGFloat(padRes.height) * srcAspect))
-            }
-        } else {
-            targetW = Int(nativeW)
-            targetH = Int(nativeH)
-        }
-
-        let config = SCStreamConfiguration()
-        config.width = targetW
-        config.height = targetH
-        config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(targetFPS))
-        config.queueDepth = 4
-        config.showsCursor = showsCursor
-        config.capturesAudio = false
-        config.pixelFormat = kCVPixelFormatType_32BGRA
-
-        encWidth = targetW
-        encHeight = targetH
-
         server.start()
         server.onClientCountChanged = { [weak self] count in
             DispatchQueue.main.async { self?.clientCount = count }
         }
-
-        do {
-            let s = SCStream(filter: filter, configuration: config, delegate: self)
-            try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: workQueue)
-            try s.startCapture()
-            stream = s
-            compressionSession = nil
-            needKeyFrame = true
-            ptsCounter = 0
-            framesThisSecond = 0
-            fpsTimerStart = Date()
-            phase = .streaming
-        } catch {
-            phase = .failed(error.localizedDescription)
-        }
+        restartCapture(with: filter)
     }
 
     func stop() {
@@ -180,24 +131,36 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         phase = .idle
     }
 
+    func refresh() {
+        stream?.stopCapture()
+        stream = nil
+        if let s = compressionSession { VTCompressionSessionInvalidate(s); compressionSession = nil }
+        compressionSession = nil
+        needKeyFrame = true
+        ptsCounter = 0
+        restartCapture(with: filter)
+    }
+
+    func toggleAnnotation() {
+        if annotationEngine.tool != .none {
+            annotationEngine.clearAll()
+            annotationEngine.tool = .none
+        } else {
+            annotationEngine.tool = .pen
+            annotationEngine.ensureDrawingWindow()
+        }
+    }
+
     func changeFilter(_ newFilter: SCContentFilter, name: String) {
         stop()
         contentName = name
         let f = newFilter
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.restartWithFilter(f)
+            self?.restartCapture(with: f)
         }
     }
 
-    private func restart() {
-        let currentFilter = filter
-        stop()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.restartWithFilter(currentFilter)
-        }
-    }
-
-    private func restartWithFilter(_ f: SCContentFilter) {
+    private func restartCapture(with f: SCContentFilter) {
         let nativeW = f.contentRect.width * CGFloat(f.pointPixelScale)
         let nativeH = f.contentRect.height * CGFloat(f.pointPixelScale)
         let padRes = server.maxRemoteResolution

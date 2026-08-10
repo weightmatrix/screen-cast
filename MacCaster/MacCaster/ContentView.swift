@@ -30,15 +30,6 @@ struct ContentView: View {
                 Image(systemName: "display.2").font(.title)
                 Text("投屏控制台").font(.title2.bold())
                 Spacer()
-                Button(action: {
-                    if streamer.annotation.tool != .none { streamer.annotation.hideToolbar() }
-                    else { streamer.annotation.showToolbar() }
-                }) {
-                    Label("批注", systemImage: streamer.annotation.isActive ? "pencil.tip.crop.circle.fill" : "pencil.tip.crop.circle")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
                 Text("\(streamer.sessions.count) 个流运行中")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -125,14 +116,23 @@ private struct SessionRow: View {
                 }
             }
             Spacer()
+            Button(action: { session.toggleAnnotation() }) {
+                Image(systemName: session.annotationEngine.isActive ? "pencil.tip.crop.circle.fill" : "pencil.tip.crop.circle")
+                    .font(.title2).foregroundStyle(session.annotationEngine.isActive ? .orange : .secondary)
+            }
+            .buttonStyle(.plain).help("批注")
+            Button(action: { session.refresh() }) {
+                Image(systemName: "arrow.clockwise.circle").font(.title2).foregroundStyle(.blue)
+            }
+            .buttonStyle(.plain).help("刷新")
             Button(action: onEdit) {
                 Image(systemName: "pencil.circle").font(.title2).foregroundStyle(.orange)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).help("编辑")
             Button(action: onStop) {
                 Image(systemName: "stop.circle.fill").font(.title2).foregroundStyle(.red)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.plain).help("停止")
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.06)))
