@@ -7,7 +7,7 @@ final class AnnotationEngine: ObservableObject {
     enum Tool { case none, pen, eraser }
 
     @Published var tool: Tool = .none
-    var isActive: Bool { tool != .none }
+    var isActive: Bool { toolbarWindow != nil }
 
     private var strokes: [[CGPoint]] = []
     private var currentStroke: [CGPoint] = []
@@ -15,37 +15,14 @@ final class AnnotationEngine: ObservableObject {
     private var toolbarWindow: NSWindow?
     private var monitor: Any?
 
+    private var penBtn: NSButton?
+    private var eraserBtn: NSButton?
+
     func showToolbar() {
-        if toolbarWindow == nil {
-            let w = NSWindow(
-                contentRect: NSRect(x: 100, y: 100, width: 140, height: 44),
-                styleMask: [.borderless, .nonactivatingPanel],
-                backing: .buffered, defer: false
-            )
-            w.level = .floating
-            w.isOpaque = false
-            w.backgroundColor = NSColor.black.withAlphaComponent(0.7)
-            w.hasShadow = true
-            w.isMovableByWindowBackground = true
-            w.collectionBehavior = [.canJoinAllSpaces, .stationary]
-
-            let content = NSView(frame: w.contentView!.bounds)
-            let penBtn = makeButton(title: "✏️", action: #selector(togglePen), x: 8, y: 6)
-            penBtn.toolTip = "笔：点按开始，再按关闭批注"
-            let eraserBtn = makeButton(title: "🧹", action: #selector(toggleEraser), x: 50, y: 6)
-            eraserBtn.toolTip = "橡皮：点按开始，再按关闭批注"
-            let clearBtn = makeButton(title: "×", action: #selector(clearAll), x: 92, y: 6)
-            clearBtn.toolTip = "清空批注"
-
-            content.addSubview(penBtn)
-            content.addSubview(eraserBtn)
-            content.addSubview(clearBtn)
-            w.contentView = content
-            w.orderFront(nil)
-            toolbarWindow = w
-
-            startGlobalMonitor()
-        }
+        if toolbarWindow != nil { return }
+        startGlobalMonitor()
+        buildToolbar()
+        buildDrawingWindow()
     }
 
     func hideToolbar() {
@@ -53,55 +30,93 @@ final class AnnotationEngine: ObservableObject {
         toolbarWindow = nil
         drawingWindow?.close()
         drawingWindow = nil
+        tool = .none
         stopGlobalMonitor()
     }
 
+    private func buildToolbar() {
+        let w = NSWindow(
+            contentRect: NSRect(x: 200, y: 100, width: 156, height: 48),
+            styleMask: [.borderless, .nonactivatingPanel],
+            backing: .buffered, defer: false
+        )
+        w.level = .floating
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.hasShadow = true
+        w.isMovableByWindowBackground = true
+        w.collectionBehavior = [.canJoinAllSpaces, .stationary]
+
+        let pill = NSView(frame: NSRect(x: 0, y: 0, width: 156, height: 48))
+        pill.wantsLayer = true
+        pill.layer?.cornerRadius = 22
+        pill.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.75).cgColor
+
+        let pen = makeToolButton(symbol: "pencil", action: #selector(togglePen), frame: NSRect(x: 10, y: 8, width: 40, height: 32))
+        pen.toolTip = "画笔"
+        self.penBtn = pen
+
+        let div1 = makeDivider(x: 54)
+        pill.addSubview(div1)
+
+        let eraser = makeToolButton(symbol: "eraser", action: #selector(toggleEraser), frame: NSRect(x: 60, y: 8, width: 40, height: 32))
+        eraser.toolTip = "橡皮擦"
+        self.eraserBtn = eraser
+
+        let div2 = makeDivider(x: 104)
+        pill.addSubview(div2)
+
+        let clear = makeToolButton(symbol: "trash", action: #selector(clearAll), frame: NSRect(x: 110, y: 8, width: 40, height: 32))
+        clear.toolTip = "清空批注"
+
+        pill.addSubview(pen)
+        pill.addSubview(eraser)
+        pill.addSubview(clear)
+
+        w.contentView?.addSubview(pill)
+        w.orderFront(nil)
+        toolbarWindow = w
+        updateButtonStates()
+    }
+
+    private func buildDrawingWindow() {
+        guard drawingWindow == nil, let screen = NSScreen.main else { return }
+        let w = NSWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+        w.level = .floating
+        w.isOpaque = false
+        w.backgroundColor = .clear
+        w.ignoresMouseEvents = true
+        w.hasShadow = false
+        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+
+        let drawView = AnnotationView(frame: screen.frame)
+        drawView.drawCallback = { [weak self] ctx, rect in self?.drawStrokes(in: ctx, rect: rect) }
+        w.contentView = drawView
+        w.orderFront(nil)
+        drawingWindow = w
+    }
+
+    private func updateButtonStates() {
+        penBtn?.layer?.backgroundColor = (tool == .pen ? NSColor.systemBlue : NSColor.white.withAlphaComponent(0.2)).cgColor
+        eraserBtn?.layer?.backgroundColor = (tool == .eraser ? NSColor.systemBlue : NSColor.white.withAlphaComponent(0.2)).cgColor
+    }
+
     @objc private func togglePen() {
-        if tool == .pen { tool = .none } else { tool = .pen }
-        updateDrawingWindow()
+        tool = (tool == .pen) ? .none : .pen
+        updateButtonStates()
+        drawingWindow?.ignoresMouseEvents = (tool == .none)
     }
 
     @objc private func toggleEraser() {
-        if tool == .eraser { tool = .none } else { tool = .eraser }
-        updateDrawingWindow()
+        tool = (tool == .eraser) ? .none : .eraser
+        updateButtonStates()
+        drawingWindow?.ignoresMouseEvents = (tool == .none)
     }
 
     @objc func clearAll() {
         strokes.removeAll()
         currentStroke.removeAll()
         drawingWindow?.contentView?.needsDisplay = true
-    }
-
-    private func updateDrawingWindow() {
-        if tool != .none {
-            ensureDrawingWindow()
-            drawingWindow?.ignoresMouseEvents = false
-        } else {
-            drawingWindow?.ignoresMouseEvents = true
-        }
-    }
-
-    func ensureDrawingWindow() {
-        guard drawingWindow == nil, let screen = NSScreen.main else { return }
-        let w = NSWindow(
-            contentRect: screen.frame,
-            styleMask: [.borderless],
-            backing: .buffered, defer: false
-        )
-        w.level = .floating
-        w.isOpaque = false
-        w.backgroundColor = .clear
-        w.ignoresMouseEvents = false
-        w.hasShadow = false
-        w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
-
-        let drawView = AnnotationView(frame: screen.frame)
-        drawView.drawCallback = { [weak self] ctx, rect in
-            self?.drawStrokes(in: ctx, rect: rect)
-        }
-        w.contentView = drawView
-        w.orderFront(nil)
-        drawingWindow = w
     }
 
     private func startGlobalMonitor() {
@@ -120,13 +135,8 @@ final class AnnotationEngine: ObservableObject {
                 }
                 self.drawingWindow?.contentView?.needsDisplay = true
             case .leftMouseUp:
-                if !self.currentStroke.isEmpty {
-                    self.strokes.append(self.currentStroke)
-                    self.currentStroke = []
-                }
-                if self.tool == .eraser {
-                    self.eraseNear(point)
-                }
+                if !self.currentStroke.isEmpty { self.strokes.append(self.currentStroke); self.currentStroke = [] }
+                if self.tool == .eraser { self.eraseNear(point) }
                 self.drawingWindow?.contentView?.needsDisplay = true
             default: break
             }
@@ -139,13 +149,13 @@ final class AnnotationEngine: ObservableObject {
 
     private func eraseNear(_ point: CGPoint) {
         strokes.removeAll { stroke in
-            stroke.contains { abs($0.x - point.x) < 16 && abs($0.y - point.y) < 16 }
+            stroke.contains { abs($0.x - point.x) < 20 && abs($0.y - point.y) < 20 }
         }
     }
 
     func drawStrokes(in ctx: CGContext, rect: CGRect) {
-        ctx.setStrokeColor(NSColor.systemRed.withAlphaComponent(0.9).cgColor)
-        ctx.setLineWidth(3)
+        ctx.setStrokeColor(NSColor.systemRed.cgColor)
+        ctx.setLineWidth(4)
         ctx.setLineCap(.round)
         ctx.setLineJoin(.round)
 
@@ -158,15 +168,30 @@ final class AnnotationEngine: ObservableObject {
         }
     }
 
-    private func makeButton(title: String, action: Selector, x: CGFloat, y: CGFloat) -> NSButton {
-        let btn = NSButton(frame: NSRect(x: x, y: y, width: 36, height: 32))
-        btn.title = title
+    private func makeToolButton(symbol: String, action: Selector, frame: NSRect) -> NSButton {
+        let btn = NSButton(frame: frame)
+        btn.title = ""
         btn.isBordered = false
         btn.bezelStyle = .regularSquare
-        btn.font = NSFont.systemFont(ofSize: 16)
+        btn.wantsLayer = true
+        btn.layer?.cornerRadius = 16
+        btn.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
+
+        let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        let config = NSImage.SymbolConfiguration(pointSize: 16, weight: .medium)
+        btn.image = img?.withSymbolConfiguration(config)
+        btn.imagePosition = .imageOnly
+        btn.contentTintColor = .white
         btn.target = self
         btn.action = action
         return btn
+    }
+
+    private func makeDivider(x: CGFloat) -> NSView {
+        let v = NSView(frame: NSRect(x: x, y: 12, width: 1, height: 24))
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.2).cgColor
+        return v
     }
 }
 
