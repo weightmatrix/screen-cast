@@ -8,6 +8,7 @@ import VideoToolbox
 import AppKit
 
 final class ScreenStreamer: NSObject, ObservableObject {
+    let annotation = AnnotationEngine()
     struct AppGroup: Identifiable {
         var id = UUID()
         let application: SCRunningApplication
@@ -76,7 +77,12 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var clientCount: Int = 0
     @Published var useH264: Bool
     @Published var bitrate: Int
-    @Published var showsCursor: Bool
+    @Published var showsCursor: Bool {
+        didSet {
+            guard oldValue != showsCursor else { return }
+            restart()
+        }
+    }
     @Published var encWidth: Int = 0
     @Published var encHeight: Int = 0
 
@@ -179,50 +185,61 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         contentName = name
         let f = newFilter
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            guard let self else { return }
-            let nativeW = f.contentRect.width * CGFloat(f.pointPixelScale)
-            let nativeH = f.contentRect.height * CGFloat(f.pointPixelScale)
-            let padRes = self.server.maxRemoteResolution
-            let targetW: Int, targetH: Int
-            if let padRes {
-                let padAspect = CGFloat(padRes.width) / CGFloat(padRes.height)
-                let srcAspect = nativeW / nativeH
-                if srcAspect > padAspect {
-                    targetW = padRes.width
-                    targetH = max(1, Int(CGFloat(padRes.width) / srcAspect))
-                } else {
-                    targetH = padRes.height
-                    targetW = max(1, Int(CGFloat(padRes.height) * srcAspect))
-                }
+            self?.restartWithFilter(f)
+        }
+    }
+
+    private func restart() {
+        let currentFilter = filter
+        stop()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.restartWithFilter(currentFilter)
+        }
+    }
+
+    private func restartWithFilter(_ f: SCContentFilter) {
+        let nativeW = f.contentRect.width * CGFloat(f.pointPixelScale)
+        let nativeH = f.contentRect.height * CGFloat(f.pointPixelScale)
+        let padRes = server.maxRemoteResolution
+        let targetW: Int, targetH: Int
+        if let padRes {
+            let padAspect = CGFloat(padRes.width) / CGFloat(padRes.height)
+            let srcAspect = nativeW / nativeH
+            if srcAspect > padAspect {
+                targetW = padRes.width
+                targetH = max(1, Int(CGFloat(padRes.width) / srcAspect))
             } else {
-                targetW = Int(nativeW)
-                targetH = Int(nativeH)
+                targetH = padRes.height
+                targetW = max(1, Int(CGFloat(padRes.height) * srcAspect))
             }
-            let config = SCStreamConfiguration()
-            config.width = targetW
-            config.height = targetH
-            config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(self.targetFPS))
-            config.queueDepth = 4
-            config.showsCursor = self.showsCursor
-            config.capturesAudio = false
-            config.pixelFormat = kCVPixelFormatType_32BGRA
-            self.encWidth = targetW
-            self.encHeight = targetH
-            self.server.start()
-            do {
-                let s = SCStream(filter: f, configuration: config, delegate: self)
-                try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: self.workQueue)
-                try s.startCapture()
-                self.stream = s
-                self.compressionSession = nil
-                self.needKeyFrame = true
-                self.ptsCounter = 0
-                self.framesThisSecond = 0
-                self.fpsTimerStart = Date()
-                self.phase = .streaming
-            } catch {
-                self.phase = .failed(error.localizedDescription)
-            }
+        } else {
+            targetW = Int(nativeW)
+            targetH = Int(nativeH)
+        }
+        let config = SCStreamConfiguration()
+        config.width = targetW
+        config.height = targetH
+        config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(targetFPS))
+        config.queueDepth = 4
+        config.showsCursor = showsCursor
+        config.capturesAudio = false
+        config.pixelFormat = kCVPixelFormatType_32BGRA
+        encWidth = targetW
+        encHeight = targetH
+        server.start()
+        do {
+            let s = SCStream(filter: f, configuration: config, delegate: self)
+            try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: workQueue)
+            try s.startCapture()
+            stream = s
+            compressionSession = nil
+            needKeyFrame = true
+            ptsCounter = 0
+            framesThisSecond = 0
+            fpsTimerStart = Date()
+            phase = .streaming
+        } catch {
+            phase = .failed(error.localizedDescription)
         }
     }
 

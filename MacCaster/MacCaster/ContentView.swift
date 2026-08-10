@@ -30,6 +30,15 @@ struct ContentView: View {
                 Image(systemName: "display.2").font(.title)
                 Text("投屏控制台").font(.title2.bold())
                 Spacer()
+                Button(action: {
+                    if streamer.annotation.tool != .none { streamer.annotation.hideToolbar() }
+                    else { streamer.annotation.showToolbar() }
+                }) {
+                    Label("批注", systemImage: streamer.annotation.isActive ? "pencil.tip.crop.circle.fill" : "pencil.tip.crop.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 Text("\(streamer.sessions.count) 个流运行中")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -37,9 +46,9 @@ struct ContentView: View {
                 Text("本机 IP：\(CastingServer.localIPs.joined(separator: "、"))")
                     .font(.caption).foregroundStyle(.blue)
                 Spacer()
+            }
         }
     }
-}
     private var defaultSettingsPanel: some View {
         HStack(spacing: 16) {
             Text("新建流默认设置").font(.caption).foregroundStyle(.secondary)

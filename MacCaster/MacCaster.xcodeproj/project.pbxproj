@@ -10,6 +10,7 @@
 		AB0000000000000000000201 /* MacCasterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000101 /* MacCasterApp.swift */; };
 		AB0000000000000000000202 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000102 /* ContentView.swift */; };
 		AB0000000000000000000203 /* ScreenStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000103 /* ScreenStreamer.swift */; };
+		ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */; };
 		AB0000000000000000000204 /* CastingServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* CastingServer.swift */; };
 /* End PBXBuildFile section */
 
@@ -18,6 +19,7 @@
 		AB0000000000000000000101 /* MacCasterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCasterApp.swift; sourceTree = "<group>"; };
 		AB0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000103 /* ScreenStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenStreamer.swift; sourceTree = "<group>"; };
+		ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationEngine.swift; sourceTree = "<group>"; };
 		AB0000000000000000000104 /* CastingServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastingServer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000105 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -55,6 +57,7 @@
 				AB0000000000000000000101 /* MacCasterApp.swift */,
 				AB0000000000000000000102 /* ContentView.swift */,
 				AB0000000000000000000103 /* ScreenStreamer.swift */,
+				ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */,
 				AB0000000000000000000104 /* CastingServer.swift */,
 				AB0000000000000000000105 /* Info.plist */,
 			);
@@ -132,6 +135,7 @@
 				AB0000000000000000000201 /* MacCasterApp.swift in Sources */,
 				AB0000000000000000000202 /* ContentView.swift in Sources */,
 				AB0000000000000000000203 /* ScreenStreamer.swift in Sources */,
+				ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */,
 				AB0000000000000000000204 /* CastingServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
