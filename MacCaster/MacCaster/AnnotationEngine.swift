@@ -14,24 +14,42 @@ final class AnnotationEngine: ObservableObject {
     private var drawingWindow: NSWindow?
     private var toolbarWindow: NSWindow?
     private var monitor: Any?
-
     private var penBtn: NSButton?
     private var eraserBtn: NSButton?
+    private var isShuttingDown = false
 
     func showToolbar() {
-        if toolbarWindow != nil { return }
+        guard toolbarWindow == nil else { return }
+        isShuttingDown = false
+        NSLog("[Annotation] showToolbar")
         startGlobalMonitor()
         buildToolbar()
         buildDrawingWindow()
     }
 
     func hideToolbar() {
-        toolbarWindow?.close()
-        toolbarWindow = nil
-        drawingWindow?.close()
-        drawingWindow = nil
-        tool = .none
+        guard !isShuttingDown else { return }
+        isShuttingDown = true
+        NSLog("[Annotation] hideToolbar begin")
         stopGlobalMonitor()
+        if let dw = drawingWindow {
+            NSLog("[Annotation] closing drawingWindow")
+            dw.orderOut(nil)
+            dw.close()
+            drawingWindow = nil
+            NSLog("[Annotation] drawingWindow closed")
+        }
+        if let tw = toolbarWindow {
+            NSLog("[Annotation] closing toolbarWindow")
+            tw.orderOut(nil)
+            tw.close()
+            toolbarWindow = nil
+            NSLog("[Annotation] toolbarWindow closed")
+        }
+        tool = .none
+        strokes.removeAll()
+        currentStroke.removeAll()
+        NSLog("[Annotation] hideToolbar end")
     }
 
     private func buildToolbar() {
@@ -46,6 +64,7 @@ final class AnnotationEngine: ObservableObject {
         w.hasShadow = true
         w.isMovableByWindowBackground = true
         w.collectionBehavior = [.canJoinAllSpaces, .stationary]
+        w.isReleasedWhenClosed = false
 
         let pill = NSView(frame: NSRect(x: 0, y: 0, width: 156, height: 48))
         pill.wantsLayer = true
@@ -77,16 +96,21 @@ final class AnnotationEngine: ObservableObject {
         w.orderFront(nil)
         toolbarWindow = w
         updateButtonStates()
+        NSLog("[Annotation] toolbar built")
     }
 
     private func buildDrawingWindow() {
-        guard drawingWindow == nil, let screen = NSScreen.main else { return }
+        guard drawingWindow == nil, let screen = NSScreen.main else {
+            NSLog("[Annotation] buildDrawingWindow skip: dw=\(drawingWindow != nil) screen=\(NSScreen.main != nil)")
+            return
+        }
         let w = NSWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         w.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopWindow)) - 1)
         w.isOpaque = false
         w.backgroundColor = .clear
         w.ignoresMouseEvents = true
         w.hasShadow = false
+        w.isReleasedWhenClosed = false
         w.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
 
         let drawView = AnnotationView(frame: screen.frame)
@@ -94,6 +118,7 @@ final class AnnotationEngine: ObservableObject {
         w.contentView = drawView
         w.orderFront(nil)
         drawingWindow = w
+        NSLog("[Annotation] drawingWindow built")
     }
 
     private func updateButtonStates() {
@@ -104,22 +129,26 @@ final class AnnotationEngine: ObservableObject {
     @objc private func togglePen() {
         tool = (tool == .pen) ? .none : .pen
         updateButtonStates()
+        NSLog("[Annotation] togglePen → \(tool)")
     }
 
     @objc private func toggleEraser() {
         tool = (tool == .eraser) ? .none : .eraser
         updateButtonStates()
+        NSLog("[Annotation] toggleEraser → \(tool)")
     }
 
     @objc func clearAll() {
         strokes.removeAll()
         currentStroke.removeAll()
         drawingWindow?.contentView?.needsDisplay = true
+        NSLog("[Annotation] clearAll strokes=\(strokes.count)")
     }
 
     private func startGlobalMonitor() {
+        NSLog("[Annotation] startGlobalMonitor")
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
-            guard let self, self.tool != .none else { return }
+            guard let self, !self.isShuttingDown, self.tool != .none else { return }
             let point = NSEvent.mouseLocation
 
             switch event.type {
@@ -142,7 +171,11 @@ final class AnnotationEngine: ObservableObject {
     }
 
     private func stopGlobalMonitor() {
-        if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+        NSLog("[Annotation] stopGlobalMonitor")
+        if let m = monitor {
+            NSEvent.removeMonitor(m)
+            monitor = nil
+        }
     }
 
     private func eraseNear(_ point: CGPoint) {
@@ -152,6 +185,7 @@ final class AnnotationEngine: ObservableObject {
     }
 
     func drawStrokes(in ctx: CGContext, rect: CGRect) {
+        guard !strokes.isEmpty else { return }
         ctx.setStrokeColor(NSColor.systemRed.cgColor)
         ctx.setLineWidth(4)
         ctx.setLineCap(.round)

@@ -250,6 +250,13 @@ extension StreamSession {
         guard annotationEngine.isActive else { return }
         let w = CVPixelBufferGetWidth(pixelBuffer)
         let h = CVPixelBufferGetHeight(pixelBuffer)
+        guard w > 0, h > 0 else { return }
+        let cr = filter.contentRect
+        let ps = CGFloat(filter.pointPixelScale)
+        let srcW = cr.width * ps
+        let srcH = cr.height * ps
+        guard srcW > 0, srcH > 0 else { return }
+
         CVPixelBufferLockBaseAddress(pixelBuffer, [])
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, []) }
         guard let base = CVPixelBufferGetBaseAddress(pixelBuffer) else { return }
@@ -259,10 +266,6 @@ extension StreamSession {
             bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue | CGImageAlphaInfo.noneSkipFirst.rawValue
         ) else { return }
 
-        let cr = filter.contentRect
-        let ps = CGFloat(filter.pointPixelScale)
-        let srcW = cr.width * ps
-        let srcH = cr.height * ps
         let scaleX = CGFloat(w) / srcW
         let scaleY = CGFloat(h) / srcH
         ctx.translateBy(x: -cr.origin.x * ps * scaleX, y: -cr.origin.y * ps * scaleY)
