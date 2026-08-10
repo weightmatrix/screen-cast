@@ -20,11 +20,17 @@ final class StreamClient: ObservableObject {
     private var expectedPayloadLength: Int?
     private var expectedType: UInt8?
     private let netQueue = DispatchQueue(label: "com.witten.touping.net")
+    private var isDisconnecting = false
+    private var lastHost: String?
+    private var lastPort: UInt16?
 
     private static let maxMessageLength = 8 * 1024 * 1024
 
     func connect(host: String, port: UInt16) {
         disconnect()
+        isDisconnecting = false
+        lastHost = host
+        lastPort = port
         setStatus(.connecting)
         decoder.reset()
         let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
@@ -37,12 +43,10 @@ final class StreamClient: ObservableObject {
                     self.setStatus(.connected)
                     self.sendScreenSize()
                     self.netQueue.async { [weak self] in self?.readLoop() }
-                case .failed(let error):
-                    self.setStatus(.failed(error.localizedDescription))
+                case .failed:
+                    self.handleDisconnect()
                 case .cancelled:
-                    if self.connection === connection, self.status != .idle {
-                        self.setStatus(.idle)
-                    }
+                    self.handleDisconnect()
                 default:
                     break
                 }
@@ -52,7 +56,26 @@ final class StreamClient: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
     }
 
+    private func handleDisconnect() {
+        if isDisconnecting { return }
+        connection = nil
+        netQueue.async {
+            self.rxBuffer.removeAll(keepingCapacity: false)
+            self.expectedPayloadLength = nil
+            self.expectedType = nil
+        }
+        if let host = lastHost, let port = lastPort {
+            setStatus(.connecting)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                self?.connect(host: host, port: port)
+            }
+        }
+    }
+
     func disconnect() {
+        isDisconnecting = true
+        lastHost = nil
+        lastPort = nil
         let conn = connection
         connection = nil
         conn?.cancel()

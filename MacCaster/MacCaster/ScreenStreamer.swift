@@ -38,7 +38,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
     }
 
     func loadShareableContent() {
-        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: true) { [weak self] content, error in
+        SCShareableContent.getExcludingDesktopWindows(false, onScreenWindowsOnly: false) { [weak self] content, error in
             DispatchQueue.main.async {
                 guard let self, let content else { return }
                 var grouped: [SCRunningApplication: [SCWindow]] = [:]
@@ -69,7 +69,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
 final class StreamSession: NSObject, ObservableObject, Identifiable {
     let id = UUID()
     let port: UInt16
-    let contentName: String
+    @Published var contentName: String
 
     @Published var phase: Phase = .idle
     @Published var currentFPS: Double = 0
@@ -172,6 +172,58 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         if let s = compressionSession { VTCompressionSessionInvalidate(s); compressionSession = nil }
         server.stop()
         phase = .idle
+    }
+
+    func changeFilter(_ newFilter: SCContentFilter, name: String) {
+        stop()
+        contentName = name
+        let f = newFilter
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self else { return }
+            let nativeW = f.contentRect.width * CGFloat(f.pointPixelScale)
+            let nativeH = f.contentRect.height * CGFloat(f.pointPixelScale)
+            let padRes = self.server.maxRemoteResolution
+            let targetW: Int, targetH: Int
+            if let padRes {
+                let padAspect = CGFloat(padRes.width) / CGFloat(padRes.height)
+                let srcAspect = nativeW / nativeH
+                if srcAspect > padAspect {
+                    targetW = padRes.width
+                    targetH = max(1, Int(CGFloat(padRes.width) / srcAspect))
+                } else {
+                    targetH = padRes.height
+                    targetW = max(1, Int(CGFloat(padRes.height) * srcAspect))
+                }
+            } else {
+                targetW = Int(nativeW)
+                targetH = Int(nativeH)
+            }
+            let config = SCStreamConfiguration()
+            config.width = targetW
+            config.height = targetH
+            config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(self.targetFPS))
+            config.queueDepth = 4
+            config.showsCursor = self.showsCursor
+            config.capturesAudio = false
+            config.pixelFormat = kCVPixelFormatType_32BGRA
+            self.encWidth = targetW
+            self.encHeight = targetH
+            self.server.start()
+            do {
+                let s = SCStream(filter: f, configuration: config, delegate: self)
+                try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: self.workQueue)
+                try s.startCapture()
+                self.stream = s
+                self.compressionSession = nil
+                self.needKeyFrame = true
+                self.ptsCounter = 0
+                self.framesThisSecond = 0
+                self.fpsTimerStart = Date()
+                self.phase = .streaming
+            } catch {
+                self.phase = .failed(error.localizedDescription)
+            }
+        }
     }
 
     func applyBitrate() {

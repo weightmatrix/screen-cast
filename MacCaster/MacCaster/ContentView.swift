@@ -37,10 +37,9 @@ struct ContentView: View {
                 Text("本机 IP：\(CastingServer.localIPs.joined(separator: "、"))")
                     .font(.caption).foregroundStyle(.blue)
                 Spacer()
-            }
         }
     }
-
+}
     private var defaultSettingsPanel: some View {
         HStack(spacing: 16) {
             Text("新建流默认设置").font(.caption).foregroundStyle(.secondary)
@@ -69,12 +68,13 @@ struct ContentView: View {
 private struct StreamListView: View {
     @ObservedObject var streamer: ScreenStreamer
     let onAdd: () -> Void
+    @State private var editSession: StreamSession? = nil
 
     var body: some View {
         ScrollView {
             VStack(spacing: 6) {
                 ForEach(streamer.sessions) { session in
-                    SessionRow(session: session, onStop: { streamer.removeSession(session) })
+                    SessionRow(session: session, onStop: { streamer.removeSession(session) }, onEdit: { editSession = session })
                 }
                 Button(action: onAdd) {
                     Label("添加投屏流", systemImage: "plus.circle.fill")
@@ -85,12 +85,16 @@ private struct StreamListView: View {
                 .padding(.top, 4)
             }
         }
+        .sheet(item: $editSession) { session in
+            EditStreamSheet(session: session, streamer: streamer)
+        }
     }
 }
 
 private struct SessionRow: View {
     @ObservedObject var session: StreamSession
     let onStop: () -> Void
+    let onEdit: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -112,6 +116,10 @@ private struct SessionRow: View {
                 }
             }
             Spacer()
+            Button(action: onEdit) {
+                Image(systemName: "pencil.circle").font(.title2).foregroundStyle(.orange)
+            }
+            .buttonStyle(.plain)
             Button(action: onStop) {
                 Image(systemName: "stop.circle.fill").font(.title2).foregroundStyle(.red)
             }
@@ -304,3 +312,87 @@ private struct AddStreamSheet: View {
         }
     }
 }
+
+private struct EditStreamSheet: View {
+    let session: StreamSession
+    @ObservedObject var streamer: ScreenStreamer
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedName: String = ""
+    @State private var selectedFilter: SCContentFilter?
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("更改投屏内容").font(.title2.bold())
+                Spacer()
+                Text("当前：\(session.contentName)").font(.caption).foregroundStyle(.secondary)
+                Button("取消") { dismiss() }
+            }
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("显示器").font(.caption).foregroundStyle(.secondary)
+                    ForEach(streamer.displays, id: \.displayID) { display in
+                        let filter = SCContentFilter(display: display, excludingWindows: [])
+                        let name = "显示器 \(Int(display.width))×\(Int(display.height))"
+                        pickerRow(name: name, filter: filter)
+                    }
+
+                    Text("应用与窗口").font(.caption).foregroundStyle(.secondary).padding(.top, 8)
+                    ForEach(streamer.appGroups) { group in
+                        VStack(spacing: 2) {
+                            HStack(spacing: 8) {
+                                if let icon = group.icon {
+                                    Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                                }
+                                Text(group.application.applicationName).font(.callout).bold()
+                                Spacer()
+                                if let display = streamer.displays.first {
+                                    let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
+                                    pickerRow(name: group.application.applicationName, filter: filter)
+                                }
+                            }
+                            ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
+                                let title = (window.title ?? "").isEmpty ? "未命名" : window.title ?? ""
+                                let filter = SCContentFilter(desktopIndependentWindow: window)
+                                HStack {
+                                    Text("  \(title)").font(.caption).lineLimit(1)
+                                    Spacer()
+                                    pickerRow(name: title, filter: filter)
+                                }
+                            }
+                        }
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.05)))
+                    }
+                }
+            }
+
+            if let filter = selectedFilter {
+                Divider()
+                HStack {
+                    Spacer()
+                    Button("确认切换") {
+                        session.changeFilter(filter, name: selectedName)
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+        }
+        .padding(20)
+        .frame(minWidth: 480, minHeight: 420)
+    }
+
+    private func pickerRow(name: String, filter: SCContentFilter) -> some View {
+        Button("选择") {
+            selectedFilter = filter
+            selectedName = name
+        }
+        .buttonStyle(.bordered).controlSize(.small)
+        .tint(selectedFilter === filter ? .blue : nil)
+    }
+}
+
