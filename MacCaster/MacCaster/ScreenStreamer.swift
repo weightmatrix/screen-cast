@@ -142,12 +142,10 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     func toggleAnnotation() {
-        if annotationEngine.tool != .none {
-            annotationEngine.clearAll()
-            annotationEngine.tool = .none
+        if annotationEngine.isActive {
+            annotationEngine.hideToolbar()
         } else {
-            annotationEngine.tool = .pen
-            annotationEngine.ensureDrawingWindow()
+            annotationEngine.showToolbar()
         }
     }
 
