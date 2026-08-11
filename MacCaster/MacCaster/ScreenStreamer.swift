@@ -145,8 +145,10 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
 
     func toggleAnnotation() {
         if annotationEngine.isActive {
+            DiagLog.log("Stream", "toggleAnnotation: off (port \(port))")
             annotationEngine.hideToolbar()
         } else {
+            DiagLog.log("Stream", "toggleAnnotation: on (port \(port))")
             annotationEngine.showToolbar()
         }
     }

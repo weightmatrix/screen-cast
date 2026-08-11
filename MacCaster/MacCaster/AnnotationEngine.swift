@@ -21,7 +21,7 @@ final class AnnotationEngine: ObservableObject {
     func showToolbar() {
         guard toolbarWindow == nil else { return }
         isShuttingDown = false
-        NSLog("[Annotation] showToolbar")
+        DiagLog.log("Annotation", "showToolbar")
         startGlobalMonitor()
         buildToolbar()
         buildDrawingWindow()
@@ -30,26 +30,26 @@ final class AnnotationEngine: ObservableObject {
     func hideToolbar() {
         guard !isShuttingDown else { return }
         isShuttingDown = true
-        NSLog("[Annotation] hideToolbar begin")
+        DiagLog.log("Annotation", "hideToolbar begin")
         stopGlobalMonitor()
         if let dw = drawingWindow {
-            NSLog("[Annotation] closing drawingWindow")
+            DiagLog.log("Annotation", "closing drawingWindow")
             dw.orderOut(nil)
             dw.close()
             drawingWindow = nil
-            NSLog("[Annotation] drawingWindow closed")
+            DiagLog.log("Annotation", "drawingWindow closed")
         }
         if let tw = toolbarWindow {
-            NSLog("[Annotation] closing toolbarWindow")
+            DiagLog.log("Annotation", "closing toolbarWindow")
             tw.orderOut(nil)
             tw.close()
             toolbarWindow = nil
-            NSLog("[Annotation] toolbarWindow closed")
+            DiagLog.log("Annotation", "toolbarWindow closed")
         }
         tool = .none
         strokes.removeAll()
         currentStroke.removeAll()
-        NSLog("[Annotation] hideToolbar end")
+        DiagLog.log("Annotation", "hideToolbar end")
     }
 
     private func buildToolbar() {
@@ -96,12 +96,12 @@ final class AnnotationEngine: ObservableObject {
         w.orderFront(nil)
         toolbarWindow = w
         updateButtonStates()
-        NSLog("[Annotation] toolbar built")
+        DiagLog.log("Annotation", "toolbar built")
     }
 
     private func buildDrawingWindow() {
         guard drawingWindow == nil, let screen = NSScreen.main else {
-            NSLog("[Annotation] buildDrawingWindow skip: dw=\(drawingWindow != nil) screen=\(NSScreen.main != nil)")
+            DiagLog.log("Annotation", "buildDrawingWindow skip: dw=\(drawingWindow != nil) screen=\(NSScreen.main != nil)")
             return
         }
         let w = NSWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
@@ -118,7 +118,7 @@ final class AnnotationEngine: ObservableObject {
         w.contentView = drawView
         w.orderFront(nil)
         drawingWindow = w
-        NSLog("[Annotation] drawingWindow built")
+        DiagLog.log("Annotation", "drawingWindow built")
     }
 
     private func updateButtonStates() {
@@ -129,24 +129,24 @@ final class AnnotationEngine: ObservableObject {
     @objc private func togglePen() {
         tool = (tool == .pen) ? .none : .pen
         updateButtonStates()
-        NSLog("[Annotation] togglePen → \(tool)")
+        DiagLog.log("Annotation", "togglePen → \(tool)")
     }
 
     @objc private func toggleEraser() {
         tool = (tool == .eraser) ? .none : .eraser
         updateButtonStates()
-        NSLog("[Annotation] toggleEraser → \(tool)")
+        DiagLog.log("Annotation", "toggleEraser → \(tool)")
     }
 
     @objc func clearAll() {
         strokes.removeAll()
         currentStroke.removeAll()
         drawingWindow?.contentView?.needsDisplay = true
-        NSLog("[Annotation] clearAll strokes=\(strokes.count)")
+        DiagLog.log("Annotation", "clearAll strokes=\(strokes.count)")
     }
 
     private func startGlobalMonitor() {
-        NSLog("[Annotation] startGlobalMonitor")
+        DiagLog.log("Annotation", "startGlobalMonitor")
         monitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .leftMouseDragged, .leftMouseUp]) { [weak self] event in
             guard let self, !self.isShuttingDown, self.tool != .none else { return }
             let point = NSEvent.mouseLocation
@@ -171,7 +171,7 @@ final class AnnotationEngine: ObservableObject {
     }
 
     private func stopGlobalMonitor() {
-        NSLog("[Annotation] stopGlobalMonitor")
+        DiagLog.log("Annotation", "stopGlobalMonitor")
         if let m = monitor {
             NSEvent.removeMonitor(m)
             monitor = nil

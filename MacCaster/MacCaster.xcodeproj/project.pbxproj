@@ -11,6 +11,7 @@
 		AB0000000000000000000202 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000102 /* ContentView.swift */; };
 		AB0000000000000000000203 /* ScreenStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000103 /* ScreenStreamer.swift */; };
 		ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */; };
+		AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB428A01562F9048A59EEE5F /* Diagnostic.swift */; };
 		AB0000000000000000000204 /* CastingServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* CastingServer.swift */; };
 /* End PBXBuildFile section */
 
@@ -20,6 +21,7 @@
 		AB0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		AB0000000000000000000103 /* ScreenStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenStreamer.swift; sourceTree = "<group>"; };
 		ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationEngine.swift; sourceTree = "<group>"; };
+		AB428A01562F9048A59EEE5F /* Diagnostic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostic.swift; sourceTree = "<group>"; };
 		AB0000000000000000000104 /* CastingServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastingServer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000105 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
@@ -59,6 +61,7 @@
 				AB0000000000000000000102 /* ContentView.swift */,
 				AB0000000000000000000103 /* ScreenStreamer.swift */,
 				ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */,
+				AB428A01562F9048A59EEE5F /* Diagnostic.swift */,
 				AB0000000000000000000104 /* CastingServer.swift */,
 				AB0000000000000000000105 /* Info.plist */,
 				AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */,
@@ -138,6 +141,7 @@
 				AB0000000000000000000202 /* ContentView.swift in Sources */,
 				AB0000000000000000000203 /* ScreenStreamer.swift in Sources */,
 				ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */,
+				AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */,
 				AB0000000000000000000204 /* CastingServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
