@@ -22,6 +22,7 @@
 		ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationEngine.swift; sourceTree = "<group>"; };
 		AB0000000000000000000104 /* CastingServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastingServer.swift; sourceTree = "<group>"; };
 		AB0000000000000000000105 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -60,6 +61,7 @@
 				ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */,
 				AB0000000000000000000104 /* CastingServer.swift */,
 				AB0000000000000000000105 /* Info.plist */,
+				AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */,
 			);
 			path = MacCaster;
 			sourceTree = "<group>";

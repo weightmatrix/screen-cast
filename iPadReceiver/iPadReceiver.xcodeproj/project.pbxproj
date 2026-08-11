@@ -20,6 +20,7 @@
 		0B0000000000000000000103 /* StreamClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamClient.swift; sourceTree = "<group>"; };
 		0B0000000000000000000104 /* H264Decoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H264Decoder.swift; sourceTree = "<group>"; };
 		0B0000000000000000000106 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB72356A241AE6480AA3BFC6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -57,6 +58,7 @@
 				0B0000000000000000000103 /* StreamClient.swift */,
 				0B0000000000000000000104 /* H264Decoder.swift */,
 				0B0000000000000000000106 /* Info.plist */,
+				AB72356A241AE6480AA3BFC6 /* Assets.xcassets */,
 			);
 			path = iPadReceiver;
 			sourceTree = "<group>";
@@ -279,6 +281,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.witten.touping.ipadreceiver.f4l9p953mq;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -300,6 +303,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.witten.touping.ipadreceiver.f4l9p953mq;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
