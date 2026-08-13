@@ -217,9 +217,6 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         stop()
         contentName = name
         let f = newFilter
-        if #available(macOS 15.2, *) {
-            for app in f.includedApplications { recordUsage(for: app) }
-        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.restartCapture(with: f)
         }
