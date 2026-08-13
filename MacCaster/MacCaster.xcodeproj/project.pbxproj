@@ -12,6 +12,8 @@
 		AB0000000000000000000203 /* ScreenStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000103 /* ScreenStreamer.swift */; };
 		AB0000000000000000000204 /* CastingServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* CastingServer.swift */; };
 		AB35C6000C68B240AC8A5D4B /* DiscoveryBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */; };
+		ABE23ED2905134432BB15EC3 /* MacReceiverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */; };
+		AB91522DAD32A041D0AA2D6E /* MacReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */; };
 		AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB428A01562F9048A59EEE5F /* Diagnostic.swift */; };
 		ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */; };
 		ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */; };
@@ -28,6 +30,8 @@
 		AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
 		ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationEngine.swift; sourceTree = "<group>"; };
 		ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryBroadcaster.swift; sourceTree = "<group>"; };
+		ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReceiverView.swift; sourceTree = "<group>"; };
+		ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReceiver.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -66,6 +70,8 @@
 				ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */,
 				AB428A01562F9048A59EEE5F /* Diagnostic.swift */,
 				ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */,
+				ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */,
+				ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */,
 				AB0000000000000000000104 /* CastingServer.swift */,
 				AB0000000000000000000105 /* Info.plist */,
 				AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */,
@@ -148,6 +154,8 @@
 				ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */,
 				AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */,
 				AB35C6000C68B240AC8A5D4B /* DiscoveryBroadcaster.swift in Sources */,
+				ABE23ED2905134432BB15EC3 /* MacReceiverView.swift in Sources */,
+				AB91522DAD32A041D0AA2D6E /* MacReceiver.swift in Sources */,
 				AB0000000000000000000204 /* CastingServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

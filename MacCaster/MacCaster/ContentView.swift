@@ -4,6 +4,7 @@ import ScreenCaptureKit
 struct ContentView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
     @State private var showAddSheet = false
+    @AppStorage("appMode") private var appMode = "cast"
 
     var body: some View {
         VStack(spacing: 0) {
@@ -30,6 +31,12 @@ struct ContentView: View {
                 Image(systemName: "display.2").font(.title)
                 Text("投屏控制台").font(.title2.bold())
                 Spacer()
+                Button(action: { appMode = "receive" }) {
+                    Label("切换接收", systemImage: "arrow.down.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 Text("\(streamer.sessions.count) 个流运行中")
                     .font(.caption).foregroundStyle(.secondary)
             }
