@@ -284,10 +284,12 @@ private struct AddStreamSheet: View {
                         if !selectedApps.isEmpty, let display = streamer.displays.first {
                             let apps = selectedApps.map(\.1)
                             let name = selectedApps.map(\.0).joined(separator: " + ")
+                            for app in apps { streamer.recordUsage(bundleIdentifier: app.bundleIdentifier) }
                             streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: useCode)
                         }
                         for (name, window) in selectedWindows {
                             let origin = window.frame.origin
+                            if let app = window.owningApplication { streamer.recordUsage(bundleIdentifier: app.bundleIdentifier) }
                             streamer.addSession(filter: SCContentFilter(desktopIndependentWindow: window), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, screenOrigin: origin, code: useCode)
                         }
                         for (name, display) in selectedDisplays {

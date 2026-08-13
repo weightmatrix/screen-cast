@@ -29,6 +29,8 @@ final class ScreenStreamer: NSObject, ObservableObject {
     @Published var defaultFPS: Int { didSet { UserDefaults.standard.set(defaultFPS, forKey: "defaultFPS") } }
     @Published var lastCode: String { didSet { UserDefaults.standard.set(lastCode, forKey: "lastCode") } }
 
+    private var usageCounts: [String: Int] = [:]
+
     private var nextPort: UInt16 = 8318
 
     override init() {
@@ -37,8 +39,32 @@ final class ScreenStreamer: NSObject, ObservableObject {
         self.defaultBitrate = u.object(forKey: "defaultBitrate") as? Int ?? 30_000_000
         self.defaultFPS = u.object(forKey: "defaultFPS") as? Int ?? 60
         self.lastCode = u.object(forKey: "lastCode") as? String ?? "1234"
+        self.usageCounts = u.object(forKey: "appUsageCounts") as? [String: Int] ?? [:]
         super.init()
         DiscoveryBroadcaster.shared.start()
+    }
+
+    private func recordUsage(for app: SCRunningApplication) {
+        let bundle = app.bundleIdentifier
+        guard !bundle.isEmpty else { return }
+        usageCounts[bundle, default: 0] += 1
+        UserDefaults.standard.set(usageCounts, forKey: "appUsageCounts")
+    }
+
+    func recordUsage(bundleIdentifier: String) {
+        guard !bundleIdentifier.isEmpty else { return }
+        usageCounts[bundleIdentifier, default: 0] += 1
+        UserDefaults.standard.set(usageCounts, forKey: "appUsageCounts")
+        sortAppGroups()
+    }
+
+    private func sortAppGroups() {
+        appGroups.sort { a, b in
+            let ca = usageCounts[a.application.bundleIdentifier ?? ""] ?? 0
+            let cb = usageCounts[b.application.bundleIdentifier ?? ""] ?? 0
+            if ca != cb { return ca > cb }
+            return a.application.applicationName.localizedStandardCompare(b.application.applicationName) == .orderedAscending
+        }
     }
 
     func loadShareableContent() {
@@ -50,8 +76,8 @@ final class ScreenStreamer: NSObject, ObservableObject {
                     if let app = window.owningApplication { grouped[app, default: []].append(window) }
                 }
                 self.appGroups = grouped.map { AppGroup(application: $0.key, windows: $0.value) }
-                    .sorted { $0.application.applicationName.localizedStandardCompare($1.application.applicationName) == .orderedAscending }
                 self.displays = content.displays
+                self.sortAppGroups()
             }
         }
     }
@@ -60,6 +86,10 @@ final class ScreenStreamer: NSObject, ObservableObject {
         let port = nextPort
         nextPort += 1
         let finalCode = uniqueCode(for: code)
+        if #available(macOS 15.2, *) {
+            for app in filter.includedApplications { recordUsage(for: app) }
+        }
+        sortAppGroups()
         let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin, code: finalCode)
         session.start()
         sessions.append(session)
@@ -187,6 +217,9 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         stop()
         contentName = name
         let f = newFilter
+        if #available(macOS 15.2, *) {
+            for app in f.includedApplications { recordUsage(for: app) }
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
             self?.restartCapture(with: f)
         }
