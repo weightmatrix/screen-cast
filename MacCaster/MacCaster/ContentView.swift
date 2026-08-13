@@ -228,7 +228,7 @@ private struct AddStreamSheet: View {
                         TextField("1234", text: $code)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 64)
-                            .onChange(of: code) { newValue in
+                            .onChange(of: code) { _, newValue in
                                 let filtered = newValue.filter { $0.isNumber }.prefix(4)
                                 if String(filtered) != newValue { code = String(filtered) }
                             }
@@ -384,7 +384,7 @@ private struct AppGroupPicker: View {
                 Text(group.application.applicationName).font(.callout).bold()
                 Spacer()
                 if group.windows.count > 1, let display = streamer.displays.first {
-                    let key = "app-\(group.application.bundleIdentifier ?? "")-\(display.displayID)"
+                    let key = "app-\(group.application.bundleIdentifier)-\(display.displayID)"
                     Button(selected.contains(key) ? "已选" : "投屏整个应用") {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
                         else { selected.insert(key); selectedApps.append((group.application.applicationName, group.application)) }

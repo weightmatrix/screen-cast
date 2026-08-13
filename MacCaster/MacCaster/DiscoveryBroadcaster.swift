@@ -48,7 +48,7 @@ final class DiscoveryBroadcaster {
                 addr.sin_port = Self.udpPort.bigEndian
                 addr.sin_addr.s_addr = inet_addr("255.255.255.255")
                 let len = socklen_t(MemoryLayout<sockaddr_in>.size)
-                withUnsafePointer(to: &addr) {
+                _ = withUnsafePointer(to: &addr) {
                     $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
                         sendto(socketFd, raw.baseAddress, raw.count, 0, sa, len)
                     }

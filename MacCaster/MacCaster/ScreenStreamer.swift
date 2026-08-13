@@ -206,7 +206,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         do {
             let s = SCStream(filter: f, configuration: config, delegate: self)
             try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: workQueue)
-            try s.startCapture()
+            s.startCapture()
             stream = s
             compressionSession = nil
             needKeyFrame = true
@@ -369,7 +369,7 @@ extension StreamSession {
         guard CMVideoFormatDescriptionCopyAsBigEndianImageDescriptionBlockBuffer(allocator: nil, videoFormatDescription: fmt, stringEncoding: 0, flavor: .isoFamily, blockBufferOut: &bb) == noErr, let bb else { return nil }
         let len = CMBlockBufferGetDataLength(bb)
         var d = Data(count: len)
-        d.withUnsafeMutableBytes { p in CMBlockBufferCopyDataBytes(bb, atOffset: 0, dataLength: len, destination: p.baseAddress!) }
+        d.withUnsafeMutableBytes { p in _ = CMBlockBufferCopyDataBytes(bb, atOffset: 0, dataLength: len, destination: p.baseAddress!) }
         return d
     }
 }
