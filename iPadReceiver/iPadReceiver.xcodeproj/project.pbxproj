@@ -10,6 +10,7 @@
 		0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000101 /* iPadReceiverApp.swift */; };
 		0B0000000000000000000202 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000102 /* ContentView.swift */; };
 		0B0000000000000000000203 /* StreamClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000103 /* StreamClient.swift */; };
+		AB4945206941CA47A0BA7F08 /* DiscoveryListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */; };
 		0B0000000000000000000204 /* H264Decoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000104 /* H264Decoder.swift */; };
 /* End PBXBuildFile section */
 
@@ -18,6 +19,7 @@
 		0B0000000000000000000101 /* iPadReceiverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadReceiverApp.swift; sourceTree = "<group>"; };
 		0B0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		0B0000000000000000000103 /* StreamClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamClient.swift; sourceTree = "<group>"; };
+		ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryListener.swift; sourceTree = "<group>"; };
 		0B0000000000000000000104 /* H264Decoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H264Decoder.swift; sourceTree = "<group>"; };
 		0B0000000000000000000106 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		AB72356A241AE6480AA3BFC6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -56,6 +58,7 @@
 				0B0000000000000000000101 /* iPadReceiverApp.swift */,
 				0B0000000000000000000102 /* ContentView.swift */,
 				0B0000000000000000000103 /* StreamClient.swift */,
+				ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */,
 				0B0000000000000000000104 /* H264Decoder.swift */,
 				0B0000000000000000000106 /* Info.plist */,
 				AB72356A241AE6480AA3BFC6 /* Assets.xcassets */,
@@ -134,6 +137,7 @@
 				0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */,
 				0B0000000000000000000202 /* ContentView.swift in Sources */,
 				0B0000000000000000000203 /* StreamClient.swift in Sources */,
+				AB4945206941CA47A0BA7F08 /* DiscoveryListener.swift in Sources */,
 				0B0000000000000000000204 /* H264Decoder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

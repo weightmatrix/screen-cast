@@ -110,6 +110,10 @@ final class StreamClient: ObservableObject {
         }
     }
 
+    func setStatus(_ message: String) {
+        setStatus(.failed(message))
+    }
+
     private func readLoop() {
         connection?.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
             guard let self else { return }

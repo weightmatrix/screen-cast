@@ -156,6 +156,7 @@ private struct AddStreamSheet: View {
     @State private var bitrate: Int
     @State private var fps: Int
     @State private var showsCursor: Bool = true
+    @State private var code: String = ""
 
     init(streamer: ScreenStreamer, isPresented: Binding<Bool>) {
         self.streamer = streamer
@@ -163,6 +164,7 @@ private struct AddStreamSheet: View {
         self._useH264 = State(initialValue: streamer.defaultUseH264)
         self._bitrate = State(initialValue: streamer.defaultBitrate)
         self._fps = State(initialValue: streamer.defaultFPS)
+        self._code = State(initialValue: streamer.lastCode)
     }
 
     var body: some View {
@@ -221,22 +223,34 @@ private struct AddStreamSheet: View {
                         Text("60").tag(60)
                     }.pickerStyle(.segmented).frame(width: 80)
                     Toggle("光标", isOn: $showsCursor).toggleStyle(.switch)
+                    HStack(spacing: 4) {
+                        Text("匹配码").font(.caption)
+                        TextField("1234", text: $code)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 64)
+                            .onChange(of: code) { newValue in
+                                let filtered = newValue.filter { $0.isNumber }.prefix(4)
+                                if String(filtered) != newValue { code = String(filtered) }
+                            }
+                    }
                 }
 
                 HStack {
                     Spacer()
                     Button("开始投屏 (\(selected.count)个)") {
+                        let useCode = code.isEmpty ? "1234" : code
+                        streamer.lastCode = useCode
                         if !selectedApps.isEmpty, let display = streamer.displays.first {
                             let apps = selectedApps.map(\.1)
                             let name = selectedApps.map(\.0).joined(separator: " + ")
-                            streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                            streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: useCode)
                         }
                         for (name, window) in selectedWindows {
                             let origin = window.frame.origin
-                            streamer.addSession(filter: SCContentFilter(desktopIndependentWindow: window), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, screenOrigin: origin)
+                            streamer.addSession(filter: SCContentFilter(desktopIndependentWindow: window), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, screenOrigin: origin, code: useCode)
                         }
                         for (name, display) in selectedDisplays {
-                            streamer.addSession(filter: SCContentFilter(display: display, excludingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor)
+                            streamer.addSession(filter: SCContentFilter(display: display, excludingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: useCode)
                         }
                         selected.removeAll()
                         selectedApps.removeAll()

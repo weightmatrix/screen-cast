@@ -27,6 +27,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
     @Published var defaultUseH264: Bool { didSet { UserDefaults.standard.set(defaultUseH264, forKey: "defaultUseH264") } }
     @Published var defaultBitrate: Int { didSet { UserDefaults.standard.set(defaultBitrate, forKey: "defaultBitrate") } }
     @Published var defaultFPS: Int { didSet { UserDefaults.standard.set(defaultFPS, forKey: "defaultFPS") } }
+    @Published var lastCode: String { didSet { UserDefaults.standard.set(lastCode, forKey: "lastCode") } }
 
     private var nextPort: UInt16 = 8318
 
@@ -35,7 +36,9 @@ final class ScreenStreamer: NSObject, ObservableObject {
         self.defaultUseH264 = u.object(forKey: "defaultUseH264") as? Bool ?? false
         self.defaultBitrate = u.object(forKey: "defaultBitrate") as? Int ?? 30_000_000
         self.defaultFPS = u.object(forKey: "defaultFPS") as? Int ?? 60
+        self.lastCode = u.object(forKey: "lastCode") as? String ?? "1234"
         super.init()
+        DiscoveryBroadcaster.shared.start()
     }
 
     func loadShareableContent() {
@@ -53,17 +56,23 @@ final class ScreenStreamer: NSObject, ObservableObject {
         }
     }
 
-    func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero) {
+    func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "") {
         let port = nextPort
         nextPort += 1
-        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin)
+        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin, code: code)
         session.start()
         sessions.append(session)
+        refreshBroadcast()
     }
 
     func removeSession(_ session: StreamSession) {
         session.stop()
         sessions.removeAll { $0.id == session.id }
+        refreshBroadcast()
+    }
+
+    func refreshBroadcast() {
+        DiscoveryBroadcaster.shared.update(entries: sessions.map { ($0.code, $0.port) })
     }
 }
 
@@ -71,6 +80,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     let id = UUID()
     let port: UInt16
     @Published var contentName: String
+    let code: String
 
     @Published var phase: Phase = .idle
     @Published var currentFPS: Double = 0
@@ -102,7 +112,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private var encodeHeight: Int = 0
     let annotationEngine: AnnotationEngine
 
-    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine, screenOrigin: CGPoint = .zero) {
+    init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine, screenOrigin: CGPoint = .zero, code: String = "1234") {
         self.port = port
         self.filter = filter
         self.contentName = name
@@ -112,6 +122,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         self.showsCursor = showsCursor
         self.annotationEngine = annotationEngine
         self.screenOrigin = screenOrigin
+        self.code = code
         self.server = CastingServer(port: port)
         super.init()
     }

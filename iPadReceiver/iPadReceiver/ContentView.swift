@@ -6,6 +6,8 @@ struct ContentView: View {
     @StateObject private var client = StreamClient()
     @AppStorage("macIP") private var host = ""
     @AppStorage("macPort") private var portText = "8318"
+    @AppStorage("connectMode") private var connectMode = "ip"
+    @AppStorage("matchCode") private var matchCode = ""
     @State private var drawerOpen = false
 
     var body: some View {
@@ -41,34 +43,26 @@ struct ContentView: View {
             DragGesture(minimumDistance: 10)
                 .onChanged { value in
                     if value.startLocation.x < 40 || drawerOpen {
-                        let offset = min(max(value.translation.width, -drawerWidth), drawerWidth)
                         withAnimation(.interactiveSpring()) {
-                            drawerOpen = offset > drawerWidth / 3
+                            drawerOpen = value.translation.width > drawerWidth / 3
                         }
                     }
                 }
                 .onEnded { value in
-                    if value.translation.width > 60 && value.startLocation.x < 40 {
-                        openDrawer()
-                    } else if value.translation.width < -60 {
-                        closeDrawer()
-                    }
+                    if value.translation.width > 60 && value.startLocation.x < 40 { openDrawer() }
+                    else if value.translation.width < -60 { closeDrawer() }
                 }
         )
         .task {
+            DiscoveryListener.shared.start()
             if !host.isEmpty {
                 client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
             }
         }
     }
 
-    private func openDrawer() {
-        withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = true }
-    }
-
-    private func closeDrawer() {
-        withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = false }
-    }
+    private func openDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = true } }
+    private func closeDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = false } }
 
     private var isConnected: Bool {
         if case .connected = client.status { return true }
@@ -85,19 +79,39 @@ struct ContentView: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Mac IP").font(.caption).foregroundStyle(.secondary)
-                TextField("192.168.x.x", text: $host)
-                    .textFieldStyle(.roundedBorder)
-                    .keyboardType(.numbersAndPunctuation)
+            Picker("连接方式", selection: $connectMode) {
+                Text("IP 直连").tag("ip")
+                Text("匹配码").tag("code")
             }
+            .pickerStyle(.segmented)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("端口").font(.caption).foregroundStyle(.secondary)
-                TextField("8318", text: $portText)
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 100)
-                    .keyboardType(.numberPad)
+            if connectMode == "ip" {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Mac IP").font(.caption).foregroundStyle(.secondary)
+                    TextField("192.168.x.x", text: $host)
+                        .textFieldStyle(.roundedBorder)
+                        .keyboardType(.numbersAndPunctuation)
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("端口").font(.caption).foregroundStyle(.secondary)
+                    TextField("8318", text: $portText)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 100)
+                        .keyboardType(.numberPad)
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("匹配码").font(.caption).foregroundStyle(.secondary)
+                    TextField("4 位数字", text: $matchCode)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .keyboardType(.numberPad)
+                        .onChange(of: matchCode) { newValue in
+                            let filtered = newValue.filter { $0.isNumber }.prefix(4)
+                            if String(filtered) != newValue { matchCode = String(filtered) }
+                        }
+                }
             }
 
             Button(action: toggleConnection) {
@@ -136,8 +150,18 @@ struct ContentView: View {
     }
 
     private func toggleConnection() {
-        if isConnected { client.disconnect() }
-        else { client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317) }
+        if isConnected {
+            client.disconnect()
+        } else if connectMode == "code" {
+            guard matchCode.count == 4 else { return }
+            if let found = DiscoveryListener.shared.find(code: matchCode) {
+                client.connect(host: found.ip, port: found.port)
+            } else {
+                client.setStatus("未找到匹配码对应的投屏流")
+            }
+        } else {
+            client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
+        }
     }
 }
 
