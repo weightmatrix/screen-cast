@@ -31,6 +31,12 @@ struct ContentView: View {
                 Image(systemName: "display.2").font(.title)
                 Text("投屏控制台").font(.title2.bold())
                 Spacer()
+                Button(action: { streamer.loadShareableContent() }) {
+                    Image(systemName: "arrow.clockwise.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("刷新应用列表")
                 Button(action: { appMode = "receive" }) {
                     Label("切换接收", systemImage: "arrow.down.circle")
                         .font(.caption)
@@ -220,6 +226,12 @@ private struct AddStreamSheet: View {
             HStack {
                 Text("添加投屏流").font(.title2.bold())
                 Spacer()
+                Button(action: { streamer.loadShareableContent() }) {
+                    Image(systemName: "arrow.clockwise.circle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("刷新应用列表")
                 Text("已选 \(selected.count) 个").font(.callout).foregroundStyle(.blue)
                 Button("取消") { isPresented = false }
             }
