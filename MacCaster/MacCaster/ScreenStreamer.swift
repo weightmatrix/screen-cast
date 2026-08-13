@@ -59,10 +59,29 @@ final class ScreenStreamer: NSObject, ObservableObject {
     func addSession(filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "") {
         let port = nextPort
         nextPort += 1
-        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin, code: code)
+        let finalCode = uniqueCode(for: code)
+        let session = StreamSession(port: port, filter: filter, name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin, code: finalCode)
         session.start()
         sessions.append(session)
         refreshBroadcast()
+    }
+
+    private func uniqueCode(for requested: String) -> String {
+        let base = requested.isEmpty ? "1234" : requested
+        let used = Set(sessions.map { $0.code })
+        if !used.contains(base) { return base }
+        var n = Int(base) ?? 1234
+        var candidate = base
+        while used.contains(candidate) {
+            n += 1
+            candidate = String(format: "%04d", n % 10000)
+        }
+        return candidate
+    }
+
+    func canChangeCode(_ session: StreamSession, to newCode: String) -> Bool {
+        let used = Set(sessions.filter { $0.id != session.id }.map { $0.code })
+        return !used.contains(newCode)
     }
 
     func removeSession(_ session: StreamSession) {
@@ -80,7 +99,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     let id = UUID()
     let port: UInt16
     @Published var contentName: String
-    let code: String
+    @Published var code: String
 
     @Published var phase: Phase = .idle
     @Published var currentFPS: Double = 0

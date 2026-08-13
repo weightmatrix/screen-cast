@@ -74,7 +74,7 @@ private struct StreamListView: View {
         ScrollView {
             VStack(spacing: 6) {
                 ForEach(streamer.sessions) { session in
-                    SessionRow(session: session, onStop: { streamer.removeSession(session) }, onEdit: { editSession = session })
+                    SessionRow(session: session, streamer: streamer, onStop: { streamer.removeSession(session) }, onEdit: { editSession = session })
                 }
                 Button(action: onAdd) {
                     Label("添加投屏流", systemImage: "plus.circle.fill")
@@ -93,8 +93,12 @@ private struct StreamListView: View {
 
 private struct SessionRow: View {
     @ObservedObject var session: StreamSession
+    @ObservedObject var streamer: ScreenStreamer
     let onStop: () -> Void
     let onEdit: () -> Void
+    @State private var editingCode = false
+    @State private var codeDraft = ""
+    @State private var codeError = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -113,6 +117,31 @@ private struct SessionRow: View {
                     Label("\(Int(session.currentFPS)) fps", systemImage: "gauge.with.dots.needle.33percent").font(.caption2)
                     Label("\(session.clientCount) 设备", systemImage: "ipad").font(.caption2)
                     Toggle("光标", isOn: $session.showsCursor).toggleStyle(.switch).controlSize(.mini)
+
+                    if editingCode {
+                        TextField("", text: $codeDraft)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(width: 52)
+                            .onChange(of: codeDraft) { _, newValue in
+                                let filtered = newValue.filter { $0.isNumber }.prefix(4)
+                                if String(filtered) != newValue { codeDraft = String(filtered) }
+                                codeError = !streamer.canChangeCode(session, to: codeDraft) && codeDraft != session.code
+                            }
+                            .onSubmit { commitCode() }
+                        Button("OK") { commitCode() }
+                            .buttonStyle(.bordered).controlSize(.mini)
+                    } else {
+                        Button(action: {
+                            codeDraft = session.code
+                            editingCode = true
+                        }) {
+                            Label("\(session.code)", systemImage: "number.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(codeError ? .red : .blue)
+                        }
+                        .buttonStyle(.plain)
+                        .help("点击修改匹配码")
+                    }
                 }
             }
             Spacer()
@@ -136,6 +165,18 @@ private struct SessionRow: View {
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.06)))
+    }
+
+    private func commitCode() {
+        guard codeDraft.count == 4 else { return }
+        if streamer.canChangeCode(session, to: codeDraft) {
+            session.code = codeDraft
+            codeError = false
+            editingCode = false
+            streamer.refreshBroadcast()
+        } else {
+            codeError = true
+        }
     }
 
     private var statusDot: some View {
