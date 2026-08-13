@@ -12,6 +12,7 @@
 		0B0000000000000000000203 /* StreamClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000103 /* StreamClient.swift */; };
 		AB4945206941CA47A0BA7F08 /* DiscoveryListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */; };
 		0B0000000000000000000204 /* H264Decoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000104 /* H264Decoder.swift */; };
+		AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB72356A241AE6480AA3BFC6 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -124,6 +125,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

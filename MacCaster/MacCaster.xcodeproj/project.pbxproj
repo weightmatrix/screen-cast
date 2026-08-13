@@ -14,6 +14,7 @@
 		AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB428A01562F9048A59EEE5F /* Diagnostic.swift */; };
 		AB35C6000C68B240AC8A5D4B /* DiscoveryBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */; };
 		AB0000000000000000000204 /* CastingServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* CastingServer.swift */; };
+		ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -130,6 +131,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
