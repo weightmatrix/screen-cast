@@ -31,12 +31,12 @@ final class DiscoveryListener {
 
     private func receive(on conn: NWConnection) {
         conn.receiveMessage { [weak self] data, _, _, _ in
-            guard let self, let data, let json = String(data: data, encoding: .utf8) else { return }
-            if let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+            guard let self else { return }
+            if let data,
+               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let code = dict["code"] as? String,
-               let port = dict["port"] as? UInt16,
-               let remote = conn.endpoint as? NWEndpoint {
-                let ip = self.extractIP(from: remote) ?? self.extractIP(from: conn.currentPath?.remoteEndpoint)
+               let port = dict["port"] as? UInt16 {
+                let ip = self.extractIP(from: conn.endpoint) ?? self.extractIP(from: conn.currentPath?.remoteEndpoint)
                 if let ip {
                     self.entries[code] = (ip, port)
                     self.lastSeen[code] = Date()

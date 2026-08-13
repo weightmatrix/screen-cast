@@ -36,15 +36,15 @@ final class MacDiscoveryListener {
 
     private func receive(on conn: NWConnection) {
         conn.receiveMessage { [weak self] data, _, _, _ in
-            guard let self, let data,
-                  let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let code = dict["code"] as? String,
-                  let port = dict["port"] as? UInt16,
-                  let ip = self.extractIP(from: conn.currentPath?.remoteEndpoint) else {
-                return
+            guard let self else { return }
+            if let data,
+               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let code = dict["code"] as? String,
+               let port = dict["port"] as? UInt16,
+               let ip = self.extractIP(from: conn.currentPath?.remoteEndpoint) {
+                self.entries[code] = (ip, port)
+                self.lastSeen[code] = Date()
             }
-            self.entries[code] = (ip, port)
-            self.lastSeen[code] = Date()
             self.receive(on: conn)
         }
     }

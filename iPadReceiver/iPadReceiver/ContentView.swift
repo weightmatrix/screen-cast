@@ -154,13 +154,22 @@ struct ContentView: View {
             client.disconnect()
         } else if connectMode == "code" {
             guard matchCode.count == 4 else { return }
-            if let found = DiscoveryListener.shared.find(code: matchCode) {
-                client.connect(host: found.ip, port: found.port)
-            } else {
-                client.setStatus("未找到匹配码对应的投屏流")
-            }
+            tryMatchCode(attempt: 0)
         } else {
             client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
+        }
+    }
+
+    private func tryMatchCode(attempt: Int) {
+        guard matchCode.count == 4 else { return }
+        if let found = DiscoveryListener.shared.find(code: matchCode) {
+            client.connect(host: found.ip, port: found.port)
+        } else if attempt < 2 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                self.tryMatchCode(attempt: attempt + 1)
+            }
+        } else {
+            client.setStatus("未找到匹配码对应的投屏流")
         }
     }
 }

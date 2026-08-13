@@ -160,6 +160,9 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private var encodeWidth: Int = 0
     private var encodeHeight: Int = 0
     let annotationEngine: AnnotationEngine
+    private var lastContentRect: CGRect = .zero
+    private var rectWatchTimer: Timer?
+    private var isRestartingForResize = false
 
     init(port: UInt16, filter: SCContentFilter, name: String, useH264: Bool, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine, screenOrigin: CGPoint = .zero, code: String = "1234") {
         self.port = port
@@ -186,11 +189,40 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     func stop() {
+        stopRectWatch()
         stream?.stopCapture()
         stream = nil
         if let s = compressionSession { VTCompressionSessionInvalidate(s); compressionSession = nil }
         server.stop()
         phase = .idle
+    }
+
+    private func startRectWatch() {
+        lastContentRect = filter.contentRect
+        rectWatchTimer?.invalidate()
+        rectWatchTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self, !self.isRestartingForResize else { return }
+            guard self.phase == .streaming else { return }
+            let current = self.filter.contentRect
+            let dw = abs(current.width - self.lastContentRect.width)
+            let dh = abs(current.height - self.lastContentRect.height)
+            if dw > 8 || dh > 8 {
+                DiagLog.log("Stream", "contentRect changed \(Int(self.lastContentRect.width))x\(Int(self.lastContentRect.height)) → \(Int(current.width))x\(Int(current.height))")
+                self.lastContentRect = current
+                self.isRestartingForResize = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    guard let self else { return }
+                    self.isRestartingForResize = false
+                    self.refresh()
+                }
+            }
+        }
+        RunLoop.main.add(rectWatchTimer!, forMode: .common)
+    }
+
+    private func stopRectWatch() {
+        rectWatchTimer?.invalidate()
+        rectWatchTimer = nil
     }
 
     func refresh() {
@@ -263,6 +295,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
             framesThisSecond = 0
             fpsTimerStart = Date()
             phase = .streaming
+            startRectWatch()
         } catch {
             phase = .failed(error.localizedDescription)
         }
