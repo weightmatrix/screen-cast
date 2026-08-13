@@ -286,6 +286,8 @@ final class MacReceiverClient: ObservableObject {
     private var isDisconnecting = false
     private var lastHost: String?
     private var lastPort: UInt16?
+    private var lastMatchCode: String?
+    var discoveryLookup: ((String) -> (String, UInt16)?)?
 
     private static let maxMessageLength = 8 * 1024 * 1024
 
@@ -294,6 +296,24 @@ final class MacReceiverClient: ObservableObject {
         isDisconnecting = false
         lastHost = host
         lastPort = port
+        startConnection()
+    }
+
+    func connectWithCode(_ code: String) {
+        disconnect()
+        isDisconnecting = false
+        lastMatchCode = code
+        guard let lookup = discoveryLookup, let found = lookup(code) else {
+            setStatus(.failed("未找到匹配码对应的投屏流"))
+            return
+        }
+        lastHost = found.0
+        lastPort = found.1
+        startConnection()
+    }
+
+    private func startConnection() {
+        guard let host = lastHost, let port = lastPort else { return }
         setStatus(.connecting)
         decoder.reset()
         let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
@@ -326,11 +346,31 @@ final class MacReceiverClient: ObservableObject {
             self.expectedPayloadLength = nil
             self.expectedType = nil
         }
-        if let host = lastHost, let port = lastPort {
+        if let code = lastMatchCode, let lookup = discoveryLookup {
+            setStatus(.connecting)
+            retryDiscoveryLookup(code: code, lookup: lookup, attempt: 0)
+        } else if let host = lastHost, let port = lastPort {
             setStatus(.connecting)
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                self?.connect(host: host, port: port)
+                guard let self, !self.isDisconnecting else { return }
+                self.startConnection()
             }
+        }
+    }
+
+    private func retryDiscoveryLookup(code: String, lookup: @escaping (String) -> (String, UInt16)?, attempt: Int) {
+        if isDisconnecting { return }
+        if let found = lookup(code) {
+            lastHost = found.0
+            lastPort = found.1
+            startConnection()
+        } else if attempt < 6 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+                guard let self, !self.isDisconnecting else { return }
+                self.retryDiscoveryLookup(code: code, lookup: lookup, attempt: attempt + 1)
+            }
+        } else {
+            setStatus(.failed("未找到匹配码对应的投屏流"))
         }
     }
 
@@ -338,6 +378,7 @@ final class MacReceiverClient: ObservableObject {
         isDisconnecting = true
         lastHost = nil
         lastPort = nil
+        lastMatchCode = nil
         let conn = connection
         connection = nil
         conn?.cancel()

@@ -55,6 +55,9 @@ struct ContentView: View {
         )
         .task {
             DiscoveryListener.shared.start()
+            client.discoveryLookup = { code in
+                DiscoveryListener.shared.find(code: code)
+            }
             if !host.isEmpty {
                 client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
             }
@@ -163,7 +166,7 @@ struct ContentView: View {
     private func tryMatchCode(attempt: Int) {
         guard matchCode.count == 4 else { return }
         if let found = DiscoveryListener.shared.find(code: matchCode) {
-            client.connect(host: found.ip, port: found.port)
+            client.connectWithCode(matchCode)
         } else if attempt < 2 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                 self.tryMatchCode(attempt: attempt + 1)

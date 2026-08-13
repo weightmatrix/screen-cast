@@ -47,6 +47,9 @@ struct MacReceiverView: View {
         )
         .onAppear {
             MacDiscoveryListener.shared.start()
+            client.discoveryLookup = { code in
+                MacDiscoveryListener.shared.find(code: code)
+            }
             if !host.isEmpty && connectMode == "ip" {
                 client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
             }
@@ -162,7 +165,7 @@ struct MacReceiverView: View {
     private func tryMatchCode(attempt: Int) {
         guard matchCode.count == 4 else { return }
         if let found = MacDiscoveryListener.shared.find(code: matchCode) {
-            client.connect(host: found.ip, port: found.port)
+            client.connectWithCode(matchCode)
         } else if attempt < 2 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
                 self.tryMatchCode(attempt: attempt + 1)
