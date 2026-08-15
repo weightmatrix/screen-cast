@@ -58,9 +58,11 @@ struct ContentView: View {
             client.discoveryLookup = { code in
                 DiscoveryListener.shared.find(code: code)
             }
-            if !host.isEmpty {
-                client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
-            }
+        }
+        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
+            guard !isConnected else { return }
+            let p = UInt16(portText) ?? 8317
+            client.autoSearch(mode: connectMode, host: host, port: p, code: matchCode)
         }
     }
 
@@ -165,7 +167,7 @@ struct ContentView: View {
 
     private func tryMatchCode(attempt: Int) {
         guard matchCode.count == 4 else { return }
-        if let found = DiscoveryListener.shared.find(code: matchCode) {
+        if DiscoveryListener.shared.find(code: matchCode) != nil {
             client.connectWithCode(matchCode)
         } else if attempt < 2 {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {

@@ -300,11 +300,13 @@ private struct AddStreamSheet: View {
                     Button("开始投屏 (\(selected.count)个)") {
                         let useCode = code.isEmpty ? "1234" : code
                         streamer.lastCode = useCode
-                        if !selectedApps.isEmpty, let display = streamer.displays.first {
+                        if !selectedApps.isEmpty {
                             let apps = selectedApps.map(\.1)
                             let name = selectedApps.map(\.0).joined(separator: " + ")
-                            for app in apps { streamer.recordUsage(bundleIdentifier: app.bundleIdentifier) }
-                            streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: useCode)
+                            if let display = streamer.bestDisplay(for: apps) {
+                                for app in apps { streamer.recordUsage(bundleIdentifier: app.bundleIdentifier) }
+                                streamer.addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []), name: name, useH264: useH264, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: useCode)
+                            }
                         }
                         for (name, window) in selectedWindows {
                             let origin = window.frame.origin
@@ -445,7 +447,7 @@ private struct AppGroupPicker: View {
                 }
                 Text(group.application.applicationName).font(.callout).bold()
                 Spacer()
-                if group.windows.count > 1, let display = streamer.displays.first {
+                if group.windows.count > 1, let display = streamer.bestDisplay(for: [group.application]) {
                     let key = "app-\(group.application.bundleIdentifier)-\(display.displayID)"
                     Button(selected.contains(key) ? "已选" : "投屏整个应用") {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
@@ -499,7 +501,7 @@ private struct EditAppGroupPicker: View {
                 }
                 Text(group.application.applicationName).font(.callout).bold()
                 Spacer()
-                if let display = streamer.displays.first {
+                if let display = streamer.bestDisplay(for: [group.application]) {
                     let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
                     Button("投屏整个应用") {
                         selectedFilter = filter; selectedName = group.application.applicationName
@@ -547,4 +549,3 @@ private struct pickerRow: View {
         .tint(selectedFilter === filter ? .blue : nil)
     }
 }
-

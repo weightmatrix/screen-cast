@@ -12,6 +12,7 @@ final class CastingServer: ObservableObject {
     private var connections: [NWConnection] = []
     private var clientResolutions: [ObjectIdentifier: (Int, Int)] = [:]
     private var pendingSends: [ObjectIdentifier: Int] = [:]
+    private var controlBuffers: [ObjectIdentifier: Data] = [:]
     private var lastConfig: Data?
 
     var maxRemoteResolution: (width: Int, height: Int)? {
@@ -74,6 +75,7 @@ final class CastingServer: ObservableObject {
         connections.forEach { $0.cancel() }
         connections.removeAll()
         pendingSends.removeAll()
+        controlBuffers.removeAll()
         clientResolutions.removeAll()
         listener?.cancel()
         listener = nil
@@ -83,7 +85,12 @@ final class CastingServer: ObservableObject {
 
     private func accept(_ conn: NWConnection) {
         conn.stateUpdateHandler = { [weak self] state in
-            if case .failed = state { self?.drop(conn) }
+            switch state {
+            case .failed, .cancelled:
+                self?.drop(conn)
+            default:
+                break
+            }
         }
         conn.start(queue: .main)
         connections.append(conn)
@@ -97,20 +104,48 @@ final class CastingServer: ObservableObject {
     private func drop(_ conn: NWConnection) {
         connections.removeAll { $0 === conn }
         pendingSends[ObjectIdentifier(conn)] = nil
+        controlBuffers[ObjectIdentifier(conn)] = nil
         clientResolutions[ObjectIdentifier(conn)] = nil
         DispatchQueue.main.async { [weak self] in self?.onClientCountChanged?(self?.connections.count ?? 0) }
     }
 
     private func readResolution(from conn: NWConnection) {
-        conn.receive(minimumIncompleteLength: 5, maximumLength: 13) { [weak self] data, _, _, _ in
-            guard let self, let data, data.count >= 5 else { return }
-            let length = Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 0, as: UInt32.self).bigEndian })
-            let type = data[4]
-            guard type == 2, length == 8, data.count >= 13 else { return }
-            let w = Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: UInt32.self).bigEndian })
-            let h = Int(data.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: UInt32.self).bigEndian })
-            self.clientResolutions[ObjectIdentifier(conn)] = (w, h)
+        conn.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self, weak conn] data, _, isComplete, error in
+            guard let self, let conn else { return }
+            let key = ObjectIdentifier(conn)
+            if let data, !data.isEmpty {
+                self.controlBuffers[key, default: Data()].append(data)
+                self.parseControlMessages(for: conn)
+            }
+            if error != nil || isComplete {
+                self.drop(conn)
+            } else {
+                self.readResolution(from: conn)
+            }
         }
+    }
+
+    private func parseControlMessages(for conn: NWConnection) {
+        let key = ObjectIdentifier(conn)
+        guard var buffer = controlBuffers[key] else { return }
+        while buffer.count >= 5 {
+            let length = Int(buffer.withUnsafeBytes {
+                $0.loadUnaligned(fromByteOffset: 0, as: UInt32.self).bigEndian
+            })
+            guard length >= 0, length <= 1024 else {
+                conn.cancel()
+                return
+            }
+            guard buffer.count >= 5 + length else { break }
+            let type = buffer[4]
+            if type == 2, length == 8 {
+                let w = Int(buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: UInt32.self).bigEndian })
+                let h = Int(buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: UInt32.self).bigEndian })
+                if w > 0, h > 0 { clientResolutions[key] = (w, h) }
+            }
+            buffer.removeFirst(5 + length)
+        }
+        controlBuffers[key] = buffer
     }
 
     func sendConfig(_ serializedFD: Data) {
@@ -141,9 +176,10 @@ final class CastingServer: ObservableObject {
         let pending = pendingSends[key] ?? 0
         guard pending < 8 else { return }
         pendingSends[key] = pending + 1
-        conn.send(content: msg, completion: .contentProcessed { [weak self] _ in
+        conn.send(content: msg, completion: .contentProcessed { [weak self, weak conn] error in
             DispatchQueue.main.async {
                 self?.pendingSends[key] = max(0, (self?.pendingSends[key] ?? 1) - 1)
+                if error != nil, let conn { self?.drop(conn) }
             }
         })
     }

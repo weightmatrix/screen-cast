@@ -35,7 +35,10 @@ final class DiscoveryListener {
             if let data,
                let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let code = dict["code"] as? String,
-               let port = dict["port"] as? UInt16 {
+               let portNumber = dict["port"] as? NSNumber,
+               portNumber.intValue > 0,
+               portNumber.intValue <= Int(UInt16.max) {
+                let port = UInt16(portNumber.intValue)
                 let ip = self.extractIP(from: conn.endpoint) ?? self.extractIP(from: conn.currentPath?.remoteEndpoint)
                 if let ip {
                     self.entries[code] = (ip, port)
@@ -64,11 +67,14 @@ final class DiscoveryListener {
     }
 
     func find(code: String) -> (ip: String, port: UInt16)? {
-        guard let entry = entries[code] else { return nil }
-        if let seen = lastSeen[code], Date().timeIntervalSince(seen) > 8 {
-            entries.removeValue(forKey: code)
-            return nil
+        queue.sync {
+            guard let entry = entries[code] else { return nil }
+            if let seen = lastSeen[code], Date().timeIntervalSince(seen) > 8 {
+                entries.removeValue(forKey: code)
+                lastSeen.removeValue(forKey: code)
+                return nil
+            }
+            return entry
         }
-        return entry
     }
 }

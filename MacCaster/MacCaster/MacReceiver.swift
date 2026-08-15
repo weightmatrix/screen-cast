@@ -40,8 +40,11 @@ final class MacDiscoveryListener {
             if let data,
                let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let code = dict["code"] as? String,
-               let port = dict["port"] as? UInt16,
+               let portNumber = dict["port"] as? NSNumber,
+               portNumber.intValue > 0,
+               portNumber.intValue <= Int(UInt16.max),
                let ip = self.extractIP(from: conn.currentPath?.remoteEndpoint) {
+                let port = UInt16(portNumber.intValue)
                 self.entries[code] = (ip, port)
                 self.lastSeen[code] = Date()
             }
@@ -65,12 +68,15 @@ final class MacDiscoveryListener {
     }
 
     func find(code: String) -> (ip: String, port: UInt16)? {
-        guard let entry = entries[code] else { return nil }
-        if let seen = lastSeen[code], Date().timeIntervalSince(seen) > 8 {
-            entries.removeValue(forKey: code)
-            return nil
+        queue.sync {
+            guard let entry = entries[code] else { return nil }
+            if let seen = lastSeen[code], Date().timeIntervalSince(seen) > 8 {
+                entries.removeValue(forKey: code)
+                lastSeen.removeValue(forKey: code)
+                return nil
+            }
+            return entry
         }
-        return entry
     }
 }
 
@@ -200,7 +206,7 @@ final class MacReceiverDecoder: ObservableObject {
             blockBufferOut: &blockBuffer)
         guard bbStatus == kCMBlockBufferNoErr, let blockBuffer else { return }
 
-        data.withUnsafeBytes { ptr in
+        _ = data.withUnsafeBytes { ptr in
             CMBlockBufferReplaceDataBytes(with: ptr.baseAddress!,
                 blockBuffer: blockBuffer, offsetIntoDestination: 0, dataLength: data.count)
         }
@@ -313,23 +319,23 @@ final class MacReceiverClient: ObservableObject {
     }
 
     private func startConnection() {
-        guard let host = lastHost, let port = lastPort else { return }
+        guard connection == nil, let host = lastHost, let port = lastPort else { return }
         setStatus(.connecting)
         decoder.reset()
         let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
         self.connection = connection
         connection.stateUpdateHandler = { [weak self] state in
             DispatchQueue.main.async {
-                guard let self else { return }
+                guard let self, self.connection === connection else { return }
                 switch state {
                 case .ready:
                     self.setStatus(.connected)
                     self.sendScreenSize()
-                    self.netQueue.async { [weak self] in self?.readLoop() }
+                    self.netQueue.async { [weak self] in self?.readLoop(on: connection) }
                 case .failed:
-                    self.handleDisconnect()
+                    self.handleDisconnect(connection)
                 case .cancelled:
-                    self.handleDisconnect()
+                    self.handleDisconnect(connection)
                 default:
                     break
                 }
@@ -338,39 +344,37 @@ final class MacReceiverClient: ObservableObject {
         connection.start(queue: netQueue)
     }
 
-    private func handleDisconnect() {
-        if isDisconnecting { return }
+    private func handleDisconnect(_ disconnectedConnection: NWConnection) {
+        guard !isDisconnecting, connection === disconnectedConnection else { return }
         connection = nil
         netQueue.async {
             self.rxBuffer.removeAll(keepingCapacity: false)
             self.expectedPayloadLength = nil
             self.expectedType = nil
         }
-        if let code = lastMatchCode, let lookup = discoveryLookup {
-            setStatus(.connecting)
-            retryDiscoveryLookup(code: code, lookup: lookup, attempt: 0)
-        } else if let host = lastHost, let port = lastPort {
-            setStatus(.connecting)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                guard let self, !self.isDisconnecting else { return }
-                self.startConnection()
-            }
-        }
+        setStatus(.idle)
     }
 
-    private func retryDiscoveryLookup(code: String, lookup: @escaping (String) -> (String, UInt16)?, attempt: Int) {
-        if isDisconnecting { return }
-        if let found = lookup(code) {
+    func autoSearch(mode: String, host: String, port: UInt16, code: String) {
+        guard !isDisconnecting, connection == nil else { return }
+        switch status {
+        case .connected, .connecting:
+            return
+        default:
+            break
+        }
+        if mode == "code" {
+            guard code.count == 4, let lookup = discoveryLookup else { return }
+            guard let found = lookup(code) else { return }
+            lastMatchCode = code
             lastHost = found.0
             lastPort = found.1
             startConnection()
-        } else if attempt < 6 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-                guard let self, !self.isDisconnecting else { return }
-                self.retryDiscoveryLookup(code: code, lookup: lookup, attempt: attempt + 1)
-            }
         } else {
-            setStatus(.failed("未找到匹配码对应的投屏流"))
+            guard !host.isEmpty else { return }
+            lastHost = host
+            lastPort = port
+            startConnection()
         }
     }
 
@@ -419,22 +423,23 @@ final class MacReceiverClient: ObservableObject {
         conn.send(content: head + msg, completion: .idempotent)
     }
 
-    private func readLoop() {
-        connection?.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, isComplete, error in
-            guard let self else { return }
+    private func readLoop(on connection: NWConnection) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self, weak connection] data, _, isComplete, error in
+            guard let self, let connection, self.connection === connection else { return }
             if let data, !data.isEmpty {
                 self.rxBuffer.append(data)
                 self.parseMessages()
             }
             if let error {
                 self.setStatus(.failed(error.localizedDescription))
+                DispatchQueue.main.async { [weak self] in self?.handleDisconnect(connection) }
                 return
             }
             if isComplete {
-                self.setStatus(.idle)
+                DispatchQueue.main.async { [weak self] in self?.handleDisconnect(connection) }
                 return
             }
-            self.readLoop()
+            self.readLoop(on: connection)
         }
     }
 

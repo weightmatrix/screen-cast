@@ -60,8 +60,8 @@ final class ScreenStreamer: NSObject, ObservableObject {
 
     private func sortAppGroups() {
         appGroups.sort { a, b in
-            let ca = usageCounts[a.application.bundleIdentifier ?? ""] ?? 0
-            let cb = usageCounts[b.application.bundleIdentifier ?? ""] ?? 0
+            let ca = usageCounts[a.application.bundleIdentifier] ?? 0
+            let cb = usageCounts[b.application.bundleIdentifier] ?? 0
             if ca != cb { return ca > cb }
             return a.application.applicationName.localizedStandardCompare(b.application.applicationName) == .orderedAscending
         }
@@ -123,6 +123,26 @@ final class ScreenStreamer: NSObject, ObservableObject {
     func refreshBroadcast() {
         DiscoveryBroadcaster.shared.update(entries: sessions.map { ($0.code, $0.port) })
     }
+
+    func bestDisplay(for applications: [SCRunningApplication]) -> SCDisplay? {
+        let appIDs = Set(applications.map(\.processID))
+        let windows = appGroups
+            .filter { appIDs.contains($0.application.processID) }
+            .flatMap(\.windows)
+        return bestDisplay(for: windows)
+    }
+
+    private func bestDisplay(for windows: [SCWindow]) -> SCDisplay? {
+        displays.max { lhs, rhs in
+            let lhsArea = windows.reduce(CGFloat.zero) { $0 + $1.frame.intersection(lhs.frame).area }
+            let rhsArea = windows.reduce(CGFloat.zero) { $0 + $1.frame.intersection(rhs.frame).area }
+            return lhsArea < rhsArea
+        } ?? displays.first
+    }
+}
+
+private extension CGRect {
+    var area: CGFloat { isNull || isEmpty ? 0 : width * height }
 }
 
 final class StreamSession: NSObject, ObservableObject, Identifiable {
@@ -155,7 +175,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private var ptsCounter: CMTimeValue = 0
     private var framesThisSecond = 0
     private var fpsTimerStart = Date()
-    private let filter: SCContentFilter
+    private var filter: SCContentFilter
     private let targetFPS: Int
     private var encodeWidth: Int = 0
     private var encodeHeight: Int = 0
@@ -246,11 +266,20 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     func changeFilter(_ newFilter: SCContentFilter, name: String) {
-        stop()
+        // 服务器保持运行，接收端不断连；只重启捕获
+        stopRectWatch()
+        stream?.stopCapture()
+        stream = nil
+        if let s = compressionSession { VTCompressionSessionInvalidate(s); compressionSession = nil }
+        compressionSession = nil
+        needKeyFrame = true
+        ptsCounter = 0
         contentName = name
-        let f = newFilter
+        filter = newFilter
+        lastContentRect = newFilter.contentRect
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-            self?.restartCapture(with: f)
+            guard let self else { return }
+            self.restartCapture(with: self.filter)
         }
     }
 
@@ -278,6 +307,8 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         config.height = targetH
         config.minimumFrameInterval = CMTime(value: 1, timescale: Int32(targetFPS))
         config.queueDepth = 4
+        config.scalesToFit = true
+        config.preservesAspectRatio = true
         config.showsCursor = showsCursor
         config.capturesAudio = false
         config.pixelFormat = kCVPixelFormatType_32BGRA
@@ -319,7 +350,12 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
 
 extension StreamSession: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .screen, let ib = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        guard type == .screen,
+              sampleBuffer.isValid,
+              let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
+              let statusRaw = attachments.first?[.status] as? Int,
+              SCFrameStatus(rawValue: statusRaw) == .complete,
+              let ib = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         if useH264 { encodeH264(ib) } else { encodeJPEG(ib) }
     }
 }

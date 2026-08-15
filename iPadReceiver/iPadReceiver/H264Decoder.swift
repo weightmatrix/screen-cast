@@ -129,7 +129,7 @@ final class ImageDecoder: ObservableObject {
             blockBufferOut: &blockBuffer)
         guard bbStatus == kCMBlockBufferNoErr, let blockBuffer else { return }
 
-        data.withUnsafeBytes { ptr in
+        _ = data.withUnsafeBytes { ptr in
             CMBlockBufferReplaceDataBytes(with: ptr.baseAddress!,
                 blockBuffer: blockBuffer, offsetIntoDestination: 0, dataLength: data.count)
         }
