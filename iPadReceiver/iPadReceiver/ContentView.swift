@@ -1,14 +1,23 @@
 import SwiftUI
+import Combine
+import MetalKit
+import CoreImage
 
-private let drawerWidth: CGFloat = 300
+private let drawerWidth: CGFloat = 400
 
 struct ContentView: View {
+    @AppStorage("appMode") private var appMode = "receive"
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var client = StreamClient()
     @AppStorage("macIP") private var host = ""
     @AppStorage("macPort") private var portText = "8318"
     @AppStorage("connectMode") private var connectMode = "ip"
+    @AppStorage("internetIP") private var internetHost = ""
+    @AppStorage("internetPort") private var internetPortText = "9318"
     @AppStorage("matchCode") private var matchCode = ""
-    @State private var drawerOpen = false
+    @State private var drawerOpen = true
+    @State private var autoSearchTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
+    @ObservedObject private var diag = ConnectionDiag.shared
 
     var body: some View {
         GeometryReader { geo in
@@ -25,7 +34,8 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     settingsPanel
                         .frame(width: drawerWidth)
-                        .background(.ultraThinMaterial)
+                        .background(Color(red: 0.045, green: 0.065, blue: 0.095))
+                        .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.08)).frame(width: 1) }
                         .offset(x: drawerOpen ? 0 : -drawerWidth)
                     Spacer()
                 }
@@ -38,19 +48,15 @@ struct ContentView: View {
                 }
             }
         }
+        .preferredColorScheme(.dark)
+        .tint(Color(red: 0.34, green: 0.70, blue: 1))
         .ignoresSafeArea()
-        .gesture(
+        .simultaneousGesture(
             DragGesture(minimumDistance: 10)
-                .onChanged { value in
-                    if value.startLocation.x < 40 || drawerOpen {
-                        withAnimation(.interactiveSpring()) {
-                            drawerOpen = value.translation.width > drawerWidth / 3
-                        }
-                    }
-                }
                 .onEnded { value in
-                    if value.translation.width > 60 && value.startLocation.x < 40 { openDrawer() }
-                    else if value.translation.width < -60 { closeDrawer() }
+                    if !drawerOpen, value.translation.width > 60, value.startLocation.x < 30 { openDrawer() }
+                    else if drawerOpen, abs(value.startLocation.x - drawerWidth) < 24,
+                            value.translation.width < -60 { closeDrawer() }
                 }
         )
         .task {
@@ -58,11 +64,51 @@ struct ContentView: View {
             client.discoveryLookup = { code in
                 DiscoveryListener.shared.find(code: code)
             }
+            #if DEBUG
+            let args = ProcessInfo.processInfo.arguments
+            let verificationCode: String = {
+                if let index = args.firstIndex(of: "--verify-match-code"), index + 1 < args.count { return args[index + 1] }
+                return "67890123"
+            }()
+            if let index = args.firstIndex(of: "--verify-host"), index + 1 < args.count {
+                host = args[index + 1]
+                portText = "8318"
+                matchCode = verificationCode
+                connectMode = "ip"
+                client.connect(host: host, port: 8318, code: matchCode)
+                drawerOpen = false
+            }
+            if args.contains("--verify-internet-code") {
+                matchCode = verificationCode
+                connectMode = "wanCode"
+                drawerOpen = false
+                client.connectInternetCode(verificationCode)
+            }
+            if args.contains("--verify-code") {
+                matchCode = verificationCode
+                connectMode = "code"
+                drawerOpen = false
+            }
+            #endif
         }
-        .onReceive(Timer.publish(every: 3, on: .main, in: .common).autoconnect()) { _ in
+        .onReceive(autoSearchTimer) { _ in
+            client.checkStaleConnection()
             guard !isConnected else { return }
-            let p = UInt16(portText) ?? 8317
+            let p = UInt16(portText) ?? 8318
             client.autoSearch(mode: connectMode, host: host, port: p, code: matchCode)
+        }
+        .onChange(of: scenePhase) { phase in
+            switch phase {
+            case .background:
+                client.prepareForSuspension()
+                DiscoveryListener.shared.stop()
+            case .active:
+                // Recreate discovery after the Wi-Fi route has returned. The
+                // regular auto-search tick will reconnect using current input.
+                DiscoveryListener.shared.start()
+            default:
+                break
+            }
         }
     }
 
@@ -75,71 +121,95 @@ struct ContentView: View {
     }
 
     private var settingsPanel: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack {
-                Text("设置").font(.title3.bold())
-                Spacer()
-                Button { closeDrawer() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.title3).foregroundStyle(.secondary)
-                }
-            }
-
-            Picker("连接方式", selection: $connectMode) {
-                Text("IP 直连").tag("ip")
-                Text("匹配码").tag("code")
-            }
-            .pickerStyle(.segmented)
-
-            if connectMode == "ip" {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Mac IP").font(.caption).foregroundStyle(.secondary)
-                    TextField("192.168.x.x", text: $host)
-                        .textFieldStyle(.roundedBorder)
-                        .keyboardType(.numbersAndPunctuation)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("端口").font(.caption).foregroundStyle(.secondary)
-                    TextField("8318", text: $portText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                        .keyboardType(.numberPad)
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("匹配码").font(.caption).foregroundStyle(.secondary)
-                    TextField("4 位数字", text: $matchCode)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 120)
-                        .keyboardType(.numberPad)
-                        .onChange(of: matchCode) { newValue in
-                            let filtered = newValue.filter { $0.isNumber }.prefix(4)
-                            if String(filtered) != newValue { matchCode = String(filtered) }
-                        }
-                }
-            }
-
-            Button(action: toggleConnection) {
-                Text(isConnected ? "断开" : "连接").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(isConnected ? .red : .blue)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
                 HStack {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
-                    Text(statusText).font(.subheadline)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("接收画面").font(.system(size: 30, weight: .semibold))
+                        Text("连接你的投屏工作台").font(.system(size: 16)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button { closeDrawer() } label: {
+                        Image(systemName: "xmark").font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.7)).frame(width: 48, height: 48)
+                            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 15))
+                    }.accessibilityLabel("关闭设置")
                 }
-                if isConnected {
-                    Label(client.decoder.diagText, systemImage: "info.circle").font(.caption).foregroundStyle(.green)
-                    Label("已接收 \(client.frameCount) 帧", systemImage: "arrow.down.circle").font(.caption).foregroundStyle(.secondary)
+                Button { client.disconnect(); appMode = "cast" } label: {
+                    Label("切换到投屏", systemImage: "arrow.up.right")
+                        .font(.system(size: 18, weight: .medium)).frame(maxWidth: .infinity, minHeight: 48)
+                }.buttonStyle(.bordered)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+                ForEach(ConnectionMode.allCases) { mode in
+                    Button { client.disconnect(); connectMode = mode.rawValue } label: {
+                        Text(mode.label).font(.system(size: 16, weight: .medium))
+                            .frame(maxWidth: .infinity, minHeight: 44)
+                    }.buttonStyle(.bordered).tint(connectMode == mode.rawValue ? .blue : .gray)
                 }
             }
-            Spacer()
+            if connectMode == "wanIP" {
+                Text("需要发送端可达的公网地址和映射端口；不经过配对服务器。")
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
+            } else if connectMode == "wanCode" {
+                Text("发送端需开启广域网直连。仅交换配对信息；无法穿透时会报错，不转发视频。")
+                    .font(.system(size: 14)).foregroundStyle(.secondary)
+            }
+                if connectMode == "ip" || connectMode == "wanIP" {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(connectMode == "wanIP" ? "对方公网地址" : "对方局域网地址").foregroundStyle(.secondary)
+                        TextField(connectMode == "wanIP" ? "公网 IP 或域名" : "192.168.x.x", text: connectMode == "wanIP" ? $internetHost : $host)
+                            .font(.system(size: 22, design: .monospaced))
+                            .keyboardType(.default)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                            .padding(16).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+                    }
+                    HStack {
+                        Text("端口").foregroundStyle(.secondary)
+                        Spacer()
+                        TextField(connectMode == "wanIP" ? "9318" : "8318", text: connectMode == "wanIP" ? $internetPortText : $portText)
+                            .font(.system(size: 22, design: .monospaced)).multilineTextAlignment(.trailing)
+                            .keyboardType(.default).frame(width: 130)
+                    }.padding(16).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16))
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("匹配码").foregroundStyle(.secondary)
+                    TextField("6–36 位数字", text: $matchCode)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .font(.system(size: 38, weight: .medium, design: .monospaced))
+                        .keyboardType(.default)
+                        .padding(18).frame(maxWidth: .infinity)
+                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
+                        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
+                }
+                Button(action: toggleConnection) {
+                    Label(isConnected || client.status == .connecting ? "断开连接" : "连接画面", systemImage: isConnected ? "stop.fill" : "arrow.up.right")
+                        .font(.system(size: 19, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 58)
+                        .foregroundStyle(isConnected ? Color.white : Color.black)
+                        .background(isConnected ? Color.red.opacity(0.8) : Color(red: 0.34, green: 0.70, blue: 1), in: RoundedRectangle(cornerRadius: 18))
+                }.buttonStyle(.plain)
+                HStack(spacing: 12) {
+                    Circle().fill(statusColor).frame(width: 9, height: 9)
+                    Text(statusText).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
+                }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 16))
+                DisclosureGroup("连接诊断") {
+                    VStack(alignment: .leading, spacing: 16) {
+                        if isConnected {
+                            Text(client.decoder.diagText).foregroundStyle(.secondary)
+                            Text("已接收 \(client.frameCount) 帧").foregroundStyle(.secondary)
+                        }
+                        Button("清空日志") { diag.clear() }.frame(minHeight: 44)
+                        ScrollView {
+                            Text(diag.text).font(.system(size: 13, design: .monospaced))
+                                .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+                        }.frame(height: 180)
+                    }.padding(.top, 16)
+                }.font(.system(size: 16)).foregroundStyle(.secondary)
+            }
+            .font(.system(size: 17))
+            .padding(.horizontal, 28).padding(.top, 48).padding(.bottom, 32)
         }
-        .padding(20)
     }
 
     private var statusColor: Color {
@@ -155,18 +225,31 @@ struct ContentView: View {
     }
 
     private func toggleConnection() {
-        if isConnected {
+        if isConnected || client.status == .connecting {
             client.disconnect()
+        } else if connectMode == "wanCode" {
+            client.connectInternetCode(matchCode)
+        } else if connectMode == "wanIP" {
+            guard MatchingCode.isValid(matchCode), let port = UInt16(internetPortText), port > 0 else {
+                client.setStatus("请输入有效公网端口和 6–36 位匹配码")
+                return
+            }
+            client.connectInternetIP(host: internetHost.trimmingCharacters(in: .whitespacesAndNewlines), port: port, code: matchCode)
         } else if connectMode == "code" {
-            guard matchCode.count == 4 else { return }
+            guard MatchingCode.isValid(matchCode) else { client.setStatus("请输入发送端的 6–36 位数字匹配码"); return }
             tryMatchCode(attempt: 0)
         } else {
-            client.connect(host: host.trimmingCharacters(in: .whitespaces), port: UInt16(portText) ?? 8317)
+            guard MatchingCode.isValid(matchCode) else { client.setStatus("请输入发送端的 6–36 位数字匹配码"); return }
+            client.connect(
+                host: host.trimmingCharacters(in: .whitespaces),
+                port: UInt16(portText) ?? 8318,
+                code: matchCode
+            )
         }
     }
 
     private func tryMatchCode(attempt: Int) {
-        guard matchCode.count == 4 else { return }
+        guard MatchingCode.isValid(matchCode) else { return }
         if DiscoveryListener.shared.find(code: matchCode) != nil {
             client.connectWithCode(matchCode)
         } else if attempt < 2 {
@@ -179,32 +262,102 @@ struct ContentView: View {
     }
 }
 
-private final class FitView: UIView {
-    let imageView: UIImageView
-
-    override init(frame: CGRect) {
-        imageView = UIImageView()
-        imageView.contentMode = .scaleAspectFit
-        imageView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        super.init(frame: frame)
-        imageView.frame = bounds
-        addSubview(imageView)
-    }
-
-    required init?(coder: NSCoder) { fatalError() }
-}
-
 private struct StreamingView: UIViewRepresentable {
     let decoder: ImageDecoder
 
-    func makeUIView(context: Context) -> FitView {
-        let view = FitView(frame: .zero)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(decoder: decoder)
+    }
+
+    func makeUIView(context: Context) -> MTKView {
+        let view = MTKView(frame: .zero, device: MTLCreateSystemDefaultDevice())
         view.backgroundColor = .black
-        decoder.onImageUpdate = { [weak view] img in
-            DispatchQueue.main.async { view?.imageView.image = img }
-        }
+        view.colorPixelFormat = .bgra8Unorm
+        view.framebufferOnly = false
+        view.isPaused = false
+        view.enableSetNeedsDisplay = false
+        view.preferredFramesPerSecond = 60
+        view.delegate = context.coordinator
+        context.coordinator.view = view
         return view
     }
 
-    func updateUIView(_ iv: FitView, context: Context) {}
+    func updateUIView(_ view: MTKView, context: Context) {}
+
+    static func dismantleUIView(_ view: MTKView, coordinator: Coordinator) {
+        coordinator.decoder.onFrameAvailable = nil
+    }
+
+    final class Coordinator: NSObject, MTKViewDelegate {
+        let decoder: ImageDecoder
+        weak var view: MTKView?
+        private var ciContext: CIContext?
+        private var commandQueue: MTLCommandQueue?
+        private var renderedFrames = 0
+        private var displayedRevision: UInt64?
+        private let gpuSlots = DispatchSemaphore(value: 2)
+
+        init(decoder: ImageDecoder) {
+            self.decoder = decoder
+        }
+
+        func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+            if ciContext == nil {
+                ciContext = CIContext(mtlDevice: view.device!)
+            }
+        }
+
+        func draw(in view: MTKView) {
+            guard let device = view.device,
+                  let displayFrame = decoder.frameForDisplay(after: displayedRevision),
+                  gpuSlots.wait(timeout: .now()) == .success else { return }
+            var submitted = false
+            defer { if !submitted { gpuSlots.signal() } }
+            if commandQueue == nil { commandQueue = device.makeCommandQueue() }
+            guard let drawable = view.currentDrawable,
+                  let commandBuffer = commandQueue?.makeCommandBuffer() else { return }
+            let ci = ciContext ?? CIContext(mtlDevice: device)
+            ciContext = ci
+
+            let width = CGFloat(drawable.texture.width)
+            let height = CGFloat(drawable.texture.height)
+            let colorSpace = CGColorSpaceCreateDeviceRGB()
+            let drawableRect = CGRect(x: 0, y: 0, width: width, height: height)
+
+            if let image = displayFrame.image, !image.extent.isEmpty {
+                let src = image.extent
+                let scale = min(width / src.width, height / src.height)
+                let targetW = src.width * scale
+                let targetH = src.height * scale
+                let tx = (width - targetW) / 2
+                let ty = (height - targetH) / 2
+                let transform = CGAffineTransform(a: scale, b: 0, c: 0, d: scale, tx: tx, ty: ty)
+                let fitted = image.transformed(by: transform)
+                let background = CIImage(color: CIColor.black).cropped(to: drawableRect)
+                let output = fitted.composited(over: background)
+                ci.render(output, to: drawable.texture, commandBuffer: commandBuffer, bounds: drawableRect, colorSpace: colorSpace)
+            } else {
+                let black = CIImage(color: CIColor.black).cropped(to: drawableRect)
+                ci.render(black, to: drawable.texture, commandBuffer: commandBuffer, bounds: drawableRect, colorSpace: colorSpace)
+            }
+
+            commandBuffer.present(drawable)
+            let slots = gpuSlots
+            commandBuffer.addCompletedHandler { _ in slots.signal() }
+            displayedRevision = displayFrame.revision
+            submitted = true
+            renderedFrames += 1
+            let frame = renderedFrames
+            if frame <= 3 || frame % 120 == 0 {
+                commandBuffer.addCompletedHandler { buffer in
+                    if buffer.status == .completed {
+                        ConnectionDiag.shared.log("display rendered#\(frame) GPU completed")
+                    } else {
+                        ConnectionDiag.shared.log("display GPU error: \(buffer.error?.localizedDescription ?? "unknown")")
+                    }
+                }
+            }
+            commandBuffer.commit()
+        }
+    }
 }

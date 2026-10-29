@@ -11,17 +11,39 @@ struct iPadReceiverApp: App {
 
 struct RootView: View {
     @AppStorage("appMode") private var appMode = ""
-    @State private var modeSelected = false
-
     var body: some View {
-        if modeSelected || appMode == "receive" {
-            ContentView()
-        } else {
-            ModePicker(select: { mode in
-                appMode = mode
-                modeSelected = true
-            })
+        Group {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--inspect-broadcast-resolution") {
+                Text("分辨率诊断").task {
+                    let store = BroadcastSettings.store
+                    ConnectionDiag.shared.log("ResolutionInspect stored=\(store.string(forKey: "broadcastResolution") ?? "missing") active=\(BroadcastSettings.isActive) actual=\(store.string(forKey: "broadcastResolutionStatus") ?? "missing") screen=\(UIScreen.main.nativeBounds) nativeScale=\(UIScreen.main.nativeScale)")
+                }
+            } else {
+                content
+            }
+            #else
+            content
+            #endif
+        }.preferredColorScheme(.dark)
+        .task {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--verify-internet-flow") {
+                await InternetFlowVerification.run()
+            }
+            if ProcessInfo.processInfo.arguments.contains("--verify-broadcast-encoder") {
+                await BroadcastVerification.run()
+            }
+            #endif
         }
+    }
+
+    @ViewBuilder private var content: some View {
+            switch appMode {
+            case "cast": iPadSenderView()
+            case "receive": ContentView()
+            default: ModePicker(select: { appMode = $0 })
+            }
     }
 }
 
@@ -35,7 +57,7 @@ struct ModePicker: View {
                 Image(systemName: "display.2")
                     .font(.system(size: 64))
                     .foregroundStyle(.blue)
-                Text("投屏").font(.largeTitle.bold())
+                Text("李知本·投屏管理").font(.largeTitle.bold())
 
                 VStack(spacing: 16) {
                     Button {
@@ -53,6 +75,7 @@ struct ModePicker: View {
                     .tint(.blue)
 
                     Button {
+                        select("cast")
                     } label: {
                         HStack {
                             Image(systemName: "arrow.up.circle.fill")
@@ -63,11 +86,10 @@ struct ModePicker: View {
                         .frame(width: 220, height: 64)
                     }
                     .buttonStyle(.bordered)
-                    .tint(.gray)
-                    .disabled(true)
+                    .tint(.blue)
                 }
 
-                Text("iPad 端暂不支持投屏其他 App")
+                Text("整屏投屏，或接收另一台设备的画面")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

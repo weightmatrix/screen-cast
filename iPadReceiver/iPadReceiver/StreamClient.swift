@@ -15,35 +15,88 @@ final class StreamClient: ObservableObject {
     @Published private(set) var frameCount: Int = 0
     let decoder = ImageDecoder()
 
+    private var internetTunnel: InternetTunnel?
+    private var internetDirect = false
     private var connection: NWConnection?
     private var rxBuffer = Data()
+    private var rxOffset = 0
     private var expectedPayloadLength: Int?
     private var expectedType: UInt8?
-    private let netQueue = DispatchQueue(label: "com.witten.touping.net")
+    private let netQueue = DispatchQueue.main
+    private var connectionTimeout: DispatchWorkItem?
+    private let lastDataLock = NSLock()
+    private var lastDataAt = Date()
     private var isDisconnecting = false
     private var lastHost: String?
     private var lastPort: UInt16?
     private var lastMatchCode: String?
+    private var authenticationCode: String?
+    private var isThermalHigh = false
+    private var lastKeyFrameRequest = Date.distantPast
+    private var receivedFrames = 0
     var discoveryLookup: ((String) -> (String, UInt16)?)?
 
     private static let maxMessageLength = 8 * 1024 * 1024
 
-    func connect(host: String, port: UInt16) {
+    init() {
+        decoder.onNeedsKeyFrame = { [weak self] in self?.requestKeyFrame() }
+        NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.updateIdleTimerDisabled()
+        }
+        updateIdleTimerDisabled()
+    }
+
+    func connectInternetCode(_ code: String) {
+        disconnect()
+        guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
+        isDisconnecting = false
+        setStatus(.connecting)
+        let tunnel = InternetTunnel(code: code)
+        internetTunnel = tunnel
+        tunnel.onReady = { [weak self, weak tunnel] port in
+            guard let self, let tunnel, self.internetTunnel === tunnel else { return }
+            self.lastHost = "127.0.0.1"; self.lastPort = port
+            self.authenticationCode = code
+            self.startConnection()
+        }
+        tunnel.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        tunnel.start()
+    }
+
+    func connectInternetIP(host: String, port: UInt16, code: String) {
+        disconnect()
+        internetDirect = true
+        isDisconnecting = false
+        lastHost = host; lastPort = port; authenticationCode = code
+        startConnection()
+    }
+
+    func connect(host: String, port: UInt16, code: String) {
+        ConnectionDiag.shared.log("connect host=\(host) port=\(port)")
         disconnect()
         isDisconnecting = false
         lastHost = host
         lastPort = port
+        authenticationCode = code
         startConnection()
     }
 
     func connectWithCode(_ code: String) {
+        ConnectionDiag.shared.log("connectWithCode code=\(code)")
         disconnect()
         isDisconnecting = false
         lastMatchCode = code
+        authenticationCode = code
         guard let lookup = discoveryLookup, let found = lookup(code) else {
+            ConnectionDiag.shared.log("connectWithCode lookup miss")
             setStatus(.failed("未找到匹配码对应的投屏流"))
             return
         }
+        ConnectionDiag.shared.log("connectWithCode found \(found.0):\(found.1)")
         lastHost = found.0
         lastPort = found.1
         startConnection()
@@ -51,44 +104,82 @@ final class StreamClient: ObservableObject {
 
     private func startConnection() {
         guard connection == nil, let host = lastHost, let port = lastPort else { return }
+        guard !host.isEmpty, port > 0, MatchingCode.isValid(authenticationCode) else {
+            setStatus(.failed("请填写有效地址、端口和 6–36 位数字匹配码"))
+            return
+        }
+        isDisconnecting = false
+        ConnectionDiag.shared.log("startConnection \(host):\(port) code=\(lastMatchCode ?? "-")")
+        do {
+            rxBuffer.removeAll(keepingCapacity: false)
+            rxOffset = 0
+            expectedPayloadLength = nil
+            expectedType = nil
+        }
+        lastDataLock.lock()
+        lastDataAt = Date()
+        lastDataLock.unlock()
         setStatus(.connecting)
         decoder.reset()
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: internetDirect ? InternetSettings.tlsParameters(code: authenticationCode!) : .tcp)
         self.connection = connection
-        connection.stateUpdateHandler = { [weak self] state in
+        ConnectionDiag.shared.relay = { [weak self] entry in
+            self?.sendDiagnostic(entry)
+        }
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
             DispatchQueue.main.async {
-                guard let self, self.connection === connection else { return }
+                guard let self, let connection, self.connection === connection else { return }
                 switch state {
                 case .ready:
-                    self.setStatus(.connected)
+                    ConnectionDiag.shared.log("connection ready \(host):\(port)")
+                    self.sendAuthentication()
                     self.sendScreenSize()
                     self.netQueue.async { [weak self] in self?.readLoop(on: connection) }
-                case .failed:
+                case .failed(let error):
+                    ConnectionDiag.shared.log("connection failed \(host):\(port)")
                     self.handleDisconnect(connection)
+                    self.setStatus(.failed(error.localizedDescription))
                 case .cancelled:
+                    ConnectionDiag.shared.log("connection cancelled \(host):\(port)")
                     self.handleDisconnect(connection)
+                case .waiting(let error):
+                    ConnectionDiag.shared.log("connection waiting \(host):\(port) error=\(error.localizedDescription)")
                 default:
                     break
                 }
             }
         }
         connection.start(queue: netQueue)
-        UIApplication.shared.isIdleTimerDisabled = true
+        let timeout = DispatchWorkItem { [weak self, weak connection] in
+            guard let self, let connection, self.connection === connection else { return }
+            self.handleDisconnect(connection)
+            self.setStatus(.failed("连接或认证超时，请检查地址、端口和匹配码"))
+        }
+        connectionTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
+        updateIdleTimerDisabled()
     }
 
     private func handleDisconnect(_ disconnectedConnection: NWConnection) {
+        ConnectionDiag.shared.log("handleDisconnect isDisconnecting=\(isDisconnecting)")
         guard !isDisconnecting, connection === disconnectedConnection else { return }
+        connectionTimeout?.cancel()
+        disconnectedConnection.cancel()
         connection = nil
-        netQueue.async {
+        do {
             self.rxBuffer.removeAll(keepingCapacity: false)
+            self.rxOffset = 0
             self.expectedPayloadLength = nil
             self.expectedType = nil
         }
         setStatus(.idle)
+        updateIdleTimerDisabled()
     }
 
     func autoSearch(mode: String, host: String, port: UInt16, code: String) {
+        guard mode == "ip" || mode == "code" else { return } // WAN attempts are explicit, never background server polling.
         guard !isDisconnecting, connection == nil else { return }
+        ConnectionDiag.shared.log("autoSearch mode=\(mode) host=\(host) port=\(port) code=\(code)")
         switch status {
         case .connected, .connecting:
             return
@@ -96,14 +187,20 @@ final class StreamClient: ObservableObject {
             break
         }
         if mode == "code" {
-            guard code.count == 4, let lookup = discoveryLookup else { return }
-            guard let found = lookup(code) else { return }
+            guard MatchingCode.isValid(code), let lookup = discoveryLookup else { return }
+            guard let found = lookup(code) else {
+                ConnectionDiag.shared.log("autoSearch lookup miss code=\(code)")
+                return
+            }
+            ConnectionDiag.shared.log("autoSearch found \(found.0):\(found.1)")
             lastMatchCode = code
+            authenticationCode = code
             lastHost = found.0
             lastPort = found.1
             startConnection()
         } else {
-            guard !host.isEmpty else { return }
+            guard !host.isEmpty, MatchingCode.isValid(code) else { return }
+            authenticationCode = code
             lastHost = host
             lastPort = port
             startConnection()
@@ -111,22 +208,50 @@ final class StreamClient: ObservableObject {
     }
 
     func disconnect() {
+        internetTunnel?.stop(); internetTunnel = nil
+        internetDirect = false
+        connectionTimeout?.cancel()
+        ConnectionDiag.shared.log("manual disconnect")
+        ConnectionDiag.shared.relay = nil
         isDisconnecting = true
         lastHost = nil
         lastPort = nil
         lastMatchCode = nil
+        authenticationCode = nil
         let conn = connection
         connection = nil
         conn?.cancel()
-        netQueue.sync {
+        do {
             rxBuffer.removeAll(keepingCapacity: false)
+            rxOffset = 0
             expectedPayloadLength = nil
             expectedType = nil
         }
+        receivedFrames = 0
         frameCount = 0
         setStatus(.idle)
         decoder.reset()
-        UIApplication.shared.isIdleTimerDisabled = false
+        updateIdleTimerDisabled()
+    }
+
+    /// iOS may freeze the process before Network.framework reports that the
+    /// peer disappeared. Drop that transport explicitly so a wake-up never
+    /// reuses a connection whose state predates suspension.
+    func prepareForSuspension() {
+        connectionTimeout?.cancel()
+        ConnectionDiag.shared.log("app suspended; discard transport")
+        isDisconnecting = true
+        let conn = connection
+        connection = nil
+        conn?.stateUpdateHandler = nil
+        conn?.cancel()
+        rxBuffer.removeAll(keepingCapacity: false)
+        rxOffset = 0
+        expectedPayloadLength = nil
+        expectedType = nil
+        setStatus(.idle)
+        decoder.reset()
+        isDisconnecting = false
     }
 
     private func sendScreenSize() {
@@ -135,37 +260,65 @@ final class StreamClient: ObservableObject {
         let w = UInt32(bounds.width * UIScreen.main.scale)
         let h = UInt32(bounds.height * UIScreen.main.scale)
         var msg = Data()
-        msg.append(contentsOf: w.bigEndian.bytes)
-        msg.append(contentsOf: h.bigEndian.bytes)
+        msg.append(contentsOf: w.bytes)
+        msg.append(contentsOf: h.bytes)
         var head = Data()
         head.append(uint32: msg.count)
         head.append(UInt8(2))
+        ConnectionDiag.shared.log("sendScreenSize \(w)x\(h)")
         conn.send(content: head + msg, completion: .idempotent)
     }
 
+    private func sendAuthentication() {
+        guard let conn = connection,
+              let code = authenticationCode,
+              MatchingCode.isValid(code) else { return }
+        let payload = Data(code.utf8)
+        var msg = Data()
+        msg.append(uint32: payload.count)
+        msg.append(UInt8(5))
+        msg.append(payload)
+        ConnectionDiag.shared.log("sendAuthentication")
+        conn.send(content: msg, completion: .idempotent)
+    }
+
     private func setStatus(_ s: Status) {
-        DispatchQueue.main.async { [weak self] in
-            self?.status = s
-        }
+        status = s
+        updateIdleTimerDisabled()
     }
 
     func setStatus(_ message: String) {
         setStatus(.failed(message))
     }
 
+    private func updateIdleTimerDisabled() {
+        let state = ProcessInfo.processInfo.thermalState
+        isThermalHigh = state == .serious || state == .critical
+        if case .connected = status {
+            UIApplication.shared.isIdleTimerDisabled = !isThermalHigh
+        } else {
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+    }
+
     private func readLoop(on connection: NWConnection) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self, weak connection] data, _, isComplete, error in
             guard let self, let connection, self.connection === connection else { return }
             if let data, !data.isEmpty {
+                self.lastDataLock.lock()
+                self.lastDataAt = Date()
+                self.lastDataLock.unlock()
                 self.rxBuffer.append(data)
                 self.parseMessages()
             }
             if let error {
+                ConnectionDiag.shared.log("readLoop error \(error.localizedDescription)")
                 self.setStatus(.failed(error.localizedDescription))
                 DispatchQueue.main.async { [weak self] in self?.handleDisconnect(connection) }
                 return
             }
             if isComplete {
+                ConnectionDiag.shared.log("readLoop complete")
                 DispatchQueue.main.async { [weak self] in self?.handleDisconnect(connection) }
                 return
             }
@@ -176,23 +329,27 @@ final class StreamClient: ObservableObject {
     private func parseMessages() {
         var consumed = 0
         while true {
-            let remaining = rxBuffer.count - consumed
+            let totalAvailable = rxBuffer.count - rxOffset
+            let remaining = totalAvailable - consumed
             if let expectedPayloadLength, let expectedType {
                 guard remaining >= expectedPayloadLength else { break }
-                let payload = rxBuffer.copySlice(consumed, expectedPayloadLength)
+                let start = rxOffset + consumed
+                let payload = rxBuffer.copySlice(start, expectedPayloadLength)
                 consumed += expectedPayloadLength
                 self.expectedPayloadLength = nil
                 self.expectedType = nil
                 handle(type: expectedType, payload: payload)
             } else {
                 guard remaining >= 5 else { break }
-                let base = consumed
+                let base = rxOffset + consumed
                 let length = rxBuffer.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) -> Int in
                     guard base + 4 < ptr.count else { return -1 }
                     return Int(ptr.loadUnaligned(fromByteOffset: base, as: UInt32.self).bigEndian)
                 }
                 guard length > 0, length <= Self.maxMessageLength else {
+                    ConnectionDiag.shared.log("parse error invalid length \(length)")
                     rxBuffer.removeAll(keepingCapacity: false)
+                    rxOffset = 0
                     consumed = 0
                     expectedPayloadLength = nil
                     expectedType = nil
@@ -209,8 +366,10 @@ final class StreamClient: ObservableObject {
                 expectedPayloadLength = length
                 expectedType = type
             }
-            if rxBuffer.count > Self.maxMessageLength * 4 {
+            if totalAvailable > Self.maxMessageLength * 4 {
+                ConnectionDiag.shared.log("parse error buffer overflow total=\(totalAvailable)")
                 rxBuffer.removeAll(keepingCapacity: false)
+                rxOffset = 0
                 consumed = 0
                 expectedPayloadLength = nil
                 expectedType = nil
@@ -221,7 +380,49 @@ final class StreamClient: ObservableObject {
             }
         }
         if consumed > 0 {
-            rxBuffer.removeFirst(consumed)
+            rxOffset += consumed
+            if rxOffset > 1_000_000 || rxOffset * 2 > rxBuffer.count {
+                rxBuffer.removeFirst(rxOffset)
+                rxOffset = 0
+            }
+        }
+    }
+
+    func checkStaleConnection() {
+        guard case .connected = status, let conn = connection else { return }
+        lastDataLock.lock()
+        let elapsed = Date().timeIntervalSince(lastDataAt)
+        lastDataLock.unlock()
+        guard elapsed > 15 else { return }
+        ConnectionDiag.shared.log("stale connection elapsed=\(String(format: "%.1f", elapsed)) force reconnect")
+        conn.cancel()
+        connection = nil
+        netQueue.async { [weak self] in
+            self?.rxBuffer.removeAll(keepingCapacity: false)
+            self?.rxOffset = 0
+            self?.expectedPayloadLength = nil
+            self?.expectedType = nil
+        }
+        setStatus(.idle)
+    }
+
+    private func requestKeyFrame() {
+        guard case .connected = status, let connection,
+              Date().timeIntervalSince(lastKeyFrameRequest) >= 0.15 else { return }
+        lastKeyFrameRequest = Date()
+        connection.send(content: Data([0, 0, 0, 1, 10, 1]), completion: .contentProcessed { _ in })
+    }
+
+    private func sendDiagnostic(_ entry: String) {
+        netQueue.async { [weak self] in
+            guard let self, let conn = self.connection else { return }
+            let payload = Data(entry.utf8)
+            guard payload.count > 0, payload.count <= 60_000 else { return }
+            var msg = Data()
+            msg.append(uint32: payload.count)
+            msg.append(UInt8(4))
+            msg.append(payload)
+            conn.send(content: msg, completion: .contentProcessed { _ in })
         }
     }
 
@@ -231,15 +432,29 @@ final class StreamClient: ObservableObject {
             guard payload.count >= 5 else { break }
             let codec = payload[0]
             if codec == 3 {
+                connectionTimeout?.cancel()
+                setStatus(.connected)
+                ConnectionDiag.shared.log("recv H264 config")
                 decoder.setH264Serialized(payload.dropFirst(1))
-            } else if codec == 0 {
-                decoder.setH264Config(sps: Data(), pps: Data())
+            } else {
+                ConnectionDiag.shared.log("recv unsupported codec \(codec)")
+                setStatus(.failed("当前只支持 H264，请更新发送端"))
             }
         case 1:
             decoder.decodeFrame(payload)
+            receivedFrames += 1
+            if receivedFrames == 1 || receivedFrames % 30 == 0 { frameCount = receivedFrames }
+        case 11:
+            if payload.count <= 2048, let line = String(data: payload, encoding: .utf8) {
+                PerformanceDisk.shared.write("remote \(line)", forward: false)
+            }
+        case 7:
+            let message = String(data: payload, encoding: .utf8) ?? "匹配码错误"
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.frameCount += 1
+                if let conn = self.connection { self.handleDisconnect(conn) }
+                self.isDisconnecting = true
+                self.setStatus(.failed(message))
             }
         default:
             break
@@ -251,14 +466,6 @@ extension Data {
     mutating func append(uint32: Int) {
         var v = UInt32(uint32).bigEndian
         Swift.withUnsafeBytes(of: &v) { append(contentsOf: $0) }
-    }
-
-    func copySlice(_ offset: Int, _ length: Int) -> Data {
-        guard offset >= 0, length > 0, offset + length <= count else { return Data() }
-        return withUnsafeBytes { ptr in
-            guard let base = ptr.baseAddress else { return Data() }
-            return Data(bytes: base.advanced(by: offset), count: length)
-        }
     }
 }
 

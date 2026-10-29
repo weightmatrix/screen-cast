@@ -1,0 +1,980 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68AA5B2BA8654707A8998047 /* StreamFormat.swift */; };
+		051F8EC410C549609585E599 /* DiscoveryBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */; };
+		0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000101 /* iPadReceiverApp.swift */; };
+		0B0000000000000000000202 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000102 /* ContentView.swift */; };
+		0B0000000000000000000203 /* StreamClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000103 /* StreamClient.swift */; };
+		0B0000000000000000000204 /* H264Decoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000104 /* H264Decoder.swift */; };
+		0B0000000000000000000205 /* ConnectionDiag.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000105 /* ConnectionDiag.swift */; };
+		0FEC54747E5B4577B033CED6 /* ReplayVideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878BBA27283D4923BC0729A7 /* ReplayVideoEncoder.swift */; };
+		12B23694C8C04B7EB40E9458 /* BroadcastVerification.swift in Sources */ = {isa = PBXBuildFile; fileRef = A595C706E51248F8B2688E78 /* BroadcastVerification.swift */; };
+		1E0965052A3B4A549CCDAB52 /* BroadcastSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA23BCF5612541508AE0676B /* BroadcastSettings.swift */; };
+		268465F47C0042BEB81A5311 /* CastingServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* CastingServer.swift */; };
+		37E2B1702F7D482592AC6FF0 /* StreamFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68AA5B2BA8654707A8998047 /* StreamFormat.swift */; };
+		3D51A83329FB4CED89CA0FA1 /* ReplayVideoEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 878BBA27283D4923BC0729A7 /* ReplayVideoEncoder.swift */; };
+		4C26F6369AD648EEBD18FB63 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 502FFAEBF64E4FC59424EB0C /* SampleHandler.swift */; };
+		4CA852183EC749C281E86F20 /* BroadcastSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA23BCF5612541508AE0676B /* BroadcastSettings.swift */; };
+		4E1E3605648C435DA2D468C1 /* iPadBroadcast.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 40C12F359139440E9CB5047F /* iPadBroadcast.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9DA644E696854AC8931ABDDB /* StreamFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68AA5B2BA8654707A8998047 /* StreamFormat.swift */; };
+		AB0000000000000000000201 /* MacCasterApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000101 /* MacCasterApp.swift */; };
+		AB0000000000000000000202 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000102 /* ContentView.swift */; };
+		AB0000000000000000000203 /* ScreenStreamer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000103 /* ScreenStreamer.swift */; };
+		AB0000000000000000000204 /* CastingServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB0000000000000000000104 /* CastingServer.swift */; };
+		AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = AB72356A241AE6480AA3BFC6 /* Assets.xcassets */; };
+		AB35C6000C68B240AC8A5D4B /* DiscoveryBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */; };
+		AB4945206941CA47A0BA7F08 /* DiscoveryListener.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */; };
+		AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB428A01562F9048A59EEE5F /* Diagnostic.swift */; };
+		AB91522DAD32A041D0AA2D6E /* MacReceiver.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */; };
+		ABE23ED2905134432BB15EC3 /* MacReceiverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */; };
+		ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */; };
+		ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */; };
+		C77032960A994E3DAEC9AF95 /* iPadSenderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80AA3176BE5644728123F341 /* iPadSenderView.swift */; };
+		B1B837A5075146D88EF14D48 = {isa = PBXBuildFile; productRef = C1C736262F59461DA061F5C6; };
+		E25B0499990E42CC86BCD4E1 = {isa = PBXBuildFile; productRef = CBCA2364E7E8469C878C1E82; };
+		2626E0BEDA6C4C2CA5FF0465 = {isa = PBXBuildFile; productRef = 93C14BCB9AFE48AF870F1D6B; };
+		91A8F80BD0F349F2B2FBA901 = {isa = PBXBuildFile; fileRef = 2F95EB83546C4838AC1093FE; };
+		32A3955008814AE88B7B47CC = {isa = PBXBuildFile; fileRef = 2F95EB83546C4838AC1093FE; };
+		007BB4013A8B47199DA2D5F3 = {isa = PBXBuildFile; fileRef = 2F95EB83546C4838AC1093FE; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		79F715E9EA23440BB8926D4A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AB0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CC56713314174D318B74DB57;
+			remoteInfo = iPadBroadcast;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		F03AA1C656E94217AE23D15E /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				4E1E3605648C435DA2D468C1 /* iPadBroadcast.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0B0000000000000000000004 /* iPadReceiver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iPadReceiver.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B0000000000000000000101 /* iPadReceiverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadReceiverApp.swift; sourceTree = "<group>"; };
+		0B0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		0B0000000000000000000103 /* StreamClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamClient.swift; sourceTree = "<group>"; };
+		0B0000000000000000000104 /* H264Decoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = H264Decoder.swift; sourceTree = "<group>"; };
+		0B0000000000000000000105 /* ConnectionDiag.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionDiag.swift; sourceTree = "<group>"; };
+		0B0000000000000000000106 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		40C12F359139440E9CB5047F /* iPadBroadcast.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = iPadBroadcast.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		502FFAEBF64E4FC59424EB0C /* SampleHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
+		68AA5B2BA8654707A8998047 /* StreamFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamFormat.swift; sourceTree = "<group>"; };
+		6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = AppIdentity.xcconfig; sourceTree = "<group>"; };
+		80AA3176BE5644728123F341 /* iPadSenderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadSenderView.swift; sourceTree = "<group>"; };
+		878BBA27283D4923BC0729A7 /* ReplayVideoEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplayVideoEncoder.swift; sourceTree = "<group>"; };
+		A595C706E51248F8B2688E78 /* BroadcastVerification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastVerification.swift; sourceTree = "<group>"; };
+		AB0000000000000000000004 /* MacCaster.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MacCaster.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB0000000000000000000101 /* MacCasterApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacCasterApp.swift; sourceTree = "<group>"; };
+		AB0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		AB0000000000000000000103 /* ScreenStreamer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenStreamer.swift; sourceTree = "<group>"; };
+		AB0000000000000000000104 /* CastingServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CastingServer.swift; sourceTree = "<group>"; };
+		AB0000000000000000000105 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		AB428A01562F9048A59EEE5F /* Diagnostic.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Diagnostic.swift; sourceTree = "<group>"; };
+		AB72356A241AE6480AA3BFC6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReceiverView.swift; sourceTree = "<group>"; };
+		ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryListener.swift; sourceTree = "<group>"; };
+		ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnnotationEngine.swift; sourceTree = "<group>"; };
+		ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiscoveryBroadcaster.swift; sourceTree = "<group>"; };
+		ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacReceiver.swift; sourceTree = "<group>"; };
+		BA23BCF5612541508AE0676B /* BroadcastSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BroadcastSettings.swift; sourceTree = "<group>"; };
+		CF28EDCEBB2649E58778F591 /* iPadBroadcast.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iPadBroadcast.entitlements; sourceTree = "<group>"; };
+		ED1C19201C6848158D6B4E00 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		F2AB876223584ECDAD8F0579 /* iPadReceiver.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = iPadReceiver.entitlements; sourceTree = "<group>"; };
+		2F95EB83546C4838AC1093FE = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InternetConnection.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0B0000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E25B0499990E42CC86BCD4E1,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		96753AB2043143E89FA978D3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2626E0BEDA6C4C2CA5FF0465,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB0000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1B837A5075146D88EF14D48,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0B0000000000000000000301 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				0B0000000000000000000101 /* iPadReceiverApp.swift */,
+				0B0000000000000000000102 /* ContentView.swift */,
+				0B0000000000000000000103 /* StreamClient.swift */,
+				0B0000000000000000000105 /* ConnectionDiag.swift */,
+				ABB5B4EC4FFE544DEC95AF29 /* DiscoveryListener.swift */,
+				0B0000000000000000000104 /* H264Decoder.swift */,
+				0B0000000000000000000106 /* Info.plist */,
+				AB72356A241AE6480AA3BFC6 /* Assets.xcassets */,
+				80AA3176BE5644728123F341 /* iPadSenderView.swift */,
+				F2AB876223584ECDAD8F0579 /* iPadReceiver.entitlements */,
+				A595C706E51248F8B2688E78 /* BroadcastVerification.swift */,
+			);
+			name = iOS;
+			path = iPadReceiver/iPadReceiver;
+			sourceTree = "<group>";
+		};
+		8C6B2B8B25B542489C4E201C /* iPadBroadcast */ = {
+			isa = PBXGroup;
+			children = (
+				502FFAEBF64E4FC59424EB0C /* SampleHandler.swift */,
+				878BBA27283D4923BC0729A7 /* ReplayVideoEncoder.swift */,
+				ED1C19201C6848158D6B4E00 /* Info.plist */,
+				CF28EDCEBB2649E58778F591 /* iPadBroadcast.entitlements */,
+			);
+			path = iPadBroadcast;
+			sourceTree = "<group>";
+		};
+		9545EFB652514483A91D4D8E /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				2F95EB83546C4838AC1093FE,
+				68AA5B2BA8654707A8998047 /* StreamFormat.swift */,
+				6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */,
+				BA23BCF5612541508AE0676B /* BroadcastSettings.swift */,
+			);
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000301 /* macOS */,
+				0B0000000000000000000301 /* iOS */,
+				8C6B2B8B25B542489C4E201C /* iPadBroadcast */,
+				9545EFB652514483A91D4D8E /* Shared */,
+				AB0000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000004 /* MacCaster.app */,
+				0B0000000000000000000004 /* iPadReceiver.app */,
+				40C12F359139440E9CB5047F /* iPadBroadcast.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		AB0000000000000000000301 /* macOS */ = {
+			isa = PBXGroup;
+			children = (
+				AB0000000000000000000101 /* MacCasterApp.swift */,
+				AB0000000000000000000102 /* ContentView.swift */,
+				AB0000000000000000000103 /* ScreenStreamer.swift */,
+				ABC9EF1211304F41F09B66D4 /* AnnotationEngine.swift */,
+				AB428A01562F9048A59EEE5F /* Diagnostic.swift */,
+				ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */,
+				ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */,
+				ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */,
+				AB0000000000000000000104 /* CastingServer.swift */,
+				AB0000000000000000000105 /* Info.plist */,
+				AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */,
+			);
+			name = macOS;
+			path = MacCaster/MacCaster;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0B0000000000000000000005 /* iPadReceiver */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0B0000000000000000000010 /* Build configuration list for PBXNativeTarget "iPadReceiver" */;
+			buildPhases = (
+				0B0000000000000000000006 /* Sources */,
+				0B0000000000000000000007 /* Frameworks */,
+				0B0000000000000000000008 /* Resources */,
+				F03AA1C656E94217AE23D15E /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				65C1F855C55048028B5A8DA6 /* PBXTargetDependency */,
+			);
+			name = iPadReceiver;
+			productName = iPadReceiver;
+			productReference = 0B0000000000000000000004 /* iPadReceiver.app */;
+			productType = "com.apple.product-type.application";
+			packageProductDependencies = (
+				CBCA2364E7E8469C878C1E82,
+			);
+		};
+		AB0000000000000000000005 /* MacCaster */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB0000000000000000000010 /* Build configuration list for PBXNativeTarget "MacCaster" */;
+			buildPhases = (
+				AB0000000000000000000006 /* Sources */,
+				AB0000000000000000000007 /* Frameworks */,
+				AB0000000000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MacCaster;
+			productName = MacCaster;
+			productReference = AB0000000000000000000004 /* MacCaster.app */;
+			productType = "com.apple.product-type.application";
+			packageProductDependencies = (
+				C1C736262F59461DA061F5C6,
+			);
+		};
+		CC56713314174D318B74DB57 /* iPadBroadcast */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 511C17A0F47B4012A0D1F135 /* Build configuration list for PBXNativeTarget "iPadBroadcast" */;
+			buildPhases = (
+				655605EFD835493A8D9BB71A /* Sources */,
+				96753AB2043143E89FA978D3 /* Frameworks */,
+				31A5BD5827094C5AAC4FD741 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = iPadBroadcast;
+			productName = iPadBroadcast;
+			productReference = 40C12F359139440E9CB5047F /* iPadBroadcast.appex */;
+			productType = "com.apple.product-type.app-extension";
+			packageProductDependencies = (
+				93C14BCB9AFE48AF870F1D6B,
+			);
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		AB0000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					0B0000000000000000000005 = {
+						CreatedOnToolsVersion = 16.0;
+						SystemCapabilities = {
+							com.apple.Keychain = {
+								enabled = 1;
+							};
+						};
+					};
+					AB0000000000000000000005 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+					CC56713314174D318B74DB57 = {
+						SystemCapabilities = {
+							com.apple.Keychain = {
+								enabled = 1;
+							};
+						};
+					};
+				};
+			};
+			buildConfigurationList = AB0000000000000000000009 /* Build configuration list for PBXProject "Touping" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = AB0000000000000000000002;
+			productRefGroup = AB0000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				AB0000000000000000000005 /* MacCaster */,
+				0B0000000000000000000005 /* iPadReceiver */,
+				CC56713314174D318B74DB57 /* iPadBroadcast */,
+			);
+			packageReferences = (
+				DFA73270AB77466F9A1EDCAE,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0B0000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		31A5BD5827094C5AAC4FD741 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB0000000000000000000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0B0000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				32A3955008814AE88B7B47CC,
+				0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */,
+				0B0000000000000000000202 /* ContentView.swift in Sources */,
+				0B0000000000000000000203 /* StreamClient.swift in Sources */,
+				0B0000000000000000000205 /* ConnectionDiag.swift in Sources */,
+				AB4945206941CA47A0BA7F08 /* DiscoveryListener.swift in Sources */,
+				0B0000000000000000000204 /* H264Decoder.swift in Sources */,
+				37E2B1702F7D482592AC6FF0 /* StreamFormat.swift in Sources */,
+				1E0965052A3B4A549CCDAB52 /* BroadcastSettings.swift in Sources */,
+				C77032960A994E3DAEC9AF95 /* iPadSenderView.swift in Sources */,
+				12B23694C8C04B7EB40E9458 /* BroadcastVerification.swift in Sources */,
+				3D51A83329FB4CED89CA0FA1 /* ReplayVideoEncoder.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		655605EFD835493A8D9BB71A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				007BB4013A8B47199DA2D5F3,
+				4C26F6369AD648EEBD18FB63 /* SampleHandler.swift in Sources */,
+				0FEC54747E5B4577B033CED6 /* ReplayVideoEncoder.swift in Sources */,
+				4CA852183EC749C281E86F20 /* BroadcastSettings.swift in Sources */,
+				268465F47C0042BEB81A5311 /* CastingServer.swift in Sources */,
+				051F8EC410C549609585E599 /* DiscoveryBroadcaster.swift in Sources */,
+				9DA644E696854AC8931ABDDB /* StreamFormat.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB0000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91A8F80BD0F349F2B2FBA901,
+				AB0000000000000000000201 /* MacCasterApp.swift in Sources */,
+				AB0000000000000000000202 /* ContentView.swift in Sources */,
+				AB0000000000000000000203 /* ScreenStreamer.swift in Sources */,
+				ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */,
+				AB6045B72959A34A7FB5D85B /* Diagnostic.swift in Sources */,
+				AB35C6000C68B240AC8A5D4B /* DiscoveryBroadcaster.swift in Sources */,
+				ABE23ED2905134432BB15EC3 /* MacReceiverView.swift in Sources */,
+				AB91522DAD32A041D0AA2D6E /* MacReceiver.swift in Sources */,
+				AB0000000000000000000204 /* CastingServer.swift in Sources */,
+				0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		65C1F855C55048028B5A8DA6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CC56713314174D318B74DB57 /* iPadBroadcast */;
+			targetProxy = 79F715E9EA23440BB8926D4A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		DFA73270AB77466F9A1EDCAE = {isa = XCRemoteSwiftPackageReference; repositoryURL = "https://github.com/stasel/WebRTC.git"; requirement = {kind = exactVersion; version = 156.0.0; }; };
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C1C736262F59461DA061F5C6 = {isa = XCSwiftPackageProductDependency; package = DFA73270AB77466F9A1EDCAE; productName = WebRTC; };
+		CBCA2364E7E8469C878C1E82 = {isa = XCSwiftPackageProductDependency; package = DFA73270AB77466F9A1EDCAE; productName = WebRTC; };
+		93C14BCB9AFE48AF870F1D6B = {isa = XCSwiftPackageProductDependency; package = DFA73270AB77466F9A1EDCAE; productName = WebRTC; };
+/* End XCSwiftPackageProductDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0B0000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = iPadReceiver/iPadReceiver/iPadReceiver.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = F4L9P953MQ;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iPadReceiver/iPadReceiver/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		0B0000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = iPadReceiver/iPadReceiver/iPadReceiver.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = F4L9P953MQ;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"NDEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iPadReceiver/iPadReceiver/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		3958E8867DF240EC84007A3F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = iPadBroadcast/iPadBroadcast.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = F4L9P953MQ;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iPadBroadcast/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).broadcast";
+				PRODUCT_NAME = iPadBroadcast;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A35D63732C2D44269C8B9AB2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_ENTITLEMENTS = iPadBroadcast/iPadBroadcast.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = F4L9P953MQ;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"NDEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iPadBroadcast/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(APP_BUNDLE_IDENTIFIER).broadcast";
+				PRODUCT_NAME = iPadBroadcast;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		AB0000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Debug;
+		};
+		AB0000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+			};
+			name = Release;
+		};
+		AB0000000000000000000013 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = F4L9P953MQ;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MacCaster/MacCaster/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		AB0000000000000000000014 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = F4L9P953MQ;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"NDEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MacCaster/MacCaster/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = macosx;
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0B0000000000000000000010 /* Build configuration list for PBXNativeTarget "iPadReceiver" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0B0000000000000000000013 /* Debug */,
+				0B0000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		511C17A0F47B4012A0D1F135 /* Build configuration list for PBXNativeTarget "iPadBroadcast" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3958E8867DF240EC84007A3F /* Debug */,
+				A35D63732C2D44269C8B9AB2 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB0000000000000000000009 /* Build configuration list for PBXProject "Touping" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000011 /* Debug */,
+				AB0000000000000000000012 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB0000000000000000000010 /* Build configuration list for PBXNativeTarget "MacCaster" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB0000000000000000000013 /* Debug */,
+				AB0000000000000000000014 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = AB0000000000000000000001 /* Project object */;
+}

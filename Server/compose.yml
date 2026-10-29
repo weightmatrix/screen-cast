@@ -1,0 +1,27 @@
+services:
+  signaling:
+    build:
+      context: .
+      args:
+        RUNTIME_IMAGE: ${TOUPING_RUNTIME_IMAGE:-paike-backend:latest}
+    container_name: touping-signaling
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    mem_limit: 96m
+    cpus: 0.3
+    pids_limit: 32
+    ports:
+      - "3478:3478/udp"
+    networks:
+      - paike
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
+networks:
+  paike:
+    external: true
+    name: paike_default

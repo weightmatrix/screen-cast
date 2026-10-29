@@ -8,8 +8,21 @@ struct MacCasterApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(streamer)
+                .task {
+                    #if DEBUG
+                    if ProcessInfo.processInfo.arguments.contains("--verify-internet-flow") {
+                        await InternetFlowVerification.run()
+                    }
+                    if ProcessInfo.processInfo.arguments.contains("--verify-display-pacing") {
+                        await MacStreamImageView.verifyPacing()
+                    }
+                    if ProcessInfo.processInfo.arguments.contains("--verify-internet-publish") || ProcessInfo.processInfo.arguments.contains("--verify-internet-casting") || ProcessInfo.processInfo.arguments.contains("--verify-internet-ip") || ProcessInfo.processInfo.arguments.contains("--verify-casting") || ProcessInfo.processInfo.arguments.contains("--verify-live-quality") {
+                        await streamer.verifyCasting()
+                    }
+                    #endif
+                }
         }
-        .defaultSize(width: 700, height: 520)
+        .defaultSize(width: 960, height: 740)
     }
 }
 
@@ -17,11 +30,15 @@ struct RootView: View {
     @AppStorage("appMode") private var appMode = "cast"
 
     var body: some View {
-        if appMode == "receive" {
-            MacReceiverView()
-        } else {
-            ContentView()
+        Group {
+            if appMode == "receive" { MacReceiverView() }
+            else { ContentView() }
         }
+        .font(.system(size: 16))
+        .buttonStyle(CastButtonStyle())
+        .controlSize(.large)
+        .tint(CastStyle.accent)
+        .preferredColorScheme(.dark)
     }
 }
 

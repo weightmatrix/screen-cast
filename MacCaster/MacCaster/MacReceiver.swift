@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import Network
+import Darwin
 import AppKit
 import AVFoundation
 import CoreMedia
@@ -10,61 +11,123 @@ final class MacDiscoveryListener {
     static let shared = MacDiscoveryListener()
     static let udpPort: UInt16 = 8321
 
-    private var listener: NWListener?
-    private var entries: [String: (ip: String, port: UInt16)] = [:]
+    private var socketFd: Int32 = -1
+    private var readSource: DispatchSourceRead?
+    private var entries: [String: (ip: String, port: UInt16, priority: Int)] = [:]
     private var lastSeen: [String: Date] = [:]
-    private let queue = DispatchQueue(label: "macdiscovery", qos: .utility)
+    private let queue = DispatchQueue(label: "discovery", qos: .utility)
 
     func start() {
-        guard listener == nil else { return }
-        do {
-            let l = try NWListener(using: .udp, on: NWEndpoint.Port(rawValue: Self.udpPort)!)
-            l.newConnectionHandler = { [weak self] conn in
-                conn.start(queue: self?.queue ?? .main)
-                self?.receive(on: conn)
-            }
-            l.start(queue: queue)
-            listener = l
-        } catch {
+        guard socketFd < 0 else { return }
+        DiagLog.log("Discovery", "discovery start udp=\(Self.udpPort)")
+
+        let fd = socket(AF_INET, SOCK_DGRAM, 0)
+        guard fd >= 0 else {
+            DiagLog.log("Discovery", "discovery socket create failed errno=\(errno)")
+            return
         }
+        _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+
+        var yes: Int32 = 1
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
+        setsockopt(fd, SOL_SOCKET, SO_BROADCAST, &yes, socklen_t(MemoryLayout<Int32>.size))
+
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = Self.udpPort.bigEndian
+        addr.sin_addr.s_addr = INADDR_ANY
+
+        let bindResult = withUnsafePointer(to: &addr) { ptr in
+            ptr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                bind(fd, sa, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        guard bindResult == 0 else {
+            close(fd)
+            DiagLog.log("Discovery", "discovery bind failed errno=\(errno)")
+            return
+        }
+
+        socketFd = fd
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: queue)
+        source.setEventHandler { [weak self] in
+            self?.receiveDatagram()
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        readSource = source
+        source.resume()
+        DiagLog.log("Discovery", "discovery started")
     }
 
     func stop() {
-        listener?.cancel()
-        listener = nil
-    }
-
-    private func receive(on conn: NWConnection) {
-        conn.receiveMessage { [weak self] data, _, _, _ in
-            guard let self else { return }
-            if let data,
-               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let code = dict["code"] as? String,
-               let portNumber = dict["port"] as? NSNumber,
-               portNumber.intValue > 0,
-               portNumber.intValue <= Int(UInt16.max),
-               let ip = self.extractIP(from: conn.currentPath?.remoteEndpoint) {
-                let port = UInt16(portNumber.intValue)
-                self.entries[code] = (ip, port)
-                self.lastSeen[code] = Date()
-            }
-            self.receive(on: conn)
+        let source = readSource
+        readSource = nil
+        let fd = socketFd
+        socketFd = -1
+        if let source {
+            source.cancel()
+        } else if fd >= 0 {
+            close(fd)
         }
     }
 
-    private func extractIP(from endpoint: NWEndpoint?) -> String? {
-        guard let endpoint else { return nil }
-        if case .hostPort(let host, _) = endpoint {
-            switch host {
-            case .ipv4(let addr):
-                return addr.debugDescription
-            case .ipv6(let addr):
-                return addr.debugDescription
-            default:
-                return nil
+    private func receiveDatagram() {
+        guard socketFd >= 0 else { return }
+        var buffer = [UInt8](repeating: 0, count: 2048)
+        var addr = sockaddr_in()
+        var addrLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bufferCount = buffer.count
+        let bytesRead = buffer.withUnsafeMutableBytes { raw -> Int in
+            withUnsafeMutablePointer(to: &addr) { addrPtr in
+                addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sa in
+                    recvfrom(socketFd, raw.baseAddress, bufferCount, 0, sa, &addrLen)
+                }
             }
         }
-        return nil
+        guard bytesRead > 0 else { return }
+
+        let data = Data(buffer.prefix(bytesRead))
+        guard let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let code = dict["code"] as? String,
+              MatchingCode.isValid(code),
+              let portNumber = dict["port"] as? NSNumber,
+              portNumber.intValue > 0,
+              portNumber.intValue <= Int(UInt16.max) else {
+            return
+        }
+
+        var bestIP = Self.ipv4String(from: addr) ?? ""
+        var bestPriority = bestIP.isEmpty ? 0 : 1_000
+        if bestIP.isEmpty, let ips = dict["ips"] as? [[String: Any]] {
+            for item in ips {
+                guard let ip = item["ip"] as? String, !ip.isEmpty else { continue }
+                let priority = (item["priority"] as? NSNumber)?.intValue ?? 0
+                if bestIP.isEmpty || priority > bestPriority {
+                    bestIP = ip
+                    bestPriority = priority
+                }
+            }
+        }
+        guard !bestIP.isEmpty else { return }
+
+        let port = UInt16(portNumber.intValue)
+        entries[code] = (bestIP, port, bestPriority)
+        lastSeen[code] = Date()
+        DiagLog.log("Discovery", "discovery recv code=\(code) \(bestIP):\(port) priority=\(bestPriority)")
+    }
+
+    private static func ipv4String(from addr: sockaddr_in) -> String? {
+        var addr = addr
+        var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+        let result = withUnsafePointer(to: &addr.sin_addr) { ptr in
+            ptr.withMemoryRebound(to: CChar.self, capacity: MemoryLayout<in_addr>.size) { raw in
+                inet_ntop(AF_INET, raw, &buffer, socklen_t(buffer.count))
+            }
+        }
+        guard result != nil else { return nil }
+        return String(cString: buffer)
     }
 
     func find(code: String) -> (ip: String, port: UInt16)? {
@@ -73,38 +136,87 @@ final class MacDiscoveryListener {
             if let seen = lastSeen[code], Date().timeIntervalSince(seen) > 8 {
                 entries.removeValue(forKey: code)
                 lastSeen.removeValue(forKey: code)
+                DiagLog.log("Discovery", "discovery expired code=\(code)")
                 return nil
             }
-            return entry
+            DiagLog.log("Discovery", "discovery hit code=\(code) \(entry.0):\(entry.1) priority=\(entry.2)")
+            return (entry.0, entry.1)
         }
     }
 }
 
 final class MacReceiverDecoder: ObservableObject {
     @Published var diagText = "等待画面"
-    @Published var isH264 = false
 
+    #if DEBUG
     var onImageUpdate: ((NSImage?) -> Void)?
+    #endif
+    private let frameLock = NSLock()
+    private var latestFrame: CIImage?
+    private var frameRevision: UInt64 = 0
+    private var frameDecodedAt = ProcessInfo.processInfo.systemUptime
+    private var frameHandler: (() -> Void)?
+    private let decodeQueue = DispatchQueue(label: "casting.mac.decode", qos: .userInteractive)
 
-    private var frameCount = 0
+    func setFrameHandler(_ handler: (() -> Void)?) {
+        frameLock.lock()
+        frameHandler = handler
+        frameLock.unlock()
+        handler?()
+    }
+
+    private func publishFrame(_ image: CIImage?) {
+        frameLock.lock()
+        latestFrame = image
+        frameRevision &+= 1
+        frameDecodedAt = ProcessInfo.processInfo.systemUptime
+        let handler = frameHandler
+        frameLock.unlock()
+        handler?()
+    }
+
+    #if DEBUG
+    func publishVerificationFrame(_ image: CIImage) { publishFrame(image) }
+    #endif
+
+    func frameForDisplay(after revision: UInt64?) -> (image: CIImage?, revision: UInt64, decodedAt: Double)? {
+        frameLock.lock()
+        defer { frameLock.unlock() }
+        guard revision != frameRevision else { return nil }
+        return (latestFrame, frameRevision, frameDecodedAt)
+    }
+
     private var h264FormatDesc: CMVideoFormatDescription?
+    private var h264ConfigData: Data?
     private var decompressionSession: VTDecompressionSession?
     private var h264Pts = CMTime(value: 0, timescale: 600)
+    private let perf = StreamPerformance("mac.decode")
     private let ciContext = CIContext()
     private var enqueueCount = 0
 
     func setH264Serialized(_ payload: Data) {
+        decodeQueue.async { [weak self] in self?.configureH264(payload) }
+    }
+
+    private func configureH264(_ payload: Data) {
         guard payload.count >= 5 else { return }
         let fdLen = Int(payload.withUnsafeBytes {
             $0.loadUnaligned(fromByteOffset: 0, as: UInt32.self).bigEndian
         })
         let fdData = payload.copySlice(4, fdLen)
         guard !fdData.isEmpty else { return }
-        guard let desc = deserializeFormatDescription(fdData) else {
+        if fdData == h264ConfigData, decompressionSession != nil {
+            return
+        }
+        guard let desc = StreamFormat.deserialize(fdData) else {
             DispatchQueue.main.async { [weak self] in self?.diagText = "FD反序列化失败" }
             return
         }
-        if let s = decompressionSession { VTDecompressionSessionInvalidate(s); decompressionSession = nil }
+        if let s = decompressionSession {
+            VTDecompressionSessionWaitForAsynchronousFrames(s)
+            VTDecompressionSessionInvalidate(s)
+            decompressionSession = nil
+        }
         var session: VTDecompressionSession?
         let status = VTDecompressionSessionCreate(
             allocator: nil, formatDescription: desc, decoderSpecification: nil,
@@ -116,9 +228,8 @@ final class MacReceiverDecoder: ObservableObject {
         }
         decompressionSession = session
         h264FormatDesc = desc
+        h264ConfigData = fdData
         h264Pts = CMTime(value: 0, timescale: 600)
-        frameCount = 0
-        isH264 = true
         let dims = CMVideoFormatDescriptionGetDimensions(desc)
         DispatchQueue.main.async { [weak self] in
             self?.diagText = "H264 OK \(dims.width)x\(dims.height)"
@@ -126,22 +237,12 @@ final class MacReceiverDecoder: ObservableObject {
     }
 
     func decodeFrame(_ data: Data) {
-        if isH264 {
-            decodeH264(data)
-        } else {
-            decodeJPEG(data)
-        }
-    }
-
-    private func decodeJPEG(_ data: Data) {
-        guard let img = NSImage(data: data) else { return }
-        frameCount += 1
-        DispatchQueue.main.async { [weak self] in
+        let enqueuedAt = ProcessInfo.processInfo.systemUptime
+        perf.interval("receiveInterval", at: enqueuedAt)
+        decodeQueue.async { [weak self] in
             guard let self else { return }
-            self.onImageUpdate?(img)
-            if self.frameCount % 60 == 0 {
-                self.diagText = "JPEG 帧:\(self.frameCount)"
-            }
+            self.perf.record("dispatchWait", milliseconds: (ProcessInfo.processInfo.systemUptime - enqueuedAt) * 1000)
+            self.decodeH264(data)
         }
     }
 
@@ -149,9 +250,7 @@ final class MacReceiverDecoder: ObservableObject {
         guard let desc = h264FormatDesc, let session = decompressionSession else { return }
         let avcc = Self.annexBToAVCC(annexBData)
         guard !avcc.isEmpty else { return }
-        DispatchQueue.main.async { [weak self] in
-            self?.feedH264(data: avcc, formatDesc: desc, session: session)
-        }
+        feedH264(data: avcc, formatDesc: desc, session: session)
     }
 
     static func annexBToAVCC(_ data: Data) -> Data {
@@ -224,6 +323,8 @@ final class MacReceiverDecoder: ObservableObject {
 
         h264Pts = CMTimeAdd(h264Pts, CMTime(value: 1, timescale: 60))
 
+        let decodeStart = ProcessInfo.processInfo.systemUptime
+        perf.record("submitted", bytes: data.count)
         VTDecompressionSessionDecodeFrame(session, sampleBuffer: sampleBuffer,
             flags: [._EnableAsynchronousDecompression], infoFlagsOut: nil
         ) { [weak self] status, _, imageBuffer, _, _ in
@@ -233,43 +334,51 @@ final class MacReceiverDecoder: ObservableObject {
                 }
                 return
             }
+            self.perf.interval("decodeCallbackInterval")
+            self.perf.record("decoded", milliseconds: (ProcessInfo.processInfo.systemUptime - decodeStart) * 1000)
             let ciImage = CIImage(cvPixelBuffer: imageBuffer)
-            guard let cgImage = self.ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
-            let img = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
+            self.publishFrame(ciImage)
+            self.frameLock.lock()
             self.enqueueCount += 1
-            DispatchQueue.main.async {
-                self.onImageUpdate?(img)
-                if self.enqueueCount == 1 || self.enqueueCount % 60 == 0 {
-                    self.diagText = "H264 帧:\(self.enqueueCount) \(cgImage.width)x\(cgImage.height)"
+            let count = self.enqueueCount
+            self.frameLock.unlock()
+            #if DEBUG
+            if self.onImageUpdate != nil,
+               let cgImage = self.ciContext.createCGImage(ciImage, from: ciImage.extent) {
+                let image = NSImage(cgImage: cgImage, size: ciImage.extent.size)
+                DispatchQueue.main.async { self.onImageUpdate?(image) }
+            }
+            #endif
+            if count == 1 || count % 60 == 0 {
+                DispatchQueue.main.async {
+                    self.diagText = "H264 帧:\(count) \(Int(ciImage.extent.width))x\(Int(ciImage.extent.height))"
                 }
             }
         }
     }
 
-    private func deserializeFormatDescription(_ data: Data) -> CMVideoFormatDescription? {
-        var desc: CMFormatDescription?
-        let status = data.withUnsafeBytes { (ptr: UnsafeRawBufferPointer) -> OSStatus in
-            CMVideoFormatDescriptionCreateFromBigEndianImageDescriptionData(
-                allocator: nil,
-                bigEndianImageDescriptionData: ptr.baseAddress!.assumingMemoryBound(to: UInt8.self),
-                size: data.count,
-                stringEncoding: 0,
-                flavor: .isoFamily,
-                formatDescriptionOut: &desc)
-        }
-        guard status == noErr, let desc else { return nil }
-        return desc
-    }
 
     func reset() {
-        if let s = decompressionSession { VTDecompressionSessionInvalidate(s); decompressionSession = nil }
-        isH264 = false
+        decodeQueue.async { [weak self] in self?.resetDecoder() }
+    }
+
+    private func resetDecoder() {
+        if let s = decompressionSession {
+            VTDecompressionSessionWaitForAsynchronousFrames(s)
+            VTDecompressionSessionInvalidate(s)
+            decompressionSession = nil
+        }
         h264FormatDesc = nil
-        frameCount = 0
+        h264ConfigData = nil
+        publishFrame(nil)
+        frameLock.lock()
         enqueueCount = 0
+        frameLock.unlock()
         h264Pts = CMTime(value: 0, timescale: 600)
         DispatchQueue.main.async { [weak self] in
+            #if DEBUG
             self?.onImageUpdate?(nil)
+            #endif
             self?.diagText = "等待画面"
         }
     }
@@ -282,26 +391,58 @@ final class MacReceiverClient: ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var frameCount: Int = 0
+    private var receivedFrames = 0
     let decoder = MacReceiverDecoder()
 
+    private var internetTunnel: InternetTunnel?
+    private var internetDirect = false
     private var connection: NWConnection?
     private var rxBuffer = Data()
     private var expectedPayloadLength: Int?
     private var expectedType: UInt8?
-    private let netQueue = DispatchQueue(label: "mac.receiver.net")
+    private let netQueue = DispatchQueue.main
+    private var connectionTimeout: DispatchWorkItem?
+    private var lastDataAt = Date()
     private var isDisconnecting = false
     private var lastHost: String?
     private var lastPort: UInt16?
     private var lastMatchCode: String?
+    private var authenticationCode: String?
     var discoveryLookup: ((String) -> (String, UInt16)?)?
 
     private static let maxMessageLength = 8 * 1024 * 1024
 
-    func connect(host: String, port: UInt16) {
+    func connectInternetCode(_ code: String) {
+        disconnect()
+        guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
+        isDisconnecting = false
+        setStatus(.connecting)
+        let tunnel = InternetTunnel(code: code)
+        internetTunnel = tunnel
+        tunnel.onReady = { [weak self, weak tunnel] port in
+            guard let self, let tunnel, self.internetTunnel === tunnel else { return }
+            self.lastHost = "127.0.0.1"; self.lastPort = port
+            self.authenticationCode = code
+            self.startConnection()
+        }
+        tunnel.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        tunnel.start()
+    }
+
+    func connectInternetIP(host: String, port: UInt16, code: String) {
+        disconnect()
+        internetDirect = true
+        isDisconnecting = false
+        lastHost = host; lastPort = port; authenticationCode = code
+        startConnection()
+    }
+
+    func connect(host: String, port: UInt16, code: String) {
         disconnect()
         isDisconnecting = false
         lastHost = host
         lastPort = port
+        authenticationCode = code
         startConnection()
     }
 
@@ -309,6 +450,7 @@ final class MacReceiverClient: ObservableObject {
         disconnect()
         isDisconnecting = false
         lastMatchCode = code
+        authenticationCode = code
         guard let lookup = discoveryLookup, let found = lookup(code) else {
             setStatus(.failed("未找到匹配码对应的投屏流"))
             return
@@ -320,34 +462,52 @@ final class MacReceiverClient: ObservableObject {
 
     private func startConnection() {
         guard connection == nil, let host = lastHost, let port = lastPort else { return }
+        guard !host.isEmpty, port > 0, MatchingCode.isValid(authenticationCode) else {
+            setStatus(.failed("请填写有效地址、端口和 6–36 位数字匹配码"))
+            return
+        }
+        lastDataAt = Date()
         setStatus(.connecting)
         decoder.reset()
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: .tcp)
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: internetDirect ? InternetSettings.tlsParameters(code: authenticationCode!) : .tcp)
         self.connection = connection
-        connection.stateUpdateHandler = { [weak self] state in
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
             DispatchQueue.main.async {
-                guard let self, self.connection === connection else { return }
+                guard let self, let connection, self.connection === connection else { return }
                 switch state {
                 case .ready:
-                    self.setStatus(.connected)
+                    DiagLog.log("Receive", "TCP ready \(host):\(port)")
+                    self.sendAuthentication()
                     self.sendScreenSize()
                     self.netQueue.async { [weak self] in self?.readLoop(on: connection) }
-                case .failed:
+                case .failed(let error):
                     self.handleDisconnect(connection)
+                    self.setStatus(.failed(error.localizedDescription))
                 case .cancelled:
                     self.handleDisconnect(connection)
+                case .waiting(let error):
+                    DiagLog.log("Receive", "TCP waiting \(error.localizedDescription)")
                 default:
                     break
                 }
             }
         }
         connection.start(queue: netQueue)
+        let timeout = DispatchWorkItem { [weak self, weak connection] in
+            guard let self, let connection, self.connection === connection else { return }
+            self.handleDisconnect(connection)
+            self.setStatus(.failed("连接或认证超时，请检查地址、端口和匹配码"))
+        }
+        connectionTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
     }
 
     private func handleDisconnect(_ disconnectedConnection: NWConnection) {
         guard !isDisconnecting, connection === disconnectedConnection else { return }
+        connectionTimeout?.cancel()
+        disconnectedConnection.cancel()
         connection = nil
-        netQueue.async {
+        do {
             self.rxBuffer.removeAll(keepingCapacity: false)
             self.expectedPayloadLength = nil
             self.expectedType = nil
@@ -356,6 +516,7 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func autoSearch(mode: String, host: String, port: UInt16, code: String) {
+        guard mode == "ip" || mode == "code" else { return } // WAN attempts are explicit, never background server polling.
         guard !isDisconnecting, connection == nil else { return }
         switch status {
         case .connected, .connecting:
@@ -364,14 +525,16 @@ final class MacReceiverClient: ObservableObject {
             break
         }
         if mode == "code" {
-            guard code.count == 4, let lookup = discoveryLookup else { return }
+            guard MatchingCode.isValid(code), let lookup = discoveryLookup else { return }
             guard let found = lookup(code) else { return }
             lastMatchCode = code
+            authenticationCode = code
             lastHost = found.0
             lastPort = found.1
             startConnection()
         } else {
-            guard !host.isEmpty else { return }
+            guard !host.isEmpty, MatchingCode.isValid(code) else { return }
+            authenticationCode = code
             lastHost = host
             lastPort = port
             startConnection()
@@ -379,27 +542,37 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func disconnect() {
+        internetTunnel?.stop(); internetTunnel = nil
+        internetDirect = false
+        connectionTimeout?.cancel()
         isDisconnecting = true
         lastHost = nil
         lastPort = nil
         lastMatchCode = nil
+        authenticationCode = nil
         let conn = connection
         connection = nil
         conn?.cancel()
-        netQueue.sync {
+        do {
             rxBuffer.removeAll(keepingCapacity: false)
             expectedPayloadLength = nil
             expectedType = nil
         }
         frameCount = 0
+        receivedFrames = 0
         setStatus(.idle)
         decoder.reset()
     }
 
     private func setStatus(_ s: Status) {
-        DispatchQueue.main.async { [weak self] in
-            self?.status = s
-        }
+        DiagLog.log("Receive", "status \(s)")
+        status = s
+    }
+
+    func checkStaleConnection() {
+        guard case .connected = status, let conn = connection,
+              Date().timeIntervalSince(lastDataAt) > 15 else { return }
+        handleDisconnect(conn)
     }
 
     func setStatus(_ message: String) {
@@ -423,10 +596,24 @@ final class MacReceiverClient: ObservableObject {
         conn.send(content: head + msg, completion: .idempotent)
     }
 
+    private func sendAuthentication() {
+        guard let conn = connection,
+              let code = authenticationCode,
+              MatchingCode.isValid(code) else { return }
+        let payload = Data(code.utf8)
+        var msg = Data()
+        var length = UInt32(payload.count).bigEndian
+        withUnsafeBytes(of: &length) { msg.append(contentsOf: $0) }
+        msg.append(UInt8(5))
+        msg.append(payload)
+        conn.send(content: msg, completion: .idempotent)
+    }
+
     private func readLoop(on connection: NWConnection) {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self, weak connection] data, _, isComplete, error in
             guard let self, let connection, self.connection === connection else { return }
             if let data, !data.isEmpty {
+                self.lastDataAt = Date()
                 self.rxBuffer.append(data)
                 self.parseMessages()
             }
@@ -500,27 +687,30 @@ final class MacReceiverClient: ObservableObject {
         case 0:
             guard payload.count >= 5 else { break }
             let codec = payload[0]
+            DiagLog.log("Receive", "config codec=\(codec) bytes=\(payload.count)")
             if codec == 3 {
+                connectionTimeout?.cancel()
+                setStatus(.connected)
                 decoder.setH264Serialized(payload.dropFirst(1))
             }
         case 1:
             decoder.decodeFrame(payload)
+            receivedFrames += 1
+            if receivedFrames == 1 || receivedFrames % 30 == 0 { frameCount = receivedFrames }
+        case 11:
+            if payload.count <= 2048, let line = String(data: payload, encoding: .utf8) {
+                PerformanceDisk.shared.write("remote \(line)", forward: false)
+            }
+        case 7:
+            let message = String(data: payload, encoding: .utf8) ?? "匹配码错误"
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
-                self.frameCount += 1
+                if let conn = self.connection { self.handleDisconnect(conn) }
+                self.isDisconnecting = true
+                self.setStatus(.failed(message))
             }
         default:
             break
-        }
-    }
-}
-
-extension Data {
-    func copySlice(_ offset: Int, _ length: Int) -> Data {
-        guard offset >= 0, length > 0, offset + length <= count else { return Data() }
-        return withUnsafeBytes { ptr in
-            guard let base = ptr.baseAddress else { return Data() }
-            return Data(bytes: base.advanced(by: offset), count: length)
         }
     }
 }

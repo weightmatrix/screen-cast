@@ -24,3 +24,17 @@ xcuserdata/
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# Python signaling diagnostics
+__pycache__/
+*.pyc
+
+# Local diagnostics and deployment credentials (never publish)
+/Diagnostics/
+/诊断.md
+/diag-output/
+*.log
+.deploy/
+.env
+.env.*
+!.env.example
