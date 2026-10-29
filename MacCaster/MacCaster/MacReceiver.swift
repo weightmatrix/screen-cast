@@ -734,6 +734,49 @@ final class MacReceiverClient: ObservableObject {
 
 #if DEBUG
 @MainActor enum NativeRoutesVerification {
+    /// Moving full-frame content catches starvation that a constant red test cannot.
+    static func motion() async {
+        let code = MatchingCode.generate()
+        let server = CastingServer(port: 19319, accessCode: code)
+        server.configureNative(bitrate: 100_000_000, fps: 60)
+        var registered = false
+        server.onInternetStatus = { if $0.contains("匹配就绪") { registered = true } }
+        server.start(); server.setInternetEnabled(true)
+        defer { server.stop() }
+        for _ in 0..<100 { if registered { break }; try? await Task.sleep(nanoseconds: 100_000_000) }
+        let client = MacReceiverClient(); client.connectInternetCode(code)
+        defer { client.disconnect() }
+        var ready = false
+        for _ in 0..<350 {
+            if case .connected = client.status { ready = true; break }
+            if case .failed = client.status { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard ready else { NSLog("NativeMotion FAIL negotiation status=%@", String(describing: client.status)); return }
+        let rect = CGRect(x: 0, y: 0, width: 1920, height: 1440)
+        let context = CIContext(options: [.cacheIntermediates: false])
+        var pool: CVPixelBufferPool?
+        let attributes: [CFString: Any] = [kCVPixelBufferWidthKey: 1920, kCVPixelBufferHeightKey: 1440,
+            kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+            kCVPixelBufferIOSurfacePropertiesKey: [:], kCVPixelBufferMetalCompatibilityKey: true]
+        guard CVPixelBufferPoolCreate(nil, nil, attributes as CFDictionary, &pool) == kCVReturnSuccess, let pool else { return }
+        let start = ProcessInfo.processInfo.systemUptime
+        for index in 0..<1200 {
+            var pixel: CVPixelBuffer?
+            guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &pixel) == kCVReturnSuccess, let pixel else { break }
+            let image = CIFilter(name: "CICheckerboardGenerator", parameters: ["inputCenter": CIVector(x: CGFloat(index * 13), y: CGFloat(index * 7)),
+                "inputWidth": 23, "inputSharpness": 1])!.outputImage!.cropped(to: rect)
+            context.render(image, to: pixel)
+            server.nativeSource.append(pixel)
+            let wait = start + Double(index + 1) / 60 - ProcessInfo.processInfo.systemUptime
+            if wait > 0 { try? await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000)) } else { await Task.yield() }
+            if case .failed = client.status { break }
+        }
+        let size = client.decoder.frameForDisplay(after: nil)?.image?.extent.size
+        NSLog("NativeMotion %@ frames=%ld size=%@ status=%@", client.frameCount >= 900 && size == rect.size ? "PASS" : "FAIL",
+              client.frameCount, String(describing: size), String(describing: client.status))
+    }
+
     static func receive() async {
         let client = MacReceiverClient()
         let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: 800, height: 600), styleMask: [.titled, .resizable], backing: .buffered, defer: false)

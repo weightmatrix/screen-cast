@@ -35,6 +35,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     private var pending = 0
     private var width = 0, height = 0
     private var rate: UInt32 = 8_000, fps: UInt32 = 60
+    private var appliedRate: UInt32 = 0, appliedFPS: UInt32 = 0
     private var pool: CVPixelBufferPool?
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let perf = StreamPerformance("native.encoder")
@@ -81,8 +82,8 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
                 _ = release(); return -1
             }
         }
-        _ = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 240 as CFNumber)
-        _ = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 4 as CFNumber)
+        _ = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 7200 as CFNumber)
+        _ = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 240 as CFNumber)
         let result = setBitrate(rate, framerate: fps)
         guard result == 0, VTCompressionSessionPrepareToEncodeFrames(session) == noErr else { _ = release(); return -1 }
         pool = VTCompressionSessionGetPixelBufferPool(session)
@@ -101,15 +102,17 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
             VTCompressionSessionInvalidate(session)
         }
-        session = nil; pool = nil
+        session = nil; pool = nil; appliedRate = 0; appliedFPS = 0
         return 0
     }
     func setBitrate(_ bitrateKbit: UInt32, framerate: UInt32) -> Int32 {
         rate = max(1, bitrateKbit); fps = max(1, framerate)
         guard let session else { return 0 }
+        guard appliedRate != rate || appliedFPS != fps else { return 0 }
         let status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: (Int(rate) * 1000) as CFNumber)
         let frameStatus = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: Int(fps) as CFNumber)
-        return status == noErr && frameStatus == noErr ? 0 : -1
+        if status == noErr && frameStatus == noErr { appliedRate = rate; appliedFPS = fps; return 0 }
+        return -1
     }
     func encode(_ frame: RTCVideoFrame, codecSpecificInfo: (any RTCCodecSpecificInfo)?, frameTypes: [NSNumber]) -> Int {
         guard let session, let native = frame.buffer as? RTCCVPixelBuffer else { return -1 }
@@ -147,7 +150,11 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     private func output(_ ticket: Ticket, status: OSStatus, flags: VTEncodeInfoFlags, sample: CMSampleBuffer?) {
         lock.lock(); pending -= 1; let callback = callback; lock.unlock()
         perf.record("encode", milliseconds: (ProcessInfo.processInfo.systemUptime - ticket.started) * 1000)
-        guard status == noErr, !flags.contains(.frameDropped), let sample, let format = CMSampleBufferGetFormatDescription(sample),
+        guard status == noErr else { perf.record("error\(status)"); return }
+        guard !flags.contains(.frameDropped) else { perf.record("dropVT"); return }
+        guard let sample else { perf.record("noSample"); return }
+        perf.record("output")
+        guard let format = CMSampleBufferGetFormatDescription(sample),
               let block = CMSampleBufferGetDataBuffer(sample), let callback else { return }
         let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: false) as? [[CFString: Any]]
         let key = attachments?.first?[kCMSampleAttachmentKey_NotSync] as? Bool != true
@@ -291,9 +298,6 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     }
     private let id = String(UUID().uuidString.prefix(8))
     private let sending: Bool
-    private let internet: Bool
-    private var internetRate = NativeInternetRate()
-    private var previousOutbound: (bytes: Double, packets: Double, delay: Double, time: Double)?
     private var firstFrameWork: DispatchWorkItem?
     var onConnected: (() -> Void)?
     var onSendingFPS: ((Double) -> Void)?
@@ -314,7 +318,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var bitrate: Int
     private var fps: Int
     init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60) {
-        self.bitrate = bitrate; self.fps = fps; self.internet = internet; sending = source != nil
+        self.bitrate = bitrate; self.fps = fps; sending = source != nil
         super.init()
         let config = RTCConfiguration()
         config.sdpSemantics = .unifiedPlan
@@ -333,7 +337,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             let transceiver = peer?.addTransceiver(with: track, init: options)
             sender = transceiver?.sender
             applyQuality()
-            _ = peer?.setBweMinBitrateBps(nil, currentBitrateBps: NSNumber(value: min(bitrate, 8_000_000)), maxBitrateBps: NSNumber(value: internet ? internetRate.limit : bitrate))
+            _ = peer?.setBweMinBitrateBps(nil, currentBitrateBps: NSNumber(value: min(bitrate, 8_000_000)), maxBitrateBps: NSNumber(value: bitrate))
         } else {
             let options = RTCRtpTransceiverInit(); options.direction = .recvOnly
             _ = peer?.addTransceiver(of: .video, init: options)
@@ -348,16 +352,14 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     func quality(bitrate: Int, fps: Int) { self.bitrate = bitrate; self.fps = fps; applyQuality() }
     private func applyQuality() {
         guard let peer, let sender else { return }
-        internetRate.clamp(to: bitrate)
-        let effective = internet ? internetRate.limit : bitrate
         let params = sender.parameters
         params.degradationPreference = NSNumber(value: RTCDegradationPreference.maintainResolution.rawValue)
         for encoding in params.encodings {
-            encoding.maxBitrateBps = NSNumber(value: effective)
+            encoding.maxBitrateBps = NSNumber(value: bitrate)
             encoding.maxFramerate = NSNumber(value: fps)
         }
         sender.parameters = params
-        _ = peer.setBweMinBitrateBps(nil, currentBitrateBps: nil, maxBitrateBps: NSNumber(value: effective))
+        _ = peer.setBweMinBitrateBps(nil, currentBitrateBps: nil, maxBitrateBps: NSNumber(value: bitrate))
     }
     func offer() { armTimeout(); description(offer: true) }
     private func description(offer: Bool) {
@@ -435,25 +437,6 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 }
             }
             for stat in report.statistics.values where stat.type == "outbound-rtp" {
-                let bytes = (stat.values["bytesSent"] as? NSNumber)?.doubleValue
-                let packets = (stat.values["packetsSent"] as? NSNumber)?.doubleValue
-                let delay = (stat.values["totalPacketSendDelay"] as? NSNumber)?.doubleValue
-                let target = (stat.values["targetBitrate"] as? NSNumber)?.doubleValue ?? 0
-                if let bytes, let packets, let delay {
-                    DispatchQueue.main.async { [weak self] in
-                        guard let self, !self.closed, self.internet else { return }
-                        let now = ProcessInfo.processInfo.systemUptime
-                        defer { self.previousOutbound = (bytes, packets, delay, now) }
-                        guard let previous = self.previousOutbound, now > previous.time,
-                              bytes >= previous.bytes, packets > previous.packets, delay >= previous.delay else { return }
-                        let output = (bytes - previous.bytes) * 8 / (now - previous.time)
-                        let wait = (delay - previous.delay) / (packets - previous.packets)
-                        let old = self.internetRate.limit
-                        let next = self.internetRate.sample(upper: self.bitrate, outputBps: output, targetBps: target, sendWait: wait)
-                        PerformanceDisk.shared.write("native.rate id=\(self.id) limit=\(next) output=\(Int(output)) waitMS=\(Int(wait * 1000))")
-                        if old != next { self.applyQuality() }
-                    }
-                }
                 if let fps = stat.values["framesPerSecond"] as? NSNumber {
                     DispatchQueue.main.async { [weak self] in guard let self, !self.closed else { return }; self.onSendingFPS?(fps.doubleValue) }
                 }

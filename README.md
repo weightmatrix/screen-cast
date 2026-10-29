@@ -25,7 +25,7 @@ Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，通过统一�
 - 两个原生 target 共用 `Shared/AppIdentity.xcconfig` 中的 Bundle ID 和版本号，开发团队不变。统一使用原 iOS 标识，iPhone/iPad 安装身份不变；Mac 标识由 `com.witten.touping.maccaster` 改为统一标识，系统可能要求重新授权屏幕录制，旧 Mac 的偏好设置和日志不会自动迁移。
 - 目录：`Shared/` 为两端共用的原生视频引擎、格式与诊断工具；`MacCaster/MacCaster/` 为 macOS 代码；`iPadReceiver/iPadReceiver/` 为 iOS 代码。
 - 命令行构建：`xcodebuild -project Touping.xcodeproj -scheme Touping-macOS -destination 'platform=macOS' build`；iOS 使用 `-scheme Touping-iOS -destination 'generic/platform=iOS'`。
-- 当前源码为 1.3（build 22），建议两端均安装当前版本。连接建立后必须通过匹配码校验，旧接收端无法连接新版发送端。
+- 当前源码为 1.3（build 23），建议两端均安装当前版本。连接建立后必须通过匹配码校验，旧接收端无法连接新版发送端。
 - 当前仅传视频，不含音频。被关闭的窗口无法继续采集；请重新选择有效窗口或显示器。
 
 ## 故障定位
@@ -100,11 +100,11 @@ Mac 工作台与接收设置统一使用深色背景、蓝色强调和较大的�
 
 四种入口现已统一为 WebRTC 原生 H.264 RTP/SRTP 视频轨道。局域网不访问配对服务器；广域网匹配码通过自有HTTPS/WebSocket交换SDP/ICE，连接成功关闭信令。TCP/TLS不承载视频，不再使用SCTP视频字节桥。每个接收端独立编码/拥塞控制，共用原始采集源；有界DataChannel仅回传诊断。不提供TURN、视频中继或SFU，无法穿透时明确失败。
 
-1.3（22）：Apple VideoToolbox低延迟码控、Level5.2协商、最多2帧在途；Mac普通采集NV12、标注时BGRA；iPad新帧触发Metal绘制。两种WAN模式8Mbps起步，按发送队列快速降速、健康窗口逐步升速，始终受用户上限约束；LAN不加此自适应上限。两端必须更新。
+1.3（22–23）：Apple VideoToolbox低延迟码控、Level5.2协商、最多2帧在途；Mac普通采集NV12、标注时BGRA；iPad新帧触发Metal绘制。23版撤销二次WAN限速（22版热点实测出现低速锁定）；统一由WebRTC原生拥塞控制适应网络，用户值仅作为上限，启动BWE不超过8Mbps。新视频协议两端需19版及以上，推荐更新当前版。
 
 公网配对服务部署和流量限制见[Server/README.md](Server/README.md)。自有STUN外网端口暂不可达，另配置免费公开STUN作地址探测备用；它不转发视频。依赖固定为stasel/WebRTC 156.0.0（原生macOS和iOS切片，仍不使用Catalyst），校验和由SwiftPM验证。
 
-Debug验证：Mac `--verify-native-capture`验证真实屏幕4K采集与显示，`--verify-native-routes`验证四种入口，附加`--verify-native-4k`执行4K局域媒体检查；iPad `--verify-native-routes`执行真机编码与四入口检查。同机回环不等同跨NAT实测。`Tests/NativeInternetRateCheck.swift`验证静止、增长、排队退避和边界。
+Debug验证：Mac `--verify-native-capture`验证真实屏幕4K采集与显示，`--verify-native-routes`验证四种入口，附加`--verify-native-4k`执行4K局域媒体检查；iPad `--verify-native-routes`执行真机编码与四入口检查。同机回环不等同跨NAT实测。`--verify-native-motion`通过原生WAN匹配入口发送20秒1920×1440移动棋盘，检查动态内容帧率；常量画面通过不能替代运动负载验证。
 
 以下16–18版记录为历史行为，已由原生视频替代：
 
