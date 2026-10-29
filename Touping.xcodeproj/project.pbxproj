@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		BF0000000000000000000002 = {isa = PBXBuildFile; fileRef = BF0000000000000000000001; };
         EE0000000000000000000005 = {isa = PBXBuildFile; fileRef = AB0000000000000000000104; };
 		EE0000000000000000000002 = {isa = PBXBuildFile; fileRef = EE0000000000000000000001; };
 		EE0000000000000000000003 = {isa = PBXBuildFile; fileRef = EE0000000000000000000001; };
@@ -75,6 +76,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		BF0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBenchmark.swift; sourceTree = "<group>"; };
 		EE0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeVideo.swift; sourceTree = "<group>"; };
 		0B0000000000000000000004 /* iPadReceiver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iPadReceiver.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B0000000000000000000101 /* iPadReceiverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadReceiverApp.swift; sourceTree = "<group>"; };
@@ -213,6 +215,7 @@
 				ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */,
 				ABA9BD76D56B45467890E5D2 /* MacReceiverView.swift */,
 				ABEA4E0EF75094468CB5C355 /* MacReceiver.swift */,
+				BF0000000000000000000001,
 				AB0000000000000000000104 /* CastingServer.swift */,
 				AB0000000000000000000105 /* Info.plist */,
 				AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */,
@@ -415,6 +418,7 @@
 				AB35C6000C68B240AC8A5D4B /* DiscoveryBroadcaster.swift in Sources */,
 				ABE23ED2905134432BB15EC3 /* MacReceiverView.swift in Sources */,
 				AB91522DAD32A041D0AA2D6E /* MacReceiver.swift in Sources */,
+				BF0000000000000000000002,
 				AB0000000000000000000204 /* CastingServer.swift in Sources */,
 				0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */,
                 EE0000000000000000000004,

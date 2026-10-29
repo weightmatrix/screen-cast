@@ -36,6 +36,10 @@ Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，通过统一�
 - Mac 日志：~/Library/Application Support/com.witten.touping.ipadreceiver.f4l9p953mq/diagnostic.log。
 - iPad：连接设置内的“诊断·连接”，以及 App Documents/ConnectionDiag.md。
 
+## 受控性能对照
+
+固定基线及66秒自动网络场景见 [Tests/Benchmarks/README.md](Tests/Benchmarks/README.md)。测试有效与性能通过分开判断，原始材料仅留本机。18、24版有精确源码，21版仅有历史日志，不能伪称同条件对照。
+
 ## 运行回归检查
 
 Debug 版 Mac App 使用 `--verify-native-capture` 检查真实屏幕采集及 GPU 显示，`--verify-native-routes` 检查四入口的媒体与旋转；结果写入本机诊断。单独的认证测试见 Tests/CastingServerLatencyCheck.swift。

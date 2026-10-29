@@ -1,0 +1,290 @@
+{
+  "analysis_script_sha256": "ac8b69c2af39cbef3e35b28f7bf78e3d3338d02c9218da711025a797d22606c2",
+  "bandwidth_drop_exercised": true,
+  "baseline_commit": "af42b34d38057736b4f7764875b04eb69b4b7aef",
+  "comparison_valid": true,
+  "functional_pass": true,
+  "impairment_path_verified": true,
+  "note": "Single controlled run of build24 behavior with DEBUG-only observation. Performance failed. Not a cross-NAT or historical 18/21 comparison.",
+  "performance_pass": false,
+  "phases": [
+    {
+      "capture_to_decode_p95_ms": 748.836,
+      "decode_mean_ms": null,
+      "decoded_frames": 55,
+      "encode_mean_ms": null,
+      "fps": 9.165,
+      "freeze_seconds": null,
+      "freezes": null,
+      "gap_p95_ms": 357.487,
+      "generator_fps": 59.989,
+      "jitter_buffer_mean_ms": null,
+      "latency_samples": 5,
+      "max_gap_ms": 414.108,
+      "name": "warmup",
+      "packets_lost": null,
+      "performance_pass": null,
+      "seconds": 6.001,
+      "send_queue_mean_ms": null,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 17,
+          "max_ms": 1.67,
+          "mean_ms": 0.292
+        },
+        "mac.display.rendered": {
+          "count": 18,
+          "max_ms": 3.15,
+          "mean_ms": 1.737
+        },
+        "native.capture.queueWait": {
+          "count": 319,
+          "max_ms": 0.16,
+          "mean_ms": 0.028
+        },
+        "native.encoder.encode": {
+          "count": 122,
+          "max_ms": 93.93,
+          "mean_ms": 1.961
+        }
+      }
+    },
+    {
+      "capture_to_decode_p95_ms": 79.653,
+      "decode_mean_ms": 2.164,
+      "decoded_frames": 506,
+      "encode_mean_ms": 6.533,
+      "fps": 42.162,
+      "freeze_seconds": 0,
+      "freezes": 0,
+      "gap_p95_ms": 46.903,
+      "generator_fps": 59.993,
+      "jitter_buffer_mean_ms": 12.902,
+      "latency_samples": 51,
+      "max_gap_ms": 77.606,
+      "name": "steady",
+      "packets_lost": 0,
+      "performance_pass": false,
+      "seconds": 12.001,
+      "send_queue_mean_ms": 1.998,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 436,
+          "max_ms": 9.2,
+          "mean_ms": 0.683
+        },
+        "mac.display.rendered": {
+          "count": 436,
+          "max_ms": 5.27,
+          "mean_ms": 1.526
+        },
+        "native.capture.queueWait": {
+          "count": 722,
+          "max_ms": 0.18,
+          "mean_ms": 0.03
+        },
+        "native.encoder.encode": {
+          "count": 473,
+          "max_ms": 7.34,
+          "mean_ms": 5.985
+        }
+      }
+    },
+    {
+      "capture_to_decode_p95_ms": 856.594,
+      "decode_mean_ms": 2.851,
+      "decoded_frames": 125,
+      "encode_mean_ms": 6.787,
+      "fps": 10.416,
+      "freeze_seconds": 5.687,
+      "freezes": 8,
+      "gap_p95_ms": 259.318,
+      "generator_fps": 59.998,
+      "jitter_buffer_mean_ms": 135.476,
+      "latency_samples": 12,
+      "max_gap_ms": 1858.275,
+      "name": "bandwidth_drop",
+      "packets_lost": 162,
+      "performance_pass": false,
+      "seconds": 12.0,
+      "send_queue_mean_ms": 382.12,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 227,
+          "max_ms": 7.29,
+          "mean_ms": 0.692
+        },
+        "mac.display.rendered": {
+          "count": 227,
+          "max_ms": 5.72,
+          "mean_ms": 1.583
+        },
+        "native.capture.queueWait": {
+          "count": 722,
+          "max_ms": 0.37,
+          "mean_ms": 0.038
+        },
+        "native.encoder.encode": {
+          "count": 525,
+          "max_ms": 12.61,
+          "mean_ms": 3.194
+        }
+      }
+    },
+    {
+      "capture_to_decode_p95_ms": 1959.688,
+      "decode_mean_ms": 6.544,
+      "decoded_frames": 8,
+      "encode_mean_ms": 7.875,
+      "fps": 0.5,
+      "freeze_seconds": 12.268,
+      "freezes": 5,
+      "gap_p95_ms": 2792.89,
+      "generator_fps": 59.996,
+      "jitter_buffer_mean_ms": 1248.295,
+      "latency_samples": 1,
+      "max_gap_ms": 2792.89,
+      "name": "recovery",
+      "packets_lost": 0,
+      "performance_pass": false,
+      "seconds": 16.001,
+      "send_queue_mean_ms": 398.829,
+      "sustained_45fps_recovery_seconds": null,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 8,
+          "max_ms": 5.06,
+          "mean_ms": 1.328
+        },
+        "mac.display.rendered": {
+          "count": 8,
+          "max_ms": 4.44,
+          "mean_ms": 2.279
+        },
+        "native.capture.queueWait": {
+          "count": 961,
+          "max_ms": 0.18,
+          "mean_ms": 0.04
+        },
+        "native.encoder.encode": {
+          "count": 206,
+          "max_ms": 8.53,
+          "mean_ms": 0.725
+        }
+      }
+    },
+    {
+      "capture_to_decode_p95_ms": null,
+      "decode_mean_ms": 3.904,
+      "decoded_frames": 10,
+      "encode_mean_ms": 7.375,
+      "fps": 1.249,
+      "freeze_seconds": 0,
+      "freezes": 0,
+      "gap_p95_ms": 1943.587,
+      "generator_fps": 19.991,
+      "jitter_buffer_mean_ms": 317.188,
+      "latency_samples": 0,
+      "max_gap_ms": 1943.587,
+      "name": "idle",
+      "packets_lost": 0,
+      "performance_pass": null,
+      "seconds": 8.004,
+      "send_queue_mean_ms": 206.987,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 7,
+          "max_ms": 1.48,
+          "mean_ms": 0.394
+        },
+        "mac.display.rendered": {
+          "count": 7,
+          "max_ms": 7.36,
+          "mean_ms": 3.933
+        },
+        "native.capture.queueWait": {
+          "count": 187,
+          "max_ms": 0.25,
+          "mean_ms": 0.057
+        },
+        "native.encoder.encode": {
+          "count": 93,
+          "max_ms": 7.75,
+          "mean_ms": 0.966
+        }
+      }
+    },
+    {
+      "capture_to_decode_p95_ms": 112.996,
+      "decode_mean_ms": 2.579,
+      "decoded_frames": 190,
+      "encode_mean_ms": 6.832,
+      "fps": 15.832,
+      "freeze_seconds": 0,
+      "freezes": 0,
+      "gap_p95_ms": 123.466,
+      "generator_fps": 59.994,
+      "jitter_buffer_mean_ms": 26.15,
+      "latency_samples": 19,
+      "max_gap_ms": 421.999,
+      "name": "resume_motion",
+      "packets_lost": 0,
+      "performance_pass": false,
+      "seconds": 12.001,
+      "send_queue_mean_ms": 8.778,
+      "sustained_45fps_recovery_seconds": null,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 166,
+          "max_ms": 6.81,
+          "mean_ms": 0.859
+        },
+        "mac.display.rendered": {
+          "count": 166,
+          "max_ms": 5.52,
+          "mean_ms": 1.721
+        },
+        "native.capture.queueWait": {
+          "count": 705,
+          "max_ms": 0.3,
+          "mean_ms": 0.033
+        },
+        "native.encoder.encode": {
+          "count": 199,
+          "max_ms": 7.32,
+          "mean_ms": 6.161
+        }
+      }
+    }
+  ],
+  "provenance": {
+    "chip": "Apple M4",
+    "code_files": {
+      "MacCaster": "bf8fe10079116ead15388a3307036ebc7f766af4599299c2967fac2357648422",
+      "MacCaster.debug.dylib": "afc5bd6958a9ec8ab4ac0d4774be0cab0e6eabb2fa4665185c8e5df78d1a2ce6",
+      "__preview.dylib": "2d25393202b1e3aee233dba937a04c5c8eed3617de2e7c86d36b86aabf39e533"
+    },
+    "commit": "af42b34d38057736b4f7764875b04eb69b4b7aef",
+    "cpu_count": 10,
+    "hardware": "Mac16,12",
+    "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+    "seed": 20261029,
+    "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+    "source_tree_sha256": "3e60817cacb8cd4a81a0982cebe6f1fbef80735c1fbf6ff3a0cc7380f70187e0",
+    "toolchain": "Xcode 27.1\nBuild version 27A9275",
+    "tracked_patch_sha256": "5ce75e77c9f5715a1d7802bf28449609fa60f51d81b25af1a40a5cd436e1c40f"
+  },
+  "schema": 1,
+  "setup": {
+    "bitrate_ceiling": 100000000,
+    "control_interval_seconds": 2,
+    "fps_ceiling": 60,
+    "height": 1440,
+    "idle_source_fps": 20,
+    "network": "local UDP impairment",
+    "observation_interval_seconds": 1,
+    "os": "版本27.2（版号26B123）",
+    "video": "native H264 SRTP",
+    "width": 1920
+  }
+}

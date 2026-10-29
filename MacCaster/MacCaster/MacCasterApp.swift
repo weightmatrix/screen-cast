@@ -4,6 +4,16 @@ import SwiftUI
 struct MacCasterApp: App {
     @StateObject private var streamer = ScreenStreamer()
 
+    init() {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        if arguments.contains("--verify-native-scenario"), let index = arguments.firstIndex(of: "--scenario-control"), index + 1 < arguments.count {
+            let url = URL(fileURLWithPath: arguments[index + 1])
+            Task { @MainActor in await NativeBenchmark.run(controlURL: url) }
+        }
+        #endif
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

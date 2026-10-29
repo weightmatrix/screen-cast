@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "settings": {"width": 1920, "height": 1440, "fps_ceiling": 60, "bitrate_ceiling": 100000000, "seed": 20261029},
+  "baselines": [
+    {"build": 18, "commit": "c79d691ebab84b5e5bce0a38eca51f54586334db", "source_available": true, "protocol": "legacy H264 bytes", "comparison": "historical reference; current native harness cannot run this protocol"},
+    {"build": 21, "commit": null, "source_available": false, "protocol": "native H264 SRTP", "evidence": "native21-first.log", "comparison": "evidence only; no exact source or executable snapshot was preserved"},
+    {"build": 24, "commit": "af42b34d38057736b4f7764875b04eb69b4b7aef", "source_available": true, "protocol": "native H264 SRTP", "comparison": "frozen production behavior; benchmark instrumentation is recorded separately"}
+  ]
+}

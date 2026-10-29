@@ -38,3 +38,6 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Local controlled performance runs
+**/touping-benchmark-*/

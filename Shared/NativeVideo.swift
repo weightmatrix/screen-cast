@@ -457,6 +457,23 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         candidates.removeAll(); onImage = nil
     }
     private func fail(_ message: String) { guard !closed else { return }; stop(); onError?(message) }
+    #if DEBUG
+    // Configure before negotiation. Used only by the local benchmark; nil in normal use.
+    var onVerificationStats: (([[String: Any]]) -> Void)?
+    func snapshotForVerification() {
+        guard !closed else { return }
+        peer?.statistics { [weak self] report in
+            guard let self, !self.closed else { return }
+            if let observer = self.onVerificationStats {
+                let keys = Set(["targetBitrate", "encoderImplementation", "decoderImplementation", "mimeType", "framesEncoded", "framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesSent", "bytesReceived", "packetsSent", "packetsReceived", "packetsLost", "totalPacketSendDelay", "totalEncodeTime", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "availableOutgoingBitrate", "currentRoundTripTime", "fractionLost", "retransmittedPacketsSent", "nackCount", "pliCount"])
+                let selected = report.statistics.values.first { $0.type == "transport" }?.values["selectedCandidatePairId"] as? String
+                observer(report.statistics.values.filter { ["outbound-rtp", "inbound-rtp", "remote-inbound-rtp"].contains($0.type) || $0.id == selected }.map { stat in
+                    ["type": stat.type, "values": stat.values.filter { keys.contains($0.key) }]
+                })
+            }
+        }
+    }
+    #endif
     private func stats() {
         guard !closed else { return }
         peer?.statistics { [weak self] report in

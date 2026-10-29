@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "screen-motion-v1",
+  "seed": 20261029,
+  "settings": {"width": 1920, "height": 1440, "fps_ceiling": 60, "bitrate_ceiling": 100000000, "idle_source_fps": 20},
+  "link": {"delay_ms": 10, "jitter_ms": 2, "loss": 0, "queue_ms": 150},
+  "phases": [
+    {"name": "warmup", "seconds": 6, "mbps": 20, "motion": true},
+    {"name": "steady", "seconds": 12, "mbps": 20, "motion": true},
+    {"name": "bandwidth_drop", "seconds": 12, "mbps": 4, "motion": true},
+    {"name": "recovery", "seconds": 16, "mbps": 20, "motion": true},
+    {"name": "idle", "seconds": 8, "mbps": 20, "motion": false},
+    {"name": "resume_motion", "seconds": 12, "mbps": 20, "motion": true}
+  ],
+  "criteria": {"normal_min_fps": 50, "constrained_min_fps": 12, "normal_latency_p95_ms": 200,
+    "constrained_latency_p95_ms": 300, "max_gap_ms": 500, "max_freeze_seconds": 0.2,
+    "recovery_seconds": 8, "resume_seconds": 2, "generator_min_fps": 57, "min_latency_samples": 20}
+}
