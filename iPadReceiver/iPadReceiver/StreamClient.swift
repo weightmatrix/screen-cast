@@ -15,7 +15,8 @@ final class StreamClient: ObservableObject {
     @Published private(set) var frameCount: Int = 0
     let decoder = ImageDecoder()
 
-    private var internetTunnel: InternetTunnel?
+    private var nativePeer: NativeVideoPeer?
+    private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
     private var connection: NWConnection?
     private var rxBuffer = Data()
@@ -50,21 +51,38 @@ final class StreamClient: ObservableObject {
         updateIdleTimerDisabled()
     }
 
+    private func configureNativePeer(_ video: NativeVideoPeer) {
+        nativePeer = video
+        var count = 0
+        video.onImage = { [weak self, weak video] image in
+            guard let self, video != nil else { return }
+            self.decoder.publishNativeFrame(image)
+            count += 1
+            let number = count
+            if number == 1 || number % 30 == 0 {
+                DispatchQueue.main.async { [weak self, weak video] in
+                    guard let self, self.nativePeer === video else { return }
+                    self.receivedFrames = number; self.frameCount = number
+                    self.lastDataAt = Date()
+                    self.connectionTimeout?.cancel(); self.setStatus(.connected)
+                }
+            }
+        }
+        video.onConnected = { [weak self] in self?.connectionTimeout?.cancel(); self?.setStatus(.connected) }
+        video.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+    }
+
     func connectInternetCode(_ code: String) {
         disconnect()
         guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
         isDisconnecting = false
         setStatus(.connecting)
-        let tunnel = InternetTunnel(code: code)
-        internetTunnel = tunnel
-        tunnel.onReady = { [weak self, weak tunnel] port in
-            guard let self, let tunnel, self.internetTunnel === tunnel else { return }
-            self.lastHost = "127.0.0.1"; self.lastPort = port
-            self.authenticationCode = code
-            self.startConnection()
-        }
-        tunnel.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
-        tunnel.start()
+        let room = NativeVideoRoom(code: code)
+        nativeRoom = room
+        configureNativePeer(room.video)
+        room.onConnected = { [weak self] in self?.setStatus(.connected) }
+        room.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        room.start()
     }
 
     func connectInternetIP(host: String, port: UInt16, code: String) {
@@ -208,7 +226,8 @@ final class StreamClient: ObservableObject {
     }
 
     func disconnect() {
-        internetTunnel?.stop(); internetTunnel = nil
+        nativeRoom?.stop(); nativeRoom = nil
+        nativePeer?.stop(); nativePeer = nil
         internetDirect = false
         connectionTimeout?.cancel()
         ConnectionDiag.shared.log("manual disconnect")
@@ -280,6 +299,10 @@ final class StreamClient: ObservableObject {
         msg.append(payload)
         ConnectionDiag.shared.log("sendAuthentication")
         conn.send(content: msg, completion: .idempotent)
+        let video = NativeVideoPeer(internet: internetDirect)
+        configureNativePeer(video)
+        video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
+        NativeVideo.send(["type":"hello", "version":3], over: conn)
     }
 
     private func setStatus(_ s: Status) {
@@ -389,6 +412,7 @@ final class StreamClient: ObservableObject {
     }
 
     func checkStaleConnection() {
+        if nativePeer != nil { return }
         guard case .connected = status, let conn = connection else { return }
         lastDataLock.lock()
         let elapsed = Date().timeIntervalSince(lastDataAt)
@@ -428,22 +452,11 @@ final class StreamClient: ObservableObject {
 
     private func handle(type: UInt8, payload: Data) {
         switch type {
-        case 0:
-            guard payload.count >= 5 else { break }
-            let codec = payload[0]
-            if codec == 3 {
-                connectionTimeout?.cancel()
-                setStatus(.connected)
-                ConnectionDiag.shared.log("recv H264 config")
-                decoder.setH264Serialized(payload.dropFirst(1))
-            } else {
-                ConnectionDiag.shared.log("recv unsupported codec \(codec)")
-                setStatus(.failed("当前只支持 H264，请更新发送端"))
-            }
-        case 1:
-            decoder.decodeFrame(payload)
-            receivedFrames += 1
-            if receivedFrames == 1 || receivedFrames % 30 == 0 { frameCount = receivedFrames }
+        case 20:
+            if let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] { nativePeer?.receive(object) }
+        case 0, 1:
+            disconnect()
+            setStatus(.failed("对端仍使用旧视频协议，请将两端更新到原生视频版"))
         case 11:
             if payload.count <= 2048, let line = String(data: payload, encoding: .utf8) {
                 PerformanceDisk.shared.write("remote \(line)", forward: false)
@@ -462,12 +475,7 @@ final class StreamClient: ObservableObject {
     }
 }
 
-extension Data {
-    mutating func append(uint32: Int) {
-        var v = UInt32(uint32).bigEndian
-        Swift.withUnsafeBytes(of: &v) { append(contentsOf: $0) }
-    }
-}
+
 
 extension UInt32 {
     var bytes: [UInt8] {

@@ -1,6 +1,6 @@
 # Mac / iPad 原生投屏
 
-Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，H.264 编码后通过 TCP 传输。iPad 使用 VideoToolbox 解码、Metal 显示；Mac 也支持接收。
+Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，通过统一的 WebRTC 原生 H.264 视频轨道传输。iPad 使用 VideoToolbox 解码、Metal 显示；Mac 也支持接收。
 
 ## 项目文档与协作
 
@@ -23,9 +23,9 @@ Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，H.264 编码�
 - 原生 Mac：选择 `Touping-macOS` scheme，运行设备选择 My Mac。使用 macOS SDK、AppKit、SwiftUI 和 ScreenCaptureKit，不使用 Mac Catalyst 或 iPad App 兼容运行。
 - iPhone / iPad：选择 `Touping-iOS` scheme，再选择真机或 iOS 模拟器。已禁用 Mac Catalyst 和 Designed for iPad on Mac，避免误选为 Mac 运行。
 - 两个原生 target 共用 `Shared/AppIdentity.xcconfig` 中的 Bundle ID 和版本号，开发团队不变。统一使用原 iOS 标识，iPhone/iPad 安装身份不变；Mac 标识由 `com.witten.touping.maccaster` 改为统一标识，系统可能要求重新授权屏幕录制，旧 Mac 的偏好设置和日志不会自动迁移。
-- 目录：`Shared/` 为两端共用的视频格式解析和数据工具；`MacCaster/MacCaster/` 为 macOS 代码；`iPadReceiver/iPadReceiver/` 为 iOS 代码。
+- 目录：`Shared/` 为两端共用的原生视频引擎、格式与诊断工具；`MacCaster/MacCaster/` 为 macOS 代码；`iPadReceiver/iPadReceiver/` 为 iOS 代码。
 - 命令行构建：`xcodebuild -project Touping.xcodeproj -scheme Touping-macOS -destination 'platform=macOS' build`；iOS 使用 `-scheme Touping-iOS -destination 'generic/platform=iOS'`。
-- 当前源码为 1.3（build 18），建议两端均安装当前版本。连接建立后必须通过匹配码校验，旧接收端无法连接新版发送端。
+- 当前源码为 1.3（build 22），建议两端均安装当前版本。连接建立后必须通过匹配码校验，旧接收端无法连接新版发送端。
 - 当前仅传视频，不含音频。被关闭的窗口无法继续采集；请重新选择有效窗口或显示器。
 
 ## 故障定位
@@ -38,7 +38,7 @@ Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，H.264 编码�
 
 ## 运行回归检查
 
-Debug 版 Mac App 支持 --verify-casting 启动参数，会实际测试屏幕采集、编码、TCP、解码后非黑画面、刷新、窗口换源、停止重启、错误匹配码和局域网广播发现。结果写入 Mac 日志的 RecoveryCheck 标签；检查结束后保留 36 位匹配码（30 个 0 加 123456）的测试流，可手动停止。
+Debug 版 Mac App 使用 `--verify-native-capture` 检查真实屏幕采集及 GPU 显示，`--verify-native-routes` 检查四入口的媒体与旋转；结果写入本机诊断。单独的认证测试见 Tests/CastingServerLatencyCheck.swift。
 
 Debug 版 iPad 支持 --verify-code，通过正常广播发现和匹配码路径连接测试流。--verify-host 后跟 Mac IP，可检查 IP 直连。GPU 完成显示会记录 display rendered 日志。
 
@@ -75,7 +75,7 @@ Mac 工作台与接收设置统一使用深色背景、蓝色强调和较大的�
 
 - 在连接设置中选择“切换到投屏”，或首次启动选择“投屏”。设置 6–36 位数字匹配码、码率（8–100 Mbps，步进 2 Mbps）和帧率后，点击系统录屏按钮，在 iOS 系统界面确认开始广播。
 - 使用 ReplayKit Broadcast Upload Extension 采集整屏，允许切到其他应用继续发送；不能按 Mac 的方式选择任意应用窗口。仅传视频，不传声音，受保护内容可能不可采集。
-- Mac 或另一台 iPad 选择接收模式，使用同一匹配码连接；UDP 发现端口 8321，视频 TCP 端口 8318。发送设备需允许本地网络访问。
+- Mac 或另一台 iPad 选择接收模式，使用同一匹配码连接；UDP 发现端口 8321，认证/协商 TCP 端口 8318，视频使用 WebRTC 协商出的 UDP 端口。发送设备需允许本地网络访问。
 - 停止广播使用系统录屏入口。界面会显示广播状态；设置在开始前调整。广播扩展使用受限缓冲和最长边 1600 像素，避免扩展内存积压；旋转时重新配置视频尺寸。
 - 广播扩展与主应用使用限定到本应用的 Keychain Access Group，共享匹配码、画质及心跳。它是 iOS 包内的扩展，不是另一个商店 App；Mac 仍为原生 macOS。
 - Debug 版 iPad 的 `--verify-broadcast-encoder` 参数测试真实编码、共享格式解析、解码、横竖屏切换及共享钥匙串，不会静默开始整屏录制。实际系统广播需用户确认。
@@ -87,7 +87,7 @@ Mac 工作台与接收设置统一使用深色背景、蓝色强调和较大的�
 - iPad“原生采集”保留 ReplayKit 交付的画面尺寸，不保证等于屏幕物理像素；界面显示采集与输出尺寸。13 英寸 M2 iPad Air 本机日志已确认系统交付 1920×1440、输出 1920×1440，原生选择值为 0。
 - 无旋转/缩放且像素格式兼容时，iPad 广播直接将源缓冲送入 VideoToolbox；其余情况使用转换路径，直接输入被拒绝时自动回退。
 
-- iPad 编码优先使用 VideoToolbox 低延迟码率控制；不支持时回退。100 Mbps 是平均目标，不承诺硬上限。传输只在格式变化时广播新配置，避免相同配置清空有效视频队列。
+- 两端使用公开WebRTC编码器接口接入VideoToolbox低延迟码控，创建失败会让原生视频连接报错；不回退字节隧道。100 Mbps 是用户上限，不承诺瞬时硬上限。
 
 - Mac 与 Mac、iPad 与 iPad，以及跨平台均使用相同发现、认证和视频协议；发送端选投屏，接收端选接收。匹配码为6–36位ASCII数字，默认生成8位，保留前导0，不转整数或截断。旧4位发送码首次打开自动换成新8位码，两端需要更新。
 - iPad 匹配码使用普通系统输入框与默认系统输入法，不在输入过程中删改文字；数字格式在连接/保存时验证。抽屉拖动限制到边缘，避免干扰文字编辑。
@@ -98,13 +98,15 @@ Mac 工作台与接收设置统一使用深色背景、蓝色强调和较大的�
 
 发送端默认关闭广域网。开启“允许广域网直连”后，可单独关闭“允许广域网匹配码”：这样只监听公网IP加密直连端口，完全不用配对服务。Mac各投屏流的公网IP端口为局域端口+1000（第一路9318）；iPad为9318。公网IP模式需要用户提供可达地址及端口映射/IPv6防火墙配置，不能凭公网IP自动穿透路由器。该入口用匹配码派生密钥进行TLS 1.2 PSK/AES-GCM加密，不回退明文。
 
-广域网匹配码使用自有HTTPS/WebSocket服务交换SDP/ICE，以原生WebRTC的DTLS/SCTP数据通道进行设备间P2P传输，连接成功关闭配对通道。现有H264采集、编解码和Metal显示保留；不重新编码、不走视频服务器。没有TURN URL/凭据，也没有视频中继回退，无法穿透时明确失败。网络质量和NAT限制仍可能导致直连失败。
+四种入口现已统一为 WebRTC 原生 H.264 RTP/SRTP 视频轨道。局域网不访问配对服务器；广域网匹配码通过自有HTTPS/WebSocket交换SDP/ICE，连接成功关闭信令。TCP/TLS不承载视频，不再使用SCTP视频字节桥。每个接收端独立编码/拥塞控制，共用原始采集源；有界DataChannel仅回传诊断。不提供TURN、视频中继或SFU，无法穿透时明确失败。
+
+1.3（22）：Apple VideoToolbox低延迟码控、Level5.2协商、最多2帧在途；Mac普通采集NV12、标注时BGRA；iPad新帧触发Metal绘制。两种WAN模式8Mbps起步，按发送队列快速降速、健康窗口逐步升速，始终受用户上限约束；LAN不加此自适应上限。两端必须更新。
 
 公网配对服务部署和流量限制见[Server/README.md](Server/README.md)。自有STUN外网端口暂不可达，另配置免费公开STUN作地址探测备用；它不转发视频。依赖固定为stasel/WebRTC 156.0.0（原生macOS和iOS切片，仍不使用Catalyst），校验和由SwiftPM验证。
 
-Debug Mac新增：`--verify-internet-ip`验证TLS入口，`--verify-internet-casting`验证公网配对到P2P完整视频链路，附加`--verify-internet-hold`继续传输10秒。上述同机回环测试不等同跨NAT实测。`--verify-internet-publish`保留测试发送端供真机接收。Debug iPad的`--verify-internet-code --verify-match-code <匹配码> -appMode receive`可验证P2P接收。
+Debug验证：Mac `--verify-native-capture`验证真实屏幕4K采集与显示，`--verify-native-routes`验证四种入口，附加`--verify-native-4k`执行4K局域媒体检查；iPad `--verify-native-routes`执行真机编码与四入口检查。同机回环不等同跨NAT实测。`Tests/NativeInternetRateCheck.swift`验证静止、增长、排队退避和边界。
 
-广域网匹配码传输从1.3（15）起使用v2流控，两端均需更新：按接收窗口限制发送，按本地交付确认归还额度，短时积压暂停读取并自动恢复；窗口256KiB，逐次提交本地TCP写入。窗口握手支持重复通知与确认。Debug两端均可用`--verify-internet-flow`执行4MiB慢接收完整性检查。流控消息直接在设备间传递，不经过配对服务器。
+以下16–18版记录为历史行为，已由原生视频替代：
 
 1.3（16）：广域网匹配码P2P发送采用自适应码率（8Mbps起步、2–100Mbps控制范围，同时受用户码率上限约束）。每2秒根据交付确认、信用等待和发送背压调整，拥塞快速降低，有持续负载且稳定6秒后缓慢增加；静止画面不主动升码率。连接结束恢复原设置。原生采集分辨率和帧率不变。P2P本地发送队列收紧为2帧/60ms，关键帧请求间隔至少0.5秒。已经进入TCP/SCTP的字节仍无法撤回，这次没有改成原生WebRTC视频轨道。
 注意：同一路投屏共用编码器，同时向局域网和P2P观众发送时，自适应码率影响该路所有观众；广域网IP/TLS入口暂不参与自适应。

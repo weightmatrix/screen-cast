@@ -10,9 +10,9 @@ struct MacCasterApp: App {
                 .environmentObject(streamer)
                 .task {
                     #if DEBUG
-                    if ProcessInfo.processInfo.arguments.contains("--verify-internet-flow") {
-                        await InternetFlowVerification.run()
-                    }
+                    if ProcessInfo.processInfo.arguments.contains("--verify-native-receive") { await NativeRoutesVerification.receive() }
+                    if ProcessInfo.processInfo.arguments.contains("--verify-native-capture") || ProcessInfo.processInfo.arguments.contains("--verify-native-publish") { await streamer.verifyNativeCapture() }
+                    if ProcessInfo.processInfo.arguments.contains("--verify-native-routes") { await NativeRoutesVerification.run() }
                     if ProcessInfo.processInfo.arguments.contains("--verify-display-pacing") {
                         await MacStreamImageView.verifyPacing()
                     }

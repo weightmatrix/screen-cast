@@ -7,6 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        EE0000000000000000000005 = {isa = PBXBuildFile; fileRef = AB0000000000000000000104; };
+		EE0000000000000000000002 = {isa = PBXBuildFile; fileRef = EE0000000000000000000001; };
+		EE0000000000000000000003 = {isa = PBXBuildFile; fileRef = EE0000000000000000000001; };
+		EE0000000000000000000004 = {isa = PBXBuildFile; fileRef = EE0000000000000000000001; };
+
 		0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 68AA5B2BA8654707A8998047 /* StreamFormat.swift */; };
 		051F8EC410C549609585E599 /* DiscoveryBroadcaster.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABDD5B926AFE8A4F68AB6B97 /* DiscoveryBroadcaster.swift */; };
 		0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B0000000000000000000101 /* iPadReceiverApp.swift */; };
@@ -70,6 +75,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		EE0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeVideo.swift; sourceTree = "<group>"; };
 		0B0000000000000000000004 /* iPadReceiver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = iPadReceiver.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B0000000000000000000101 /* iPadReceiverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iPadReceiverApp.swift; sourceTree = "<group>"; };
 		0B0000000000000000000102 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -167,6 +173,7 @@
 			isa = PBXGroup;
 			children = (
 				2F95EB83546C4838AC1093FE,
+                EE0000000000000000000001,
 				68AA5B2BA8654707A8998047 /* StreamFormat.swift */,
 				6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */,
 				BA23BCF5612541508AE0676B /* BroadcastSettings.swift */,
@@ -371,6 +378,8 @@
 				AB4945206941CA47A0BA7F08 /* DiscoveryListener.swift in Sources */,
 				0B0000000000000000000204 /* H264Decoder.swift in Sources */,
 				37E2B1702F7D482592AC6FF0 /* StreamFormat.swift in Sources */,
+                EE0000000000000000000005,
+                EE0000000000000000000002,
 				1E0965052A3B4A549CCDAB52 /* BroadcastSettings.swift in Sources */,
 				C77032960A994E3DAEC9AF95 /* iPadSenderView.swift in Sources */,
 				12B23694C8C04B7EB40E9458 /* BroadcastVerification.swift in Sources */,
@@ -389,6 +398,7 @@
 				268465F47C0042BEB81A5311 /* CastingServer.swift in Sources */,
 				051F8EC410C549609585E599 /* DiscoveryBroadcaster.swift in Sources */,
 				9DA644E696854AC8931ABDDB /* StreamFormat.swift in Sources */,
+                EE0000000000000000000003,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -407,6 +417,7 @@
 				AB91522DAD32A041D0AA2D6E /* MacReceiver.swift in Sources */,
 				AB0000000000000000000204 /* CastingServer.swift in Sources */,
 				0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */,
+                EE0000000000000000000004,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

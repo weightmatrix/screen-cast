@@ -54,6 +54,17 @@ final class ImageDecoder: ObservableObject {
         return (latestFrame, frameRevision)
     }
 
+    func publishNativeFrame(_ image: CIImage) {
+        frameLock.lock()
+        latestFrame = image; frameRevision &+= 1; enqueueCount += 1
+        let number = enqueueCount
+        frameLock.unlock()
+        onFrameAvailable?()
+        if number == 1 || number % 60 == 0 {
+            DispatchQueue.main.async { [weak self] in self?.diagText = "原生视频 \(Int(image.extent.width))×\(Int(image.extent.height))" }
+        }
+    }
+
     func setH264Serialized(_ payload: Data) {
         guard payload.count >= 5 else { return }
         let fdLen = Int(payload.withUnsafeBytes {

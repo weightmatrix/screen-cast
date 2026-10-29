@@ -5,6 +5,7 @@ import Darwin
 import AppKit
 import AVFoundation
 import CoreMedia
+import SwiftUI
 import VideoToolbox
 
 final class MacDiscoveryListener {
@@ -165,7 +166,7 @@ final class MacReceiverDecoder: ObservableObject {
         handler?()
     }
 
-    private func publishFrame(_ image: CIImage?) {
+    func publishFrame(_ image: CIImage?) {
         frameLock.lock()
         latestFrame = image
         frameRevision &+= 1
@@ -394,7 +395,8 @@ final class MacReceiverClient: ObservableObject {
     private var receivedFrames = 0
     let decoder = MacReceiverDecoder()
 
-    private var internetTunnel: InternetTunnel?
+    private var nativePeer: NativeVideoPeer?
+    private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
     private var connection: NWConnection?
     private var rxBuffer = Data()
@@ -412,21 +414,38 @@ final class MacReceiverClient: ObservableObject {
 
     private static let maxMessageLength = 8 * 1024 * 1024
 
+    private func configureNativePeer(_ video: NativeVideoPeer) {
+        nativePeer = video
+        var count = 0
+        video.onImage = { [weak self, weak video] image in
+            guard let self, video != nil else { return }
+            self.decoder.publishFrame(image)
+            count += 1
+            let number = count
+            if number == 1 || number % 30 == 0 {
+                DispatchQueue.main.async { [weak self, weak video] in
+                    guard let self, self.nativePeer === video else { return }
+                    self.receivedFrames = number; self.frameCount = number
+                    self.lastDataAt = Date()
+                    self.connectionTimeout?.cancel(); self.setStatus(.connected)
+                }
+            }
+        }
+        video.onConnected = { [weak self] in self?.connectionTimeout?.cancel(); self?.setStatus(.connected) }
+        video.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+    }
+
     func connectInternetCode(_ code: String) {
         disconnect()
         guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
         isDisconnecting = false
         setStatus(.connecting)
-        let tunnel = InternetTunnel(code: code)
-        internetTunnel = tunnel
-        tunnel.onReady = { [weak self, weak tunnel] port in
-            guard let self, let tunnel, self.internetTunnel === tunnel else { return }
-            self.lastHost = "127.0.0.1"; self.lastPort = port
-            self.authenticationCode = code
-            self.startConnection()
-        }
-        tunnel.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
-        tunnel.start()
+        let room = NativeVideoRoom(code: code)
+        nativeRoom = room
+        configureNativePeer(room.video)
+        room.onConnected = { [weak self] in self?.setStatus(.connected) }
+        room.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        room.start()
     }
 
     func connectInternetIP(host: String, port: UInt16, code: String) {
@@ -542,7 +561,8 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func disconnect() {
-        internetTunnel?.stop(); internetTunnel = nil
+        nativeRoom?.stop(); nativeRoom = nil
+        nativePeer?.stop(); nativePeer = nil
         internetDirect = false
         connectionTimeout?.cancel()
         isDisconnecting = true
@@ -570,6 +590,7 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func checkStaleConnection() {
+        if nativePeer != nil { return }
         guard case .connected = status, let conn = connection,
               Date().timeIntervalSince(lastDataAt) > 15 else { return }
         handleDisconnect(conn)
@@ -607,6 +628,10 @@ final class MacReceiverClient: ObservableObject {
         msg.append(UInt8(5))
         msg.append(payload)
         conn.send(content: msg, completion: .idempotent)
+        let video = NativeVideoPeer(internet: internetDirect)
+        configureNativePeer(video)
+        video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
+        NativeVideo.send(["type":"hello", "version":3], over: conn)
     }
 
     private func readLoop(on connection: NWConnection) {
@@ -684,19 +709,11 @@ final class MacReceiverClient: ObservableObject {
 
     private func handle(type: UInt8, payload: Data) {
         switch type {
-        case 0:
-            guard payload.count >= 5 else { break }
-            let codec = payload[0]
-            DiagLog.log("Receive", "config codec=\(codec) bytes=\(payload.count)")
-            if codec == 3 {
-                connectionTimeout?.cancel()
-                setStatus(.connected)
-                decoder.setH264Serialized(payload.dropFirst(1))
-            }
-        case 1:
-            decoder.decodeFrame(payload)
-            receivedFrames += 1
-            if receivedFrames == 1 || receivedFrames % 30 == 0 { frameCount = receivedFrames }
+        case 20:
+            if let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] { nativePeer?.receive(object) }
+        case 0, 1:
+            disconnect()
+            setStatus(.failed("对端仍使用旧视频协议，请将两端更新到原生视频版"))
         case 11:
             if payload.count <= 2048, let line = String(data: payload, encoding: .utf8) {
                 PerformanceDisk.shared.write("remote \(line)", forward: false)
@@ -714,3 +731,74 @@ final class MacReceiverClient: ObservableObject {
         }
     }
 }
+
+#if DEBUG
+@MainActor enum NativeRoutesVerification {
+    static func receive() async {
+        let client = MacReceiverClient()
+        let window = NSWindow(contentRect: NSRect(x: 80, y: 80, width: 800, height: 600), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+        window.contentView = NSHostingView(rootView: MacStreamImageView(decoder: client.decoder))
+        window.title = "iPad 原生视频接收验证"; window.orderFront(nil)
+        MacDiscoveryListener.shared.start()
+        client.discoveryLookup = { MacDiscoveryListener.shared.find(code: $0) }
+        defer { client.disconnect(); window.orderOut(nil) }
+        var connected = false
+        for _ in 0..<600 {
+            if !connected, MacDiscoveryListener.shared.find(code: "68342719") != nil {
+                client.connectWithCode("68342719"); connected = true
+            }
+            if client.frameCount >= 180 { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        NSLog("NativeDeviceReceive %@ frames=%ld size=%@ status=%@", client.frameCount >= 30 ? "PASS" : "FAIL", client.frameCount, String(describing: client.decoder.frameForDisplay(after: nil)?.image?.extent.size), String(describing: client.status))
+    }
+    static func run() async {
+        let code = MatchingCode.generate()
+        let server = CastingServer(port: 19318, accessCode: code)
+        server.configureNative(bitrate: 8_000_000, fps: 30)
+        server.start()
+        defer { server.stop() }
+        let fourK = ProcessInfo.processInfo.arguments.contains("--verify-native-4k")
+        let width = fourK ? 3840 : 1280, height = fourK ? 2160 : 720
+        var pixel: CVPixelBuffer?
+        CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel)
+        guard let pixel else { return }
+        let context = CIContext()
+        context.render(CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: width, height: height)), to: pixel)
+        var registered = false
+        server.onInternetStatus = { text in if text.contains("匹配就绪") { registered = true } }
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        for mode in (fourK ? ["localIP"] : ["localIP", "localCode", "internetIP", "internetCode"]) {
+            if mode == "internetIP" { server.setInternetMatchingEnabled(false); server.setInternetEnabled(true) }
+            if mode == "internetCode" {
+                server.setInternetMatchingEnabled(true)
+                for _ in 0..<100 { if registered { break }; try? await Task.sleep(nanoseconds: 100_000_000) }
+            }
+            let client = MacReceiverClient()
+            if mode == "localIP" { client.connect(host: "127.0.0.1", port: 19318, code: code) }
+            if mode == "localCode" { client.discoveryLookup = { _ in ("127.0.0.1", 19318) }; client.connectWithCode(code) }
+            if mode == "internetIP" { client.connectInternetIP(host: "127.0.0.1", port: 20318, code: code) }
+            if mode == "internetCode" { client.connectInternetCode(code) }
+            for _ in 0..<240 {
+                server.nativeSource.append(pixel)
+                try? await Task.sleep(nanoseconds: 33_333_333)
+                if case .failed = client.status { break }
+            }
+            let image = client.decoder.frameForDisplay(after: nil)?.image
+            var sample = [UInt8](repeating: 0, count: 4)
+            if let image { context.render(image, toBitmap: &sample, rowBytes: 4, bounds: CGRect(x: 10, y: 10, width: 1, height: 1), format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()) }
+            let passed = client.frameCount >= 10 && image?.extent.size == CGSize(width: width, height: height) && sample[0] > 150 && sample[1] < 80
+            NSLog("NativeRoutes %@ mode=%@ frames=%ld size=%@ pixel=%@ status=%@", passed ? "PASS" : "FAIL", mode, client.frameCount, String(describing: image?.extent.size), String(describing: sample), String(describing: client.status))
+            PerformanceDisk.shared.write("NativeRoutes \(passed ? "PASS" : "FAIL") mode=\(mode) frames=\(client.frameCount) size=\(String(describing: image?.extent.size))")
+            if mode == "localIP" && !fourK {
+                for _ in 0..<90 { server.nativeSource.append(pixel, orientation: 6); try? await Task.sleep(nanoseconds: 33_333_333) }
+                let rotated = client.decoder.frameForDisplay(after: nil)?.image?.extent.size
+                NSLog("NativeRotation %@ size=%@", rotated == CGSize(width: 720, height: 1280) ? "PASS" : "FAIL", String(describing: rotated))
+            }
+            client.disconnect()
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+}
+#endif

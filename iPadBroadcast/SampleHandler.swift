@@ -2,13 +2,14 @@ import ReplayKit
 import Combine
 
 final class SampleHandler: RPBroadcastSampleHandler {
-    private var encoder: ReplayVideoEncoder?
+    private let nativeCapture = NativeScreenSource()
     private var server: CastingServer?
     private var heartbeat: Timer?
     private var observation: AnyCancellable?
     private var running = false
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+        nativeCapture.setPaused(false)
         let defaults = BroadcastSettings.store
         let code = defaults.string(forKey: "broadcastCode") ?? "67890123"
         guard MatchingCode.isValid(code) else {
@@ -21,23 +22,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
         let requestedResolution = BroadcastSettings.resolutionLimit(Int(storedResolution ?? "1600") ?? 1600)
         PerformanceDisk.shared.write("broadcast.settings storedResolution=\(storedResolution ?? "missing") requestedLimit=\(requestedResolution) screen=\(defaults.string(forKey: "broadcastScreenPixels") ?? "unknown")")
         defaults.set("等待系统提供画面", forKey: "broadcastResolutionStatus")
-        let encoder = ReplayVideoEncoder(bitrate: bitrate, fps: fps, maximumDimension: requestedResolution)
-        encoder.onResolution = { summary in defaults.set(summary, forKey: "broadcastResolutionStatus") }
-        encoder.onOutput = { [weak self] data, key, config in
-            DispatchQueue.main.async {
-                guard let self, self.running else { return }
-                if let config { self.server?.sendConfig(config) }
-                self.server?.sendFrame(data, isKeyFrame: key)
-            }
-        }
-        encoder.onFailure = { [weak self] text in DispatchQueue.main.async { self?.fail(text) } }
-        self.encoder = encoder
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.running = true
-            let server = CastingServer(port: 8318, accessCode: code)
-            server.onInternetBitrateLimit = { [weak self] limit in self?.encoder?.setInternetBitrateLimit(limit) }
-            server.onNeedsKeyFrame = { [weak self] in self?.encoder?.requestKeyFrame() }
+            let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
+            server.configureNative(bitrate: bitrate, fps: fps, dimension: requestedResolution)
+            server.nativeSource.onResolution = { summary in defaults.set(summary, forKey: "broadcastResolutionStatus") }
             self.server = server
             self.observation = server.$lastError.compactMap { $0 }.sink { [weak self] text in self?.fail("网络监听失败：\(text)") }
             PerformanceDisk.shared.relay = { [weak server] line in
@@ -61,19 +51,18 @@ final class SampleHandler: RPBroadcastSampleHandler {
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
         guard sampleBufferType == .video else { return }
-        encoder?.append(sampleBuffer)
+        nativeCapture.append(sampleBuffer)
     }
     override func broadcastPaused() {
-        encoder?.setPaused(true)
+        nativeCapture.setPaused(true)
         BroadcastSettings.store.set("投屏已暂停", forKey: "broadcastStatus")
     }
     override func broadcastResumed() {
-        encoder?.setPaused(false)
+        nativeCapture.setPaused(false)
         BroadcastSettings.store.set("正在投屏", forKey: "broadcastStatus")
     }
     override func broadcastFinished() {
-        encoder?.stop()
-        encoder = nil
+        nativeCapture.setPaused(true)
         DispatchQueue.main.async { [weak self] in self?.cleanup() }
     }
     private func cleanup() {

@@ -59,3 +59,6 @@ final class ConnectionDiag: ObservableObject {
         lock.unlock()
     }
 }
+
+// Shared server diagnostics used by native video verification in the host app.
+final class DiagLog { static func log(_ tag: String, _ message: String) { NSLog("[%@] %@", tag, message) } }

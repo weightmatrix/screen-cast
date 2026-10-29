@@ -229,3 +229,54 @@ import ReplayKit
 
 }
 #endif
+
+#if DEBUG
+@MainActor enum NativeRoutesVerification {
+    static func run() async {
+        let code = MatchingCode.generate()
+        let server = CastingServer(port: 19318, accessCode: code)
+        server.configureNative(bitrate: 8_000_000, fps: 30)
+        server.start()
+        defer { server.stop() }
+        var pixel: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 1280, 720, kCVPixelFormatType_32BGRA,
+            [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel)
+        guard let pixel else { return }
+        let context = CIContext()
+        context.render(CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: 1280, height: 720)), to: pixel)
+        var registered = false
+        server.onInternetStatus = { text in if text.contains("匹配就绪") { registered = true } }
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        for mode in ["localIP", "localCode", "internetIP", "internetCode"] {
+            if mode == "internetIP" { server.setInternetMatchingEnabled(false); server.setInternetEnabled(true) }
+            if mode == "internetCode" {
+                server.setInternetMatchingEnabled(true)
+                for _ in 0..<100 { if registered { break }; try? await Task.sleep(nanoseconds: 100_000_000) }
+            }
+            let client = StreamClient()
+            if mode == "localIP" { client.connect(host: "127.0.0.1", port: 19318, code: code) }
+            if mode == "localCode" { client.discoveryLookup = { _ in ("127.0.0.1", 19318) }; client.connectWithCode(code) }
+            if mode == "internetIP" { client.connectInternetIP(host: "127.0.0.1", port: 20318, code: code) }
+            if mode == "internetCode" { client.connectInternetCode(code) }
+            for _ in 0..<240 {
+                server.nativeSource.append(pixel)
+                try? await Task.sleep(nanoseconds: 33_333_333)
+                if case .failed = client.status { break }
+            }
+            let image = client.decoder.currentFrame
+            var sample = [UInt8](repeating: 0, count: 4)
+            if let image { context.render(image, toBitmap: &sample, rowBytes: 4, bounds: CGRect(x: 10, y: 10, width: 1, height: 1), format: .RGBA8, colorSpace: CGColorSpaceCreateDeviceRGB()) }
+            let passed = client.frameCount >= 10 && image?.extent.size == CGSize(width: 1280, height: 720) && sample[0] > 150 && sample[1] < 80
+            NSLog("NativeRoutes %@ mode=%@ frames=%ld size=%@ pixel=%@ status=%@", passed ? "PASS" : "FAIL", mode, client.frameCount, String(describing: image?.extent.size), String(describing: sample), String(describing: client.status))
+            PerformanceDisk.shared.write("NativeRoutes \(passed ? "PASS" : "FAIL") mode=\(mode) frames=\(client.frameCount) size=\(String(describing: image?.extent.size))")
+            if mode == "localIP" {
+                for _ in 0..<90 { server.nativeSource.append(pixel, orientation: 6); try? await Task.sleep(nanoseconds: 33_333_333) }
+                let rotated = client.decoder.currentFrame?.extent.size
+                NSLog("NativeRotation %@ size=%@", rotated == CGSize(width: 720, height: 1280) ? "PASS" : "FAIL", String(describing: rotated))
+            }
+            client.disconnect()
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+    }
+}
+#endif

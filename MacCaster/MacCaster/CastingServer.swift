@@ -17,10 +17,10 @@ final class CastingServer: ObservableObject {
     let port: UInt16
     @Published private(set) var isRunning = false
     @Published private(set) var lastError: String?
+    var onNativeFPS: ((Double) -> Void)?
     var onClientCountChanged: ((Int) -> Void)?
     var onRemoteResolutionChanged: (() -> Void)?
     var onNeedsKeyFrame: (() -> Void)?
-    var onInternetBitrateLimit: ((Int?) -> Void)?
     var onTouchEvent: (([String: Any], ObjectIdentifier) -> Void)?
     var onTouchDisconnect: ((ObjectIdentifier) -> Void)?
     // Reject input even from older receivers that still expose touch controls.
@@ -33,15 +33,27 @@ final class CastingServer: ObservableObject {
     func setInternetMatchingEnabled(_ enabled: Bool) {
         guard enabled != internetMatchingEnabled else { return }
         internetMatchingEnabled = enabled
-        if !enabled { onInternetBitrateLimit?(nil) }
         if !enabled {
             internetRetry?.cancel(); internetRetry = nil
-            internetTunnel?.onClosed = nil; internetTunnel?.stop(); internetTunnel = nil
+            nativeRoom?.stop(); nativeRoom = nil
+            internetVideoConnected = false; notifyClientCountChanged()
         }
         startInternet()
     }
     private var internetListener: NWListener?
-    private var internetTunnel: InternetTunnel?
+    let nativeSource: NativeScreenSource
+    private var nativePeers: [ObjectIdentifier: NativeVideoPeer] = [:]
+    private var internetConnections: Set<ObjectIdentifier> = []
+    private var nativeBitrate = 100_000_000
+    private var nativeFPS = 60
+    private var nativeRoom: NativeVideoRoom?
+    private var internetVideoConnected = false
+    func configureNative(bitrate: Int, fps: Int, dimension: Int = 0) {
+        nativeBitrate = bitrate; nativeFPS = fps
+        nativeSource.configure(fps: fps, dimension: dimension)
+        nativePeers.values.forEach { $0.quality(bitrate: bitrate, fps: fps) }
+        nativeRoom?.video.quality(bitrate: bitrate, fps: fps)
+    }
     private var internetRetry: DispatchWorkItem?
     private var internetFailures = 0
     var onInternetStatus: ((String) -> Void)?
@@ -54,9 +66,9 @@ final class CastingServer: ObservableObject {
     }
 
     private func stopInternet() {
-        onInternetBitrateLimit?(nil)
+        internetVideoConnected = false; notifyClientCountChanged()
         internetRetry?.cancel(); internetRetry = nil
-        internetTunnel?.onClosed = nil; internetTunnel?.stop(); internetTunnel = nil
+        nativeRoom?.stop(); nativeRoom = nil
         internetListener?.cancel(); internetListener = nil
     }
 
@@ -66,7 +78,9 @@ final class CastingServer: ObservableObject {
             do {
                 let listener = try NWListener(using: InternetSettings.tlsParameters(code: accessCode), on: NWEndpoint.Port(rawValue: internetPort)!)
                 internetListener = listener
-                listener.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
+                listener.newConnectionHandler = { [weak self] conn in
+                    self?.internetConnections.insert(ObjectIdentifier(conn)); self?.accept(conn)
+                }
                 listener.stateUpdateHandler = { [weak self] state in
                     if case .failed = state { self?.onInternetStatus?("公网 IP 监听失败；可尝试广域网匹配码") }
                 }
@@ -77,24 +91,26 @@ final class CastingServer: ObservableObject {
             onInternetStatus?("公网 IP 端口 \(internetPort ?? 0) · 不使用配对服务器")
             return
         }
-        guard internetTunnel == nil else { return }
-        onInternetStatus?("等待广域网匹配 · 公网 IP 端口 \(internetPort ?? 0)")
-        let tunnel = InternetTunnel(code: accessCode, senderPort: port)
-        internetTunnel = tunnel
-        tunnel.onBitrateLimit = { [weak self] limit in self?.onInternetBitrateLimit?(limit) }
-        tunnel.onRegistered = { [weak self] in self?.onInternetStatus?("广域网匹配就绪 · 公网 IP 端口 \(self?.internetPort ?? 0)") }
-        tunnel.onConnected = { [weak self] in self?.internetFailures = 0; self?.onInternetStatus?("P2P 已直连 · 视频不经服务器") }
-        tunnel.onError = { [weak self] text in self?.onInternetStatus?(text) }
-        tunnel.onClosed = { [weak self] in
-            guard let self, self.internetEnabled, self.internetMatchingEnabled, self.isRunning else { return }
-            self.internetTunnel = nil
-            self.onInternetBitrateLimit?(nil)
+        guard nativeRoom == nil else { return }
+        let room = NativeVideoRoom(code: accessCode, source: nativeSource, bitrate: nativeBitrate, fps: nativeFPS)
+        nativeRoom = room
+        room.video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
+        room.onRegistered = { [weak self] in self?.onInternetStatus?("广域网匹配就绪 · 原生视频") }
+        room.onConnected = { [weak self] in
+            guard let self else { return }
+            self.internetFailures = 0; self.internetVideoConnected = true; self.notifyClientCountChanged()
+            self.onInternetStatus?("P2P 已直连 · 原生视频")
+        }
+        room.onError = { [weak self] text in
+            guard let self else { return }
+            self.onInternetStatus?(text); self.nativeRoom = nil
+            self.internetVideoConnected = false; self.notifyClientCountChanged()
+            guard self.internetEnabled, self.internetMatchingEnabled, self.isRunning else { return }
             self.internetFailures = min(self.internetFailures + 1, 5)
-            let work = DispatchWorkItem { [weak self] in self?.startInternet() }
-            self.internetRetry = work
+            let work = DispatchWorkItem { [weak self] in self?.startInternet() }; self.internetRetry = work
             DispatchQueue.main.asyncAfter(deadline: .now() + min(60, 5 * pow(2, Double(self.internetFailures - 1))), execute: work)
         }
-        tunnel.start()
+        room.start()
     }
 
     private let perf = StreamPerformance("transport.send")
@@ -164,7 +180,8 @@ final class CastingServer: ObservableObject {
         return 20
     }
 
-    init(port: UInt16, accessCode: String) {
+    init(port: UInt16, accessCode: String, nativeSource: NativeScreenSource = NativeScreenSource()) {
+        self.nativeSource = nativeSource
         self.port = port
         self.accessCode = accessCode
     }
@@ -232,6 +249,7 @@ final class CastingServer: ObservableObject {
         DiagLog.log("Connection", "server stop port \(port) connections=\(connections.count)")
         bindRetryWorkItem?.cancel()
         bindRetryWorkItem = nil
+        nativePeers.values.forEach { $0.stop() }; nativePeers.removeAll(); internetConnections.removeAll()
         connections.forEach { $0.cancel() }
         connections.removeAll()
         controlBuffers.removeAll()
@@ -279,6 +297,8 @@ final class CastingServer: ObservableObject {
         DiagLog.log("Connection", "drop conn \(conn.endpoint.debugDescription)")
         connections.removeAll { $0 === conn }
         let key = ObjectIdentifier(conn)
+        nativePeers.removeValue(forKey: key)?.stop()
+        internetConnections.remove(key)
         onTouchDisconnect?(key)
         controlBuffers[key] = nil
         clientResolutions[key] = nil
@@ -335,6 +355,18 @@ final class CastingServer: ObservableObject {
                     conn.send(content: message, completion: .contentProcessed { _ in conn.cancel() })
                     return
                 }
+            } else if authenticatedConnections.contains(key), type == 20 {
+                let data = Data(buffer[5..<(5 + length)])
+                guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { conn.cancel(); return }
+                if object["type"] as? String == "hello" {
+                    guard nativePeers[key] == nil else { conn.cancel(); return }
+                    let video = NativeVideoPeer(source: nativeSource, internet: internetConnections.contains(key), bitrate: nativeBitrate, fps: nativeFPS)
+                    nativePeers[key] = video
+                    video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
+                    video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
+                    video.onError = { [weak self, weak conn] _ in if let conn { self?.drop(conn) } }
+                    video.offer()
+                } else { nativePeers[key]?.receive(object) }
             } else if authenticatedConnections.contains(key), type == 2, length == 8 {
                 let w = Int(buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 5, as: UInt32.self).bigEndian })
                 let h = Int(buffer.withUnsafeBytes { $0.loadUnaligned(fromByteOffset: 9, as: UInt32.self).bigEndian })
@@ -374,14 +406,11 @@ final class CastingServer: ObservableObject {
         DiagLog.log("Connection", "authentication accepted \(conn.endpoint.debugDescription)")
         notifyClientCountChanged()
         enqueue(type: 8, payload: Data([touchEnabled ? 1 : 0]), isKeyFrame: false, to: conn)
-        if let config = lastConfig {
-            enqueue(type: 0, payload: config, isKeyFrame: false, to: conn)
-        }
-        onNeedsKeyFrame?()
+        // Authentication is control only; native video starts after the versioned hello.
     }
 
     private func notifyClientCountChanged() {
-        onClientCountChanged?(authenticatedConnections.count)
+        onClientCountChanged?(authenticatedConnections.count + (internetVideoConnected ? 1 : 0))
     }
 
     func sendConfig(_ serializedFD: Data) {
@@ -425,7 +454,7 @@ final class CastingServer: ObservableObject {
             return
         }
 
-        let isInternetPipe = conn.endpoint.debugDescription.hasPrefix("127.0.0.1:") && internetTunnel != nil
+        let isInternetPipe = internetConnections.contains(key)
         let frameLimit = isInternetPipe ? 2 : 3
         let ageLimit = isInternetPipe ? 0.06 : 0.1
         var queue = outboundQueues[key] ?? []
@@ -442,7 +471,6 @@ final class CastingServer: ObservableObject {
             outboundQueues[key] = queue
             DiagLog.log("Connection", "backpressure requests keyframe \(conn.endpoint.debugDescription)")
             perf.record("backpressure")
-            if isInternetPipe { internetTunnel?.noteCongestion() }
             requestKeyFrame()
             return
         }
@@ -453,7 +481,7 @@ final class CastingServer: ObservableObject {
     }
 
     private func requestKeyFrame() {
-        guard Date().timeIntervalSince(lastKeyFrameRequest) >= (internetTunnel == nil ? 0.15 : 0.5) else { return }
+        guard Date().timeIntervalSince(lastKeyFrameRequest) >= 0.5 else { return }
         lastKeyFrameRequest = Date()
         onNeedsKeyFrame?()
     }
@@ -484,12 +512,5 @@ final class CastingServer: ObservableObject {
                 }
             }
         })
-    }
-}
-
-private extension Data {
-    mutating func append(uint32: Int) {
-        var v = UInt32(uint32).bigEndian
-        Swift.withUnsafeBytes(of: &v) { append(contentsOf: $0) }
     }
 }

@@ -49,6 +49,10 @@ enum StreamFormat {
 }
 
 extension Data {
+    mutating func append(uint32: Int) {
+        var value = UInt32(uint32).bigEndian
+        Swift.withUnsafeBytes(of: &value) { append(contentsOf: $0) }
+    }
     func copySlice(_ offset: Int, _ length: Int) -> Data {
         guard offset >= 0, length > 0, offset + length <= count else { return Data() }
         return withUnsafeBytes { ptr in
@@ -232,5 +236,24 @@ struct EncoderFramePacer {
             }
         } else { good = 0; bad = 0 }
         return target
+    }
+}
+
+/// Bounds WAN encoder demand without replacing WebRTC's packet-level congestion control.
+struct NativeInternetRate {
+    private(set) var limit = 8_000_000
+    private var healthy = 0
+    mutating func clamp(to upper: Int) { limit = min(limit, max(1, upper)) }
+    mutating func sample(upper: Int, outputBps: Double, targetBps: Double, sendWait: Double) -> Int {
+        clamp(to: upper)
+        guard outputBps.isFinite, targetBps.isFinite, sendWait.isFinite else { return limit }
+        if sendWait > 0.080 {
+            limit = max(min(2_000_000, upper), Int(Double(min(limit, max(1, Int(outputBps)))) * 0.75))
+            healthy = 0
+        } else if sendWait < 0.030 && max(outputBps, targetBps) >= Double(limit) * 0.8 {
+            healthy += 1
+            if healthy >= 2 { limit = min(upper, limit + max(500_000, limit / 5)); healthy = 0 }
+        } else { healthy = 0 }
+        return limit
     }
 }

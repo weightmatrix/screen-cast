@@ -72,10 +72,14 @@ struct ContentView: View {
             }()
             if let index = args.firstIndex(of: "--verify-host"), index + 1 < args.count {
                 host = args[index + 1]
-                portText = "8318"
+                let verifyPort: UInt16 = {
+                    if let i = args.firstIndex(of: "--verify-port"), i + 1 < args.count { return UInt16(args[i + 1]) ?? 8318 }
+                    return 8318
+                }()
+                portText = String(verifyPort)
                 matchCode = verificationCode
                 connectMode = "ip"
-                client.connect(host: host, port: 8318, code: matchCode)
+                client.connect(host: host, port: verifyPort, code: matchCode)
                 drawerOpen = false
             }
             if args.contains("--verify-internet-code") {
@@ -274,18 +278,18 @@ private struct StreamingView: UIViewRepresentable {
         view.backgroundColor = .black
         view.colorPixelFormat = .bgra8Unorm
         view.framebufferOnly = false
-        view.isPaused = false
+        view.isPaused = true
         view.enableSetNeedsDisplay = false
         view.preferredFramesPerSecond = 60
         view.delegate = context.coordinator
-        context.coordinator.view = view
+        context.coordinator.attach(view)
         return view
     }
 
     func updateUIView(_ view: MTKView, context: Context) {}
 
     static func dismantleUIView(_ view: MTKView, coordinator: Coordinator) {
-        coordinator.decoder.onFrameAvailable = nil
+        coordinator.detach()
     }
 
     final class Coordinator: NSObject, MTKViewDelegate {
@@ -295,16 +299,40 @@ private struct StreamingView: UIViewRepresentable {
         private var commandQueue: MTLCommandQueue?
         private var renderedFrames = 0
         private var displayedRevision: UInt64?
+        private let schedulingLock = NSLock()
+        private var drawScheduled = false
+        private let perf = StreamPerformance("ipad.display")
+        private let colorSpace = CGColorSpaceCreateDeviceRGB()
         private let gpuSlots = DispatchSemaphore(value: 2)
 
         init(decoder: ImageDecoder) {
             self.decoder = decoder
         }
 
+        func attach(_ view: MTKView) {
+            self.view = view
+            decoder.onFrameAvailable = { [weak self] in self?.requestDraw() }
+            requestDraw()
+        }
+        func detach() { decoder.onFrameAvailable = nil; view = nil }
+        private func requestDraw() {
+            schedulingLock.lock()
+            guard !drawScheduled else { schedulingLock.unlock(); return }
+            drawScheduled = true; schedulingLock.unlock()
+            let at = ProcessInfo.processInfo.systemUptime
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.schedulingLock.lock(); self.drawScheduled = false; self.schedulingLock.unlock()
+                self.perf.record("mainQueueWait", milliseconds: (ProcessInfo.processInfo.systemUptime - at) * 1000)
+                self.view?.draw()
+            }
+        }
         func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
             if ciContext == nil {
-                ciContext = CIContext(mtlDevice: view.device!)
+                ciContext = CIContext(mtlDevice: view.device!, options: [.cacheIntermediates: false])
             }
+            displayedRevision = nil
+            requestDraw()
         }
 
         func draw(in view: MTKView) {
@@ -316,12 +344,11 @@ private struct StreamingView: UIViewRepresentable {
             if commandQueue == nil { commandQueue = device.makeCommandQueue() }
             guard let drawable = view.currentDrawable,
                   let commandBuffer = commandQueue?.makeCommandBuffer() else { return }
-            let ci = ciContext ?? CIContext(mtlDevice: device)
+            let ci = ciContext ?? CIContext(mtlDevice: device, options: [.cacheIntermediates: false])
             ciContext = ci
 
             let width = CGFloat(drawable.texture.width)
             let height = CGFloat(drawable.texture.height)
-            let colorSpace = CGColorSpaceCreateDeviceRGB()
             let drawableRect = CGRect(x: 0, y: 0, width: width, height: height)
 
             if let image = displayFrame.image, !image.extent.isEmpty {
@@ -343,7 +370,14 @@ private struct StreamingView: UIViewRepresentable {
 
             commandBuffer.present(drawable)
             let slots = gpuSlots
-            commandBuffer.addCompletedHandler { _ in slots.signal() }
+            let perf = self.perf
+            let submittedAt = ProcessInfo.processInfo.systemUptime
+            perf.interval("drawInterval")
+            commandBuffer.addCompletedHandler { [weak self] buffer in
+                slots.signal()
+                perf.record(buffer.status == .completed ? "rendered" : "gpuError", milliseconds: (ProcessInfo.processInfo.systemUptime - submittedAt) * 1000)
+                self?.requestDraw()
+            }
             displayedRevision = displayFrame.revision
             submitted = true
             renderedFrames += 1
