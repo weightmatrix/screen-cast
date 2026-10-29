@@ -238,3 +238,20 @@ struct EncoderFramePacer {
         return target
     }
 }
+
+/// Smooth encoder demand only. Never lower the connection's BWE/probing ceiling.
+struct NativeVideoBudget {
+    private(set) var limit = 8_000_000
+    mutating func clamp(upper: Int) { limit = min(limit, max(1, upper)) }
+    mutating func sample(upper: Int, available: Double, sendWait: Double, loss: Double) -> Int {
+        clamp(upper: upper)
+        guard available.isFinite, available > 0, sendWait.isFinite, loss.isFinite else { return limit }
+        let safe = min(Double(upper), available * 0.85)
+        if loss > 0.02 || (sendWait > 0.08 && available < Double(limit) * 0.8) {
+            limit = max(min(2_000_000, upper), Int(min(Double(limit) * 0.8, safe)))
+        } else if loss < 0.005 && sendWait < 0.05 && safe > Double(limit) * 1.1 {
+            limit = min(upper, Int(min(safe, Double(limit) * 1.25)))
+        }
+        return limit
+    }
+}
