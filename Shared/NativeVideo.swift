@@ -20,7 +20,7 @@ private final class ScreenH264EncoderFactory: NSObject, RTCVideoEncoderFactory {
         AppleScreenEncoder(info)
     }
 }
-/// Public WebRTC encoder adapter: VideoToolbox low-latency rate control, native RTP output.
+/// Public WebRTC encoder adapter: hardware VideoToolbox realtime H264, native RTP output.
 /// No encoded video is sent through the application data channel.
 private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     private final class Ticket {
@@ -49,7 +49,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     var resolutionAlignment: Int { 2 }
     var applyAlignmentToAllSimulcastLayers: Bool { true }
     var supportsNativeHandle: Bool { true }
-    func implementationName() -> String { "AppleLowLatencyVideoToolbox" }
+    func implementationName() -> String { "AppleScreenVideoToolbox" }
     func scalingSettings() -> RTCVideoEncoderQpThresholds? { nil }
     func setCallback(_ callback: RTCVideoEncoderCallback?) { lock.lock(); self.callback = callback; lock.unlock() }
     func startEncode(with settings: RTCVideoEncoderSettings, numberOfCores: Int32) -> Int {
@@ -58,8 +58,15 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         rate = max(1, settings.startBitrate); fps = max(1, settings.maxFramerate)
         lock.lock(); framePacer.reset(upper: Int(fps)); pacingFPS = Int(fps); pacingUpper = Int(fps); lock.unlock()
         nextEncodedNS = nil; scheduledFPS = 0
+        // Normal realtime rate control recovers without the low-latency mode's
+        // prolonged frame starvation. Keep the hardware-only low-latency path on
+        // older iOS, where the explicit hardware requirement is unavailable.
+        var lowLatency = true
         var specification: [CFString: Any] = [kVTVideoEncoderSpecification_EnableLowLatencyRateControl: true]
-        if #available(iOS 17.4, *) { specification[kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder] = true }
+        if #available(iOS 17.4, *) {
+            specification = [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true]
+            lowLatency = false
+        }
         let attributes: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:],
             kCVPixelBufferMetalCompatibilityKey: true,
             kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange]
@@ -101,7 +108,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             hardwareStatus = VTSessionCopyProperty(session, key: kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder, allocator: nil, valueOut: &hardware)
         }
         let hardwareValue = hardware?.takeRetainedValue()
-        PerformanceDisk.shared.write("native.encoder ready=\(width)x\(height) lowLatencyRequested=true hardware=\(String(describing: hardwareValue)) hardwareStatus=\(hardwareStatus) profile=\(profile)")
+        PerformanceDisk.shared.write("native.encoder ready=\(width)x\(height) lowLatencyRequested=\(lowLatency) hardware=\(String(describing: hardwareValue)) hardwareStatus=\(hardwareStatus) profile=\(profile)")
         return 0
     }
     func release() -> Int {
@@ -120,7 +127,14 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         guard appliedRate != rate || appliedFPS != effectiveFPS else { return 0 }
         let status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: (Int(rate) * 1000) as CFNumber)
         let frameStatus = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: Int(effectiveFPS) as CFNumber)
-        if status == noErr && frameStatus == noErr { appliedRate = rate; appliedFPS = effectiveFPS; return 0 }
+        // Bound one-second output to 1.5x the current target, as in the native SDK.
+        var burstStatus: OSStatus = noErr
+        if #available(iOS 17.4, *) {
+            burstStatus = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits,
+                value: [Double(rate) * 1000 / 8 * 1.5, 1.0] as CFArray)
+        }
+        if status == noErr && frameStatus == noErr && burstStatus == noErr { appliedRate = rate; appliedFPS = effectiveFPS; return 0 }
+        PerformanceDisk.shared.write("native.encoder rate status=\(status) fpsStatus=\(frameStatus) burstStatus=\(burstStatus)")
         return -1
     }
     func encode(_ frame: RTCVideoFrame, codecSpecificInfo: (any RTCCodecSpecificInfo)?, frameTypes: [NSNumber]) -> Int {
