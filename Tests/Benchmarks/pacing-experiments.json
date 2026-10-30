@@ -1,0 +1,303 @@
+{
+  "experiments": [
+    {
+      "comparison_valid": true,
+      "functional_pass": true,
+      "nack_count": 9557,
+      "name": "pacer_factor_2_5",
+      "note": "Only pacing factor 1.1 -> 2.5; reverted.",
+      "packets_sent": 56001,
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 155.42404164443724,
+          "fps": 56.989859366809114,
+          "freeze_seconds": null,
+          "generator_fps": 59.98932564927275,
+          "latency_samples": 34,
+          "max_gap_ms": 96.86741666519083,
+          "name": "warmup",
+          "performance_pass": null,
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 95.38849999080412,
+          "fps": 59.74447944403048,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99445634546994,
+          "latency_samples": 71,
+          "max_gap_ms": 43.30087499693036,
+          "name": "steady",
+          "performance_pass": true,
+          "send_queue_mean_ms": 5.295034974874372
+        },
+        {
+          "capture_to_decode_p95_ms": 1193.1136249913834,
+          "fps": 59.99425971593945,
+          "freeze_seconds": 1.121,
+          "generator_fps": 59.99425971593945,
+          "latency_samples": 71,
+          "max_gap_ms": 569.3709583429154,
+          "name": "bandwidth_drop",
+          "performance_pass": false,
+          "send_queue_mean_ms": 136.17907769879318
+        },
+        {
+          "capture_to_decode_p95_ms": 154.79845833033323,
+          "fps": 60.05846028650862,
+          "freeze_seconds": 0,
+          "generator_fps": 59.995964490164695,
+          "latency_samples": 96,
+          "max_gap_ms": 110.42808333877474,
+          "name": "recovery",
+          "performance_pass": true,
+          "send_queue_mean_ms": 13.6612108765925
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 20.116613991301882,
+          "freeze_seconds": 1.4300000000000002,
+          "generator_fps": 19.991666078312427,
+          "latency_samples": 0,
+          "max_gap_ms": 355.38762499345466,
+          "name": "idle",
+          "performance_pass": null,
+          "send_queue_mean_ms": 23.792016020864367
+        },
+        {
+          "capture_to_decode_p95_ms": 1295.3304999973625,
+          "fps": 58.744243879948975,
+          "freeze_seconds": 0.7599999999999998,
+          "generator_fps": 59.99412140930959,
+          "latency_samples": 70,
+          "max_gap_ms": 396.88166667474434,
+          "name": "resume_motion",
+          "performance_pass": false,
+          "send_queue_mean_ms": 115.40626311383929
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "cf2b552c93a7c82eb1be7d6e4717768cd030168f887725fce3056894f5d39d6b",
+          "MacCaster.debug.dylib": "e4e05cf40ba44a0f4c3c23e479d582156ce11a621d552d703951a5f8f2805c2f",
+          "__preview.dylib": "e1e0223001b0972b571c17d99ae0f3785b1f4768bc0e933d1ff03802220168e6"
+        },
+        "commit": "aa1cec4307df2cd229533988452f7e62336265ec",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "56131e9e1bb5f14264a0fbe9f24937d6cc399de6943b94a099f412792136fd3d",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "e7abfb19c2b2c7acfb289aa8e9bfadbfb6244d9af4f79b784882c07086e70035"
+      },
+      "retransmitted_packets_sent": 17396
+    },
+    {
+      "comparison_valid": true,
+      "functional_pass": true,
+      "nack_count": 8983,
+      "name": "extra_100ms_output_limit",
+      "note": "Original pacing factor, add 1.5x target over 100ms alongside original one-second cap; reverted.",
+      "packets_sent": 52849,
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 458.183791663032,
+          "fps": 54.15675710831877,
+          "freeze_seconds": null,
+          "generator_fps": 59.98902325844541,
+          "latency_samples": 32,
+          "max_gap_ms": 103.45762499491684,
+          "name": "warmup",
+          "performance_pass": null,
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 108.7799166853074,
+          "fps": 59.577743575725506,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99437115317813,
+          "latency_samples": 72,
+          "max_gap_ms": 90.66558332415298,
+          "name": "steady",
+          "performance_pass": true,
+          "send_queue_mean_ms": 3.433467749325462
+        },
+        {
+          "capture_to_decode_p95_ms": 1037.6305416866671,
+          "fps": 59.99666497707136,
+          "freeze_seconds": 1.106,
+          "generator_fps": 59.99666497707136,
+          "latency_samples": 72,
+          "max_gap_ms": 348.6422499991022,
+          "name": "bandwidth_drop",
+          "performance_pass": false,
+          "send_queue_mean_ms": 58.922167617072745
+        },
+        {
+          "capture_to_decode_p95_ms": 112.44879165315069,
+          "fps": 60.05835268921556,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99585700483553,
+          "latency_samples": 96,
+          "max_gap_ms": 145.9658749809023,
+          "name": "recovery",
+          "performance_pass": true,
+          "send_queue_mean_ms": 5.6370854760250095
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 20.11630210907908,
+          "freeze_seconds": 1.7989999999999997,
+          "generator_fps": 19.99135613324629,
+          "latency_samples": 0,
+          "max_gap_ms": 352.97766665462404,
+          "name": "idle",
+          "performance_pass": null,
+          "send_queue_mean_ms": 52.95554716981129
+        },
+        {
+          "capture_to_decode_p95_ms": 1001.6107499832287,
+          "fps": 59.41128932609128,
+          "freeze_seconds": 0.40500000000000025,
+          "generator_fps": 59.994569866459635,
+          "latency_samples": 71,
+          "max_gap_ms": 405.7895416626707,
+          "name": "resume_motion",
+          "performance_pass": false,
+          "send_queue_mean_ms": 186.6201788153982
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "47fa86d775546573d81f860083615d544a610feed9c60ccc4c6b61dc75c38d82",
+          "MacCaster.debug.dylib": "13eacf1caffc3d33c30b9aaac735f05b8131881900b0520cc525e55246a0904e",
+          "__preview.dylib": "5858ff8018118685c225e4550cc85ecf47ae0b554e06c708991f0f5d4e95fbbb"
+        },
+        "commit": "aa1cec4307df2cd229533988452f7e62336265ec",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "aa49f339a197ce8b4cf7f8522925882cbded903faf18a319168ccfb98e390188",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "c73055e350eb90e50ab24994e86b5b9ab97cd7a00f26f86dd4e676a0c2537501"
+      },
+      "retransmitted_packets_sent": 16361
+    },
+    {
+      "comparison_valid": false,
+      "functional_pass": false,
+      "nack_count": 7849,
+      "name": "encoded_output_input_gate",
+      "note": "Original pacing/one-second cap, gate raw input using actual encoded bytes and 50ms allowance; reverted with helper/test removed. Too few marker samples: invalid performance comparison.",
+      "packets_sent": 46580,
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 377.5597083149478,
+          "fps": 2.4996764134179843,
+          "freeze_seconds": null,
+          "generator_fps": 59.99223392203162,
+          "latency_samples": 1,
+          "max_gap_ms": 666.6762083477806,
+          "name": "warmup",
+          "performance_pass": null,
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 1050.8064583409578,
+          "fps": 2.41652495593886,
+          "freeze_seconds": 2.279,
+          "generator_fps": 59.996481664688936,
+          "latency_samples": 3,
+          "max_gap_ms": 1228.2900833233725,
+          "name": "steady",
+          "performance_pass": false,
+          "send_queue_mean_ms": 154.11868352494758
+        },
+        {
+          "capture_to_decode_p95_ms": 1295.1719166885596,
+          "fps": 0.5832803560856011,
+          "freeze_seconds": 7.968999999999999,
+          "generator_fps": 59.99455091166183,
+          "latency_samples": 1,
+          "max_gap_ms": 2511.8220416770782,
+          "name": "bandwidth_drop",
+          "performance_pass": false,
+          "send_queue_mean_ms": 516.268392832842
+        },
+        {
+          "capture_to_decode_p95_ms": 1412.658499990357,
+          "fps": 0.562457809804986,
+          "freeze_seconds": 2.578000000000001,
+          "generator_fps": 59.995499712531846,
+          "latency_samples": 1,
+          "max_gap_ms": 2577.9669166659005,
+          "name": "recovery",
+          "performance_pass": false,
+          "send_queue_mean_ms": 531.0945127264388
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 6.6223506458362404,
+          "freeze_seconds": 0,
+          "generator_fps": 19.99200194969431,
+          "latency_samples": 0,
+          "max_gap_ms": 1366.3198750000447,
+          "name": "idle",
+          "performance_pass": null,
+          "send_queue_mean_ms": 152.38962604920383
+        },
+        {
+          "capture_to_decode_p95_ms": 1546.9684999843594,
+          "fps": 1.166606882115923,
+          "freeze_seconds": 8.088000000000001,
+          "generator_fps": 59.99692536596176,
+          "latency_samples": 1,
+          "max_gap_ms": 1946.5230416681152,
+          "name": "resume_motion",
+          "performance_pass": false,
+          "send_queue_mean_ms": 307.46605386603073
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "cfe2e236a1742c1e5176bdea24c5aca194f8fb417bd559cc5d33da789c3e001e",
+          "MacCaster.debug.dylib": "2995ca1519eaf6954ad7ff106270387e10c0f05392795f2aa4b546a2487b1120",
+          "__preview.dylib": "8514d4f864de721867bead3855443349479cd559e27768f81764ab8df04d26fe"
+        },
+        "commit": "aa1cec4307df2cd229533988452f7e62336265ec",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "1fae861b1d4b8a6acbf6e5dcd357071cd44f81e6421f4353b5c41920a70a928c",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "cf8ec5a8d304cee29e08126e20ec4c3ef7064a2844b965d75ae28e86e8155ff0"
+      },
+      "retransmitted_packets_sent": 14522
+    }
+  ],
+  "note": "Step5 negative experiments. All changes reverted, production remains build26. First two valid single-run comparisons show no benefit; third lacks enough markers and must not be used for controlled quantitative comparison. No device install or release claim.",
+  "schema": 1,
+  "setup": {
+    "bitrate_ceiling": 100000000,
+    "control_interval_seconds": 2,
+    "fps_ceiling": 60,
+    "height": 1440,
+    "idle_source_fps": 20,
+    "network": "local UDP impairment",
+    "observation_interval_seconds": 1,
+    "os": "版本27.2（版号26B123）",
+    "video": "native H264 SRTP",
+    "width": 1920
+  }
+}
