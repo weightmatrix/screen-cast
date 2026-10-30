@@ -125,3 +125,22 @@ python3 Tests/Benchmarks/runner.py --app /tmp/touping-unified/Build/Products/Deb
 单轮结果表明独立逐包抖动在此负载下制造约45–50%视频包乱序，显著放大重传；不能直接当作典型Wi-Fi。保序后仍有带宽骤降与静止恢复的延迟，因此也不能把全部卡顿归因重传。额外只读细查在恒定20Mbps/FIFO下无链路丢包，仍有约1635ms重新运动P95；约100ms内多张170–260KB非关键帧集中输出。纠正20→60fps声明滞后的候选仍有突发，延迟未改善，已撤销。
 
 13项定向检查通过；Mac/iOS Debug及Mac Release构建通过。生产参数和源码版本保持26，不替换设备。下一步应独立验证VT短窗口限制是否真实生效及瞬时输出控制；属性返回成功不能代替输出测量。原乱序场景保留为压力证据，第5步尚未验收，未进入复制优化。
+
+## 编码器瞬时输出验证（未采用新参数）
+
+独立工具`encoder_burst_probe.swift`只运行本机硬件H.264：3秒运动、4秒静止、4秒重新运动，1920×1440、固定15Mbps，共500帧。输入为本套生成的document.png，不采集用户屏幕。它不包含WebRTC、网络、应用的两/三帧在途上限，也不作画质验收；不能代替App性能基线。示例（先将TP_PROBE_IMAGE设为一次本机测试生成的PNG绝对路径）：
+
+```sh
+swiftc Tests/Benchmarks/encoder_burst_probe.swift -o /tmp/touping-encoder-burst-probe
+/tmp/touping-encoder-burst-probe 1 invalid "$TP_PROBE_IMAGE"
+/tmp/touping-encoder-burst-probe 0.1 valid "$TP_PROBE_IMAGE" long-first
+/tmp/touping-encoder-burst-probe 0.1 valid "$TP_PROBE_IMAGE" vbr
+```
+
+`valid/invalid`控制是否提供明确帧时长；可选`long-first/short-first`设置两个窗口的顺序；`vbr`需要macOS26+，使用原生VBR、等于目标的VBVMaxBitRate和100ms缓冲，不与AverageBitRate/DataRateLimits混用。输出仅聚合数据：设置/回读状态、硬件状态、恢复第一秒的帧大小及任意100ms累计、在途峰值和末尾排空时间，不保存媒体字节。
+
+整理结果在`encoder-burst-investigation.json`。早期探针版本逐步增加选项，未冻结首六次二进制，结果仅作探索；最终工具的源码、二进制、素材指纹单独保存。属性接受并回读100ms限制，不等于逐个100ms都严格符合额度。独立探针长窗口恢复突发约0.92–1.20MB；短窗口配合明确帧时长约0.32–0.40MB，但不能外推到动态网络。
+
+三项完整App诊断（恒定20Mbps、FIFO交付）：短长窗口+明确帧时长导致恢复约1.7fps；VBR+两帧在途恢复P95约176ms、稳定34.2fps；VBR+三帧在途恢复P95约94ms、稳定36.2fps。三者均未达到原目标，全部撤销，没有把低延迟与帧率回退交换后发布。VBR确实启用、硬件状态为true，但回调耗时约20–56ms，包含内部排队，不能直接视为纯硬件计算时间。
+
+按项目三次试调止损暂停追加参数。最终只读固定码率VBR探针500帧全部完成，最多三帧在途、末尾无积压，不能据App回调时长就认定硬件跑不了60fps。下一轮优先验证动态码率/FPS更新是否频繁重配置，再评估速度与解码画质；不能无限加在途帧。保持源码26、现有协议和设备安装版；Mac Debug已恢复构建，独立工具编译及500帧参考检查通过。第5步仍未通过。

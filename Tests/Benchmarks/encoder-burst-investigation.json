@@ -1,0 +1,642 @@
+{
+  "conclusions": [
+    "Short-window DataRateLimits is accepted/readable and reduces standalone bursts, but valid duration + two limits regresses app resume to ~1.7fps; rejected.",
+    "VBR/VBV mode reduces resume P95 to176ms with two inflight and94ms with three, but steady fps34/36 is below the unchanged50fps goal and build26 baseline; both rejected.",
+    "VBR encoder callback durations around20-56ms and busy-driven60->30fps retreats require pipeline/throughput and quality investigation. An extra retained frame did not solve it.",
+    "No device install, quality acceptance, server change or production parameter change. Step5 remains incomplete.",
+    "Read-only final fixed-rate VBR probe measured max_inflight=3 and tail_output_ms=0. This is not an App inflight-limit or throughput acceptance result.",
+    "Fixed-rate VBR completed500frames with max3inflight and no tail backlog, so do not conclude hardware itself cannot sustain60fps. Prioritize testing dynamic rate/FPS property-update and reconfiguration overhead; hypothesis not established causally."
+  ],
+  "final_probe_provenance": {
+    "binary_sha256": "6fac74ef17bf30d7e8de7f7748b1d0ba620cc6d90178c330dc388d9b3430fa56",
+    "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+    "source_sha256": "78df24fa3cb3cdbbc816b29eb2f627642344a4510fe329cae88c273b0154a446"
+  },
+  "full_link_trials": [
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "short_limits_valid_duration",
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 431.74779164837673,
+          "encode_mean_ms": null,
+          "fps": 44.49149162026552,
+          "freeze_seconds": null,
+          "generator_fps": 59.9885280273243,
+          "latency_samples": 26,
+          "max_gap_ms": 231.5402083331719,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 140.6109583331272,
+          "encode_mean_ms": 7.108108108108108,
+          "fps": 58.07797039733284,
+          "freeze_seconds": 0,
+          "generator_fps": 59.9944600948058,
+          "latency_samples": 70,
+          "max_gap_ms": 167.14320835308172,
+          "name": "steady",
+          "send_queue_mean_ms": 3.9498241662023363
+        },
+        {
+          "capture_to_decode_p95_ms": 105.66925001330674,
+          "encode_mean_ms": 8.423976608187134,
+          "fps": 55.94985998902715,
+          "freeze_seconds": 0,
+          "generator_fps": 59.946278559671946,
+          "latency_samples": 67,
+          "max_gap_ms": 115.06004168768413,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 3.9433320826507448
+        },
+        {
+          "capture_to_decode_p95_ms": 218.66129167028703,
+          "encode_mean_ms": 8.015300546448085,
+          "fps": 57.06196073472766,
+          "freeze_seconds": 0.21299999999999997,
+          "generator_fps": 59.99943297408385,
+          "latency_samples": 91,
+          "max_gap_ms": 213.9002083276864,
+          "name": "recovery",
+          "send_queue_mean_ms": 6.87925328147788
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "encode_mean_ms": 8.106951871657763,
+          "fps": 19.991687102435122,
+          "freeze_seconds": 1.0190000000000001,
+          "generator_fps": 19.991687102435122,
+          "latency_samples": 0,
+          "max_gap_ms": 781.564333330607,
+          "name": "idle",
+          "send_queue_mean_ms": 6.760576891105561
+        },
+        {
+          "capture_to_decode_p95_ms": 2127.7489166823216,
+          "encode_mean_ms": 10.696969696969635,
+          "fps": 1.6665787719942937,
+          "freeze_seconds": 6.180000000000001,
+          "generator_fps": 59.996835791794574,
+          "latency_samples": 2,
+          "max_gap_ms": 2167.3591666622087,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 1703.9420493654823
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "415dfc95ca4afac70cb3b0528fa0209cd3b3cdc34180d20743fe4ea55290cf8f",
+          "MacCaster.debug.dylib": "29865ccc7862e9efe2ad796bb71c4ece435a684843dfd1d7e45924dfdf83510a",
+          "__preview.dylib": "2136ab1413afaf8a010cb2bec2fce8e56886b869c80f2e0b98bb29f4d2429337"
+        },
+        "commit": "4b7ff4dfdcab9a38c59c233d4d7f575d2fd94ad0",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "817e03f23f03ce55d21eb73bcc420434a0fd5d2d99db63cf6576c43c2958ba42",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "1b4dfed3eea4d383c93ed29e54bb77608fdf4670b40cf0dade68285e333f1a8c"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "vbr_two_inflight",
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 568.4984583349433,
+          "encode_mean_ms": null,
+          "fps": 30.16329549944345,
+          "freeze_seconds": null,
+          "generator_fps": 59.993294916020126,
+          "latency_samples": 18,
+          "max_gap_ms": 569.9678333185147,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 161.7592916591093,
+          "encode_mean_ms": 25.88755980861244,
+          "fps": 34.24661862208704,
+          "freeze_seconds": 0.957,
+          "generator_fps": 59.99407641825467,
+          "latency_samples": 41,
+          "max_gap_ms": 295.29495834140107,
+          "name": "steady",
+          "send_queue_mean_ms": 0.41844352096713155
+        },
+        {
+          "capture_to_decode_p95_ms": 119.24679166986607,
+          "encode_mean_ms": 24.783567134268537,
+          "fps": 41.56450850765837,
+          "freeze_seconds": 0.20000000000000018,
+          "generator_fps": 59.63965549395469,
+          "latency_samples": 49,
+          "max_gap_ms": 199.84641668270342,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 2.1647295684113854
+        },
+        {
+          "capture_to_decode_p95_ms": 84.19116667937487,
+          "encode_mean_ms": 20.741463414634147,
+          "fps": 50.93395040768455,
+          "freeze_seconds": 0.22599999999999998,
+          "generator_fps": 59.99581888512536,
+          "latency_samples": 81,
+          "max_gap_ms": 225.9265833417885,
+          "name": "recovery",
+          "send_queue_mean_ms": 1.048553998310224
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "encode_mean_ms": 26.771428571428583,
+          "fps": 19.994354614852465,
+          "freeze_seconds": 0,
+          "generator_fps": 19.994354614852465,
+          "latency_samples": 0,
+          "max_gap_ms": 129.86937499954365,
+          "name": "idle",
+          "send_queue_mean_ms": 1.6176784824148396
+        },
+        {
+          "capture_to_decode_p95_ms": 176.09554165392183,
+          "encode_mean_ms": 19.960876369327078,
+          "fps": 53.57835017473812,
+          "freeze_seconds": 0.22399999999999998,
+          "generator_fps": 59.99442010235061,
+          "latency_samples": 64,
+          "max_gap_ms": 223.53383331210352,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 12.656432312588034
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "03dc905fbef9f674377010b62c47fca9c944ba00bc6a9d494aca6709dfef491e",
+          "MacCaster.debug.dylib": "73d11c2ec0080603fd59559d5cc70772b17dfb2347de7c5cd8e8b1f7bed648df",
+          "__preview.dylib": "a7746cc1995ccee8b6ee56ecf7b84343be99f07eec747b5dac40a111611966e9"
+        },
+        "commit": "4b7ff4dfdcab9a38c59c233d4d7f575d2fd94ad0",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "824dbac90d02942a84572b75e38179c4a8e922f4845bf061d72dace7059aba4c",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "f28883ee22ba173526318226f454bd797ef2c92c4daeba4224c08b9bbb800e55"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "vbr_three_inflight",
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 341.03270832565613,
+          "encode_mean_ms": null,
+          "fps": 31.32861315553959,
+          "freeze_seconds": null,
+          "generator_fps": 59.99096136167155,
+          "latency_samples": 18,
+          "max_gap_ms": 102.4909999978263,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 116.68254164396785,
+          "encode_mean_ms": 35.95871559633027,
+          "fps": 36.16273095614134,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99347071064923,
+          "latency_samples": 44,
+          "max_gap_ms": 183.98204166442156,
+          "name": "steady",
+          "send_queue_mean_ms": 0.1806386424990371
+        },
+        {
+          "capture_to_decode_p95_ms": 115.81558332545683,
+          "encode_mean_ms": 28.650334075723823,
+          "fps": 37.832393697590625,
+          "freeze_seconds": 0.243,
+          "generator_fps": 59.99850982877808,
+          "latency_samples": 45,
+          "max_gap_ms": 242.39183333702385,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 0.7510680435884426
+        },
+        {
+          "capture_to_decode_p95_ms": 127.72679165937006,
+          "encode_mean_ms": 25.704678362573098,
+          "fps": 42.871849923794265,
+          "freeze_seconds": 0.237,
+          "generator_fps": 59.9955917300911,
+          "latency_samples": 68,
+          "max_gap_ms": 234.32112502632663,
+          "name": "recovery",
+          "send_queue_mean_ms": 3.360757725501115
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "encode_mean_ms": 27.81818181818185,
+          "fps": 20.120499924429623,
+          "freeze_seconds": 0,
+          "generator_fps": 19.995527875209564,
+          "latency_samples": 0,
+          "max_gap_ms": 159.63316668057814,
+          "name": "idle",
+          "send_queue_mean_ms": 3.142697102425869
+        },
+        {
+          "capture_to_decode_p95_ms": 94.13345833308995,
+          "encode_mean_ms": 28.709565217391297,
+          "fps": 47.93401400308001,
+          "freeze_seconds": 0.265,
+          "generator_fps": 59.16854853505188,
+          "latency_samples": 58,
+          "max_gap_ms": 265.0279583176598,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 7.333326916604968
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "0c7e496480bb0ddd16482bfe923382ede5f8fac562b1346c61decf9ae08e7343",
+          "MacCaster.debug.dylib": "b1868129f0eb106ff98bde0902ee52dbb0ef27a256e9903df4982a5900e52110",
+          "__preview.dylib": "236bf08ebb16efe55504cacf0cdae10608ed532fefec414ae39cedae6ddb3f23"
+        },
+        "commit": "4b7ff4dfdcab9a38c59c233d4d7f575d2fd94ad0",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "b1e045332681c6626b1b814eb61aba91e5c2c95dc8328a860f298acf31b66fd2",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "85bc8035d7ab789bc5bba6822dd7ec6fd7ad960b02a9c8209eedf2d7ef69c770"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    }
+  ],
+  "note": "Encoder burst investigation. Three full-link candidates rejected and reverted; production remains build26. All are diagnostic steady-ordered runs, never original acceptance passes.",
+  "preflight_vbr_readback": {
+    "buffer_seconds": 0.1,
+    "hardware": true,
+    "set_and_copy_status": 0,
+    "variable_bitrate": 15000000,
+    "vbv_max_bitrate": 15000000
+  },
+  "probe_limitations": [
+    "Encoder-only, no WebRTC/network and no application inflight bound. Fixed15Mbps, immediate FPS hints, panning path differs from native scenario.",
+    "Exploratory probe CLI evolved; first six probe binaries were not frozen. Do not treat cross-mode single-run differences as precise repeatable improvements.",
+    "100ms aggregates can overshoot a model limit at frame boundaries. Property readback is not a throughput, delay or quality guarantee."
+  ],
+  "probes": [
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 1,
+        "prepare": 0,
+        "readback": [
+          2812500,
+          1
+        ],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 1197256,
+        "resume_max_100ms_pts_bytes": 1197256,
+        "resume_max_frame_bytes": 233214,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "AverageBitRate": 0,
+          "DataRateLimits": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0
+        },
+        "valid_duration": false
+      },
+      "name": "second-invalid"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 0.1,
+        "prepare": 0,
+        "readback": [
+          281250,
+          0.1
+        ],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 484211,
+        "resume_max_100ms_pts_bytes": 484211,
+        "resume_max_frame_bytes": 198500,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "AverageBitRate": 0,
+          "DataRateLimits": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0
+        },
+        "valid_duration": false
+      },
+      "name": "short-invalid"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 0.1,
+        "prepare": 0,
+        "readback": [
+          281250,
+          0.1
+        ],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 397583,
+        "resume_max_100ms_pts_bytes": 397583,
+        "resume_max_frame_bytes": 147992,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "AverageBitRate": 0,
+          "DataRateLimits": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0
+        },
+        "valid_duration": true
+      },
+      "name": "short-valid"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 0.1,
+        "prepare": 0,
+        "readback": [
+          2812500,
+          1,
+          281250,
+          0.1
+        ],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 323942,
+        "resume_max_100ms_pts_bytes": 323942,
+        "resume_max_frame_bytes": 109048,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "AverageBitRate": 0,
+          "DataRateLimits": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0
+        },
+        "valid_duration": true
+      },
+      "name": "both-long-first"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 0.1,
+        "prepare": 0,
+        "readback": [
+          281250,
+          0.1,
+          2812500,
+          1
+        ],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 58,
+        "resume_max_100ms_arrival_bytes": 328899,
+        "resume_max_100ms_pts_bytes": 328899,
+        "resume_max_frame_bytes": 114107,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "AverageBitRate": 0,
+          "DataRateLimits": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0
+        },
+        "valid_duration": true
+      },
+      "name": "both-short-first"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 0.1,
+        "mode": "vbr",
+        "prepare": 0,
+        "readback": [],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 350451,
+        "resume_max_100ms_pts_bytes": 366055,
+        "resume_max_frame_bytes": 216943,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0,
+          "VBVBufferDuration": 0,
+          "VBVMaxBitRate": 0,
+          "VariableBitRate": 0
+        },
+        "valid_duration": true
+      },
+      "name": "vbr"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 1,
+        "max_inflight": 3,
+        "mode": "average",
+        "prepare": 0,
+        "readback": [
+          2812500,
+          1
+        ],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 918223,
+        "resume_max_100ms_pts_bytes": 918223,
+        "resume_max_frame_bytes": 230226,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "AverageBitRate": 0,
+          "DataRateLimits": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0
+        },
+        "tail_output_ms": 2.5444166676606983,
+        "valid_duration": false,
+        "vbv_readback": {}
+      },
+      "name": "final-baseline"
+    },
+    {
+      "metrics": {
+        "dropped": 0,
+        "errors": 0,
+        "frames": 500,
+        "hardware": true,
+        "hardware_status": 0,
+        "limit_seconds": 0.1,
+        "max_inflight": 3,
+        "mode": "vbr",
+        "prepare": 0,
+        "readback": [],
+        "readback_status": 0,
+        "requested_100ms_bytes": 281250,
+        "resume_first_second_frames": 60,
+        "resume_max_100ms_arrival_bytes": 366899,
+        "resume_max_100ms_pts_bytes": 357851,
+        "resume_max_frame_bytes": 216943,
+        "set_status": {
+          "AllowFrameReordering": 0,
+          "ExpectedFrameRate": 0,
+          "ExpectedFrameRate-idle": 0,
+          "ExpectedFrameRate-motion": 0,
+          "ExpectedFrameRate-resume": 0,
+          "ProfileLevel": 0,
+          "RealTime": 0,
+          "VBVBufferDuration": 0,
+          "VBVMaxBitRate": 0,
+          "VariableBitRate": 0
+        },
+        "tail_output_ms": 0,
+        "valid_duration": true,
+        "vbv_readback": {
+          "VBVBufferDuration": {
+            "status": 0,
+            "value": 0.1
+          },
+          "VBVMaxBitRate": {
+            "status": 0,
+            "value": 15000000
+          },
+          "VariableBitRate": {
+            "status": 0,
+            "value": 15000000
+          }
+        }
+      },
+      "name": "final_vbr_observation"
+    }
+  ],
+  "schema": 1
+}
