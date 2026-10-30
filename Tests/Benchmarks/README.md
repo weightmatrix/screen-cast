@@ -98,3 +98,30 @@ python3 Tests/Benchmarks/compare.py before/summary.json after/summary.json
 `pacing-experiments.json`记录三项顺序实验，均已撤销：提高pacer倍率、额外100ms编码硬限速、基于实际编码字节的输入节流。前两项对照有效但没有改善弱网/重新运动延迟；第三项严重低帧率导致条码样本不足，functional_pass/comparison_valid均false，禁止作为有效量化对照。
 
 末次统计重传包约占发送包31%，有大量NACK。测试链路本来包含抖动/队列丢包，这只是后续定位线索，不证明全是错误重传。未修改协议条件或放宽指标；SDK未包含旧SendNackDelayMs开关，未添加它。按三次失败止损规则停止试调，下一轮先查重传与队列来源。生产源码与版本保持26，Mac Debug测试产品已恢复构建，未更换设备安装版。
+
+## 第5步：包级诊断与2×2对照
+
+`packet_trace.py`只读取SRTP明文RTP头及Debug信令给出的PT→编码映射，区分H.264/RTX/其他，按阶段记录收到、链路丢弃、成功sendto和同一SSRC的链路乱序。保留每流最近4096个身份、最多32流，超限使诊断无效。测试不解密媒体、不保存包内容、不修改生产传输。RTX里的原始包序号已加密，不能逐包证明RTX对应哪个原包；sendto成功也不等于对端收到/解码。
+
+默认命令仍按原`protocol.json`运行，独立逐包±2ms抖动及验收阈值不变。另有三个诊断条件：
+
+```sh
+python3 Tests/Benchmarks/runner.py --app /tmp/touping-unified/Build/Products/Debug/MacCaster.app/Contents/MacOS/MacCaster --diagnostic-profile ordered
+python3 Tests/Benchmarks/runner.py --app /tmp/touping-unified/Build/Products/Debug/MacCaster.app/Contents/MacOS/MacCaster --diagnostic-profile steady
+python3 Tests/Benchmarks/runner.py --app /tmp/touping-unified/Build/Products/Debug/MacCaster.app/Contents/MacOS/MacCaster --diagnostic-profile steady-ordered
+```
+
+`ordered`把每包采样到期时间向前一包到期时间取最大值，保序但可能小幅成批交付；`steady`全程20Mbps，阶段时长/运动模式仍按原计划。它们均记录不同setup，强制comparison_valid/performance_pass=false，不替代原验收；diagnostic_valid单独检查输入/路径/观测有效性。退出2也可表示诊断有效但不是验收通过，1才表示设施/诊断无效。不同profile不得用原compare.py算性能提升。原始输出仍只留/tmp。
+
+整理证据见`packet-diagnosis.json`。四组主实验同二进制；后续增加帧率/大帧只读日志的运行及已撤销帧率修复候选各有独立代码指纹。
+
+| 条件 | 链路乱序视频包 | 链路丢弃视频包 | 送出RTX | 重新运动P95 |
+|---|---:|---:|---:|---:|
+| 原20→4→20Mbps，逐包抖动 | 15340 | 80 | 15678 | 1634ms |
+| 原带宽变化，FIFO交付 | 0 | 494 | 767 | 764ms |
+| 恒定20Mbps，逐包抖动 | 23919 | 0 | 26394 | 1256ms |
+| 恒定20Mbps，FIFO交付 | 0 | 55 | 356 | 1556ms |
+
+单轮结果表明独立逐包抖动在此负载下制造约45–50%视频包乱序，显著放大重传；不能直接当作典型Wi-Fi。保序后仍有带宽骤降与静止恢复的延迟，因此也不能把全部卡顿归因重传。额外只读细查在恒定20Mbps/FIFO下无链路丢包，仍有约1635ms重新运动P95；约100ms内多张170–260KB非关键帧集中输出。纠正20→60fps声明滞后的候选仍有突发，延迟未改善，已撤销。
+
+13项定向检查通过；Mac/iOS Debug及Mac Release构建通过。生产参数和源码版本保持26，不替换设备。下一步应独立验证VT短窗口限制是否真实生效及瞬时输出控制；属性返回成功不能代替输出测量。原乱序场景保留为压力证据，第5步尚未验收，未进入复制优化。

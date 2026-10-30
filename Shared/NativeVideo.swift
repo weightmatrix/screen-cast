@@ -123,8 +123,14 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         rate = max(1, bitrateKbit); fps = max(1, framerate)
         guard let session else { return 0 }
         // A source becoming idle must not permanently lower the recovery ceiling.
-        lock.lock(); pacingUpper = max(pacingUpper, Int(fps)); let effectiveFPS = UInt32(min(Int(fps), pacingFPS)); lock.unlock()
+        lock.lock(); pacingUpper = max(pacingUpper, Int(fps)); let inputLimitFPS = pacingFPS
+        let effectiveFPS = UInt32(min(Int(fps), inputLimitFPS)); lock.unlock()
         guard appliedRate != rate || appliedFPS != effectiveFPS else { return 0 }
+        #if DEBUG
+        if appliedFPS != effectiveFPS {
+            PerformanceDisk.shared.write("native.encoder rateApply rateKbit=\(rate) expectedFPS=\(effectiveFPS) inputLimitFPS=\(inputLimitFPS)")
+        }
+        #endif
         let status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: (Int(rate) * 1000) as CFNumber)
         let frameStatus = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: Int(effectiveFPS) as CFNumber)
         // Bound one-second output to 1.5x the current target, as in the native SDK.
@@ -230,6 +236,11 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             offset += length
         }
         guard offset == size, !data.isEmpty else { return }
+        #if DEBUG
+        if data.count >= 131072 {
+            PerformanceDisk.shared.write("native.encoder largeFrame bytes=\(data.count) key=\(key) sourceNS=\(ticket.frame.timeStampNs)")
+        }
+        #endif
         let encoded = RTCEncodedImage()
         encoded.buffer = data; encoded.encodedWidth = Int32(width); encoded.encodedHeight = Int32(height)
         encoded.timeStamp = UInt32(bitPattern: ticket.frame.timeStamp)

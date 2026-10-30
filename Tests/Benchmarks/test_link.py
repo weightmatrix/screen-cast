@@ -1,10 +1,12 @@
 import socket
+import struct
 import sys
 import time
 import unittest
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from runner import Link, PHASES, summarize
+from packet_trace import PacketTrace
 
 
 class LinkChecks(unittest.TestCase):
@@ -67,6 +69,64 @@ class LinkChecks(unittest.TestCase):
         self.assertEqual(self.link.counts["forwarded"], 0)
 
 
+class PacketTraceChecks(unittest.TestCase):
+    def packet(self, seq, pt=96, ssrc=1):
+        return struct.pack(">BBHII", 128, pt, seq, 123, ssrc) + b"encrypted"
+
+    def test_wrap_input_and_link_reordering_and_actual_drops(self):
+        trace = PacketTrace(); trace.maps[0] = {"96": "h264", "97": "rtx"}
+        a = trace.receive(0, self.packet(65534))
+        b = trace.receive(0, self.packet(1))
+        c = trace.receive(0, self.packet(65535))
+        trace.outcome(b, "forwarded"); trace.outcome(a, "forwarded")
+        trace.outcome(c, "queue_dropped")
+        rtx = trace.receive(0, self.packet(0, 97, 2)); trace.outcome(rtx, "forwarded")
+        trace.outcome(trace.receive(0, self.packet(1)), "forwarded")
+        self.assertEqual(trace.totals["media_link_reordered"], 1)
+        self.assertEqual(trace.totals["media_input_sequence_reordered"], 1)
+        self.assertEqual(trace.totals["media_queue_dropped"], 1)
+        self.assertEqual(trace.totals["media_repeated_identity_forwarded"], 1)
+        self.assertEqual(trace.totals["rtx_forwarded"], 1)
+        self.assertIsNone(trace.receive(0, b"\x80\xc8" + b"x" * 18))
+        self.assertIsNone(trace.receive(0, b"\x16" + b"x" * 18))
+
+    def test_bounded_streams_and_recent_identities(self):
+        trace = PacketTrace()
+        for n in range(4200):
+            trace.outcome(trace.receive(0, self.packet(n)), "forwarded")
+        self.assertEqual(len(trace.streams[(0, 1)]["seen"]), 4096)
+        for n in range(2, 35):
+            trace.receive(0, self.packet(0, ssrc=n))
+        self.assertEqual(len(trace.streams), 32)
+        self.assertEqual(trace.totals["stream_overflow"], 2)
+
+    def test_real_link_can_preserve_or_reorder_same_packet_sequence(self):
+        for ordered in (False, True):
+            link = Link("127.0.0.1", ordered=ordered)
+            a, b = socket.socket(socket.AF_INET, socket.SOCK_DGRAM), socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            try:
+                for sock in (a, b):
+                    sock.bind(("127.0.0.1", 0)); sock.setblocking(False)
+                link.configure(dict(sender=a.getsockname(), receiver=b.getsockname(), rtp_maps={"0": {"96": "h264"}},
+                    profile=dict(mbps=20, delay_ms=70, jitter_ms=60, queue_ms=150)))
+                for n in range(50): a.sendto(self.packet(n), ("127.0.0.1", link.ports[1]))
+                received = []; end = time.monotonic() + 1
+                while len(received) < 50 and time.monotonic() < end:
+                    link.step(0.001)
+                    try:
+                        while True: received.append(struct.unpack_from(">H", b.recvfrom(65535)[0], 2)[0])
+                    except BlockingIOError: pass
+                self.assertEqual(len(received), 50)
+                if ordered:
+                    self.assertEqual(received, list(range(50)))
+                    self.assertEqual(link.trace.totals["media_link_reordered"], 0)
+                else:
+                    self.assertNotEqual(received, list(range(50)))
+                    self.assertGreater(link.trace.totals["media_link_reordered"], 0)
+            finally:
+                link.close(); a.close(); b.close()
+
+
 class ReportChecks(unittest.TestCase):
     def link(self):
         return dict(totals=dict(bytes_forwarded=100000000), transitions=[
@@ -105,6 +165,20 @@ class ReportChecks(unittest.TestCase):
         self.assertTrue(bad["functional_pass"])
         self.assertFalse(bad["performance_pass"])
         self.assertIsNone(next(p for p in bad["phases"] if p["name"] == "recovery")["sustained_45fps_recovery_seconds"])
+
+    def test_diagnostic_conditions_are_not_original_acceptance(self):
+        report = self.fixture()
+        report["setup"] = {"diagnostic_profile": "steady-ordered"}
+        result = summarize(report, self.link())
+        self.assertTrue(result["diagnostic_valid"])
+        self.assertFalse(result["comparison_valid"])
+        self.assertFalse(result["performance_pass"])
+
+    def test_missing_or_unclassified_packet_observation_is_not_valid_diagnosis(self):
+        link = self.link(); link["packet_trace"] = {"totals": {}}
+        self.assertFalse(summarize(self.fixture(), link)["diagnostic_valid"])
+        link["packet_trace"] = {"totals": {"media_received": 10, "unknown_received": 1}}
+        self.assertFalse(summarize(self.fixture(), link)["diagnostic_valid"])
 
     def test_slow_generator_invalidates_comparison(self):
         report = self.fixture()

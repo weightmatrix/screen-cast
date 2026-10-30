@@ -1,0 +1,1189 @@
+{
+  "conclusions": [
+    "Independent per-packet +/-2ms propagation jitter creates roughly 45-50% media packet reordering in this workload. Preserve this as stress evidence, do not assume it represents typical Wi-Fi.",
+    "At constant20Mbps with independent jitter, the link dropped no media/RTX datagrams yet forwarded 26394 RTX datagrams. FIFO delivery markedly reduced RTX; not a decrypted packet-to-original association or proof of zero endpoint kernel loss.",
+    "FIFO constant-bandwidth runs still show about1.56-1.64s resume P95. Large delta frames burst near motion onset. Correcting the stale FPS expectation did not eliminate burst/latency and was reverted.",
+    "Original protocol and acceptance thresholds unchanged. Alternate diagnostics are explicitly not original acceptance; step5 and image-quality/device regressions remain incomplete."
+  ],
+  "experiments": [
+    {
+      "comparison_valid": true,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "standard",
+      "note": "Read-only diagnostic; no production encoder/pacing changes.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 3811,
+          "media_link_reordered": 339,
+          "media_queue_dropped": 80,
+          "media_received": 3886,
+          "non_rtp_received": 780,
+          "rtx_forwarded": 583,
+          "rtx_link_reordered": 25,
+          "rtx_queue_dropped": 70,
+          "rtx_received": 648
+        },
+        "idle": {
+          "media_forwarded": 1037,
+          "media_link_reordered": 451,
+          "media_received": 1036,
+          "non_rtp_received": 470,
+          "rtx_forwarded": 612,
+          "rtx_link_reordered": 205,
+          "rtx_received": 612
+        },
+        "negotiation": {
+          "non_rtp_received": 20
+        },
+        "recovery": {
+          "media_forwarded": 3942,
+          "media_link_reordered": 1565,
+          "media_received": 3936,
+          "non_rtp_received": 1503,
+          "rtx_forwarded": 1563,
+          "rtx_link_reordered": 409,
+          "rtx_received": 1563
+        },
+        "resume_motion": {
+          "media_forwarded": 8668,
+          "media_link_reordered": 4519,
+          "media_received": 8668,
+          "non_rtp_received": 3001,
+          "rtx_forwarded": 4484,
+          "rtx_link_reordered": 2172,
+          "rtx_received": 4484
+        },
+        "steady": {
+          "media_forwarded": 10284,
+          "media_link_reordered": 5137,
+          "media_received": 10253,
+          "non_rtp_received": 3531,
+          "rtx_forwarded": 5176,
+          "rtx_link_reordered": 2225,
+          "rtx_received": 5159
+        },
+        "warmup": {
+          "media_forwarded": 6395,
+          "media_link_reordered": 3329,
+          "media_received": 6438,
+          "non_rtp_received": 2121,
+          "rtx_forwarded": 3260,
+          "rtx_link_reordered": 1577,
+          "rtx_received": 3282
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 34137,
+        "media_link_reordered": 15340,
+        "media_queue_dropped": 80,
+        "media_received": 34217,
+        "non_rtp_received": 11426,
+        "rtx_forwarded": 15678,
+        "rtx_link_reordered": 6613,
+        "rtx_queue_dropped": 70,
+        "rtx_received": 15748
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 662.4100416665897,
+          "fps": 44.82806230021478,
+          "freeze_seconds": null,
+          "generator_fps": 59.99294582928373,
+          "latency_samples": 26,
+          "max_gap_ms": 75.5068333237432,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 108.41566667659208,
+          "fps": 60.411046970917035,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99441906077278,
+          "latency_samples": 71,
+          "max_gap_ms": 65.96524998894893,
+          "name": "steady",
+          "send_queue_mean_ms": 22.025878917550628
+        },
+        {
+          "capture_to_decode_p95_ms": 552.5111250171904,
+          "fps": 59.9943944820779,
+          "freeze_seconds": 0.526,
+          "generator_fps": 59.9943944820779,
+          "latency_samples": 72,
+          "max_gap_ms": 525.9148750046734,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 22.750555276381927
+        },
+        {
+          "capture_to_decode_p95_ms": 122.43454167037271,
+          "fps": 59.87088886565522,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99588028291128,
+          "latency_samples": 96,
+          "max_gap_ms": 107.1784166560974,
+          "name": "recovery",
+          "send_queue_mean_ms": 9.490375473399444
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 19.116832034792406,
+          "freeze_seconds": 3.7090000000000005,
+          "generator_fps": 19.99145833703781,
+          "latency_samples": 0,
+          "max_gap_ms": 526.3695000030566,
+          "name": "idle",
+          "send_queue_mean_ms": 76.00015696062125
+        },
+        {
+          "capture_to_decode_p95_ms": 1634.4949583290145,
+          "fps": 58.74473051608874,
+          "freeze_seconds": 0.242,
+          "generator_fps": 59.994618399409774,
+          "latency_samples": 71,
+          "max_gap_ms": 241.14495833055116,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 441.7853139013453
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "818aba311a27a73fcf5c7f8b3887fc52044800e3189b01ea4377c566b4b5f1f5",
+          "MacCaster.debug.dylib": "b0c67b3cd10fffbe26dae38b0d58575529bbc7beb8f420b82ee9d0e6216469cb",
+          "__preview.dylib": "e576f2a54edb5c7c6fb0bbddf899881cfed4914ca4df8453a74d07f287fa477a"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "cb92d6b4296aba6c798da4a4f17fdb727cde53de3859e21736180dcab7869eb5",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "25835f121d40b00eec71a68411e5f788d8a400dbc7e90052a2e5ea55801f72c3"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "ordered",
+      "note": "Read-only diagnostic; no production encoder/pacing changes.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 3976,
+          "media_queue_dropped": 416,
+          "media_received": 4385,
+          "non_rtp_received": 481,
+          "rtx_forwarded": 471,
+          "rtx_queue_dropped": 222,
+          "rtx_received": 693
+        },
+        "idle": {
+          "media_forwarded": 961,
+          "media_received": 952,
+          "non_rtp_received": 216,
+          "rtx_forwarded": 90,
+          "rtx_received": 90
+        },
+        "negotiation": {
+          "non_rtp_received": 20
+        },
+        "recovery": {
+          "media_forwarded": 5946,
+          "media_received": 5948,
+          "non_rtp_received": 522
+        },
+        "resume_motion": {
+          "media_forwarded": 9805,
+          "media_received": 9805,
+          "non_rtp_received": 531
+        },
+        "steady": {
+          "media_forwarded": 23010,
+          "media_queue_dropped": 78,
+          "media_received": 23076,
+          "non_rtp_received": 882,
+          "rtx_forwarded": 203,
+          "rtx_received": 203
+        },
+        "warmup": {
+          "media_forwarded": 7830,
+          "media_received": 7856,
+          "non_rtp_received": 332,
+          "rtx_forwarded": 3,
+          "rtx_received": 3
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 51528,
+        "media_queue_dropped": 494,
+        "media_received": 52022,
+        "non_rtp_received": 2984,
+        "rtx_forwarded": 767,
+        "rtx_queue_dropped": 222,
+        "rtx_received": 989
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 70.37395832594484,
+          "fps": 56.82326851188455,
+          "freeze_seconds": null,
+          "generator_fps": 59.989374382048204,
+          "latency_samples": 34,
+          "max_gap_ms": 57.396291667828336,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 148.95825000712648,
+          "fps": 58.99660585157338,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99654832363394,
+          "latency_samples": 70,
+          "max_gap_ms": 189.74345832248218,
+          "name": "steady",
+          "send_queue_mean_ms": 0.26042533878803387
+        },
+        {
+          "capture_to_decode_p95_ms": 1402.8259166807402,
+          "fps": 59.16246777483407,
+          "freeze_seconds": 1.4,
+          "generator_fps": 59.99574196884581,
+          "latency_samples": 70,
+          "max_gap_ms": 524.121833324898,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 209.97155730478593
+        },
+        {
+          "capture_to_decode_p95_ms": 58.09079165919684,
+          "fps": 59.121703964963544,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99665518643235,
+          "latency_samples": 94,
+          "max_gap_ms": 68.65533330710605,
+          "name": "recovery",
+          "send_queue_mean_ms": 1.4596393332210682
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 19.99475991500922,
+          "freeze_seconds": 0.21500000000000008,
+          "generator_fps": 19.99475991500922,
+          "latency_samples": 0,
+          "max_gap_ms": 214.8270000179764,
+          "name": "idle",
+          "send_queue_mean_ms": 14.308561484918833
+        },
+        {
+          "capture_to_decode_p95_ms": 764.1461250022985,
+          "fps": 59.49654155681666,
+          "freeze_seconds": 0.21199999999999997,
+          "generator_fps": 59.9965124942689,
+          "latency_samples": 71,
+          "max_gap_ms": 212.27533335331827,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 129.4910651763224
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "818aba311a27a73fcf5c7f8b3887fc52044800e3189b01ea4377c566b4b5f1f5",
+          "MacCaster.debug.dylib": "b0c67b3cd10fffbe26dae38b0d58575529bbc7beb8f420b82ee9d0e6216469cb",
+          "__preview.dylib": "e576f2a54edb5c7c6fb0bbddf899881cfed4914ca4df8453a74d07f287fa477a"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "cb92d6b4296aba6c798da4a4f17fdb727cde53de3859e21736180dcab7869eb5",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "25835f121d40b00eec71a68411e5f788d8a400dbc7e90052a2e5ea55801f72c3"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "steady",
+      "note": "Read-only diagnostic; no production encoder/pacing changes.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 7646,
+          "media_link_reordered": 3682,
+          "media_received": 7631,
+          "non_rtp_received": 2624,
+          "rtx_forwarded": 3873,
+          "rtx_link_reordered": 1455,
+          "rtx_received": 3875
+        },
+        "idle": {
+          "media_forwarded": 653,
+          "media_link_reordered": 262,
+          "media_received": 662,
+          "non_rtp_received": 397,
+          "rtx_forwarded": 2017,
+          "rtx_link_reordered": 894,
+          "rtx_received": 2029
+        },
+        "negotiation": {
+          "non_rtp_received": 17
+        },
+        "recovery": {
+          "media_forwarded": 10627,
+          "media_link_reordered": 5232,
+          "media_received": 10635,
+          "non_rtp_received": 3651,
+          "rtx_forwarded": 5324,
+          "rtx_link_reordered": 2095,
+          "rtx_received": 5320
+        },
+        "resume_motion": {
+          "media_forwarded": 12578,
+          "media_link_reordered": 6558,
+          "media_received": 12544,
+          "non_rtp_received": 4195,
+          "rtx_forwarded": 6522,
+          "rtx_link_reordered": 3225,
+          "rtx_received": 6510
+        },
+        "steady": {
+          "media_forwarded": 10411,
+          "media_link_reordered": 5253,
+          "media_received": 10411,
+          "non_rtp_received": 3545,
+          "rtx_forwarded": 5583,
+          "rtx_link_reordered": 2380,
+          "rtx_received": 5576
+        },
+        "warmup": {
+          "media_forwarded": 5860,
+          "media_link_reordered": 2932,
+          "media_received": 5892,
+          "non_rtp_received": 1961,
+          "rtx_forwarded": 3075,
+          "rtx_link_reordered": 1291,
+          "rtx_received": 3084
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 47775,
+        "media_link_reordered": 23919,
+        "media_received": 47775,
+        "non_rtp_received": 16390,
+        "rtx_forwarded": 26394,
+        "rtx_link_reordered": 11340,
+        "rtx_received": 26394
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 152.41720833000727,
+          "fps": 57.16413675669538,
+          "freeze_seconds": null,
+          "generator_fps": 59.99734470090477,
+          "latency_samples": 34,
+          "max_gap_ms": 50.555041671032086,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 98.49999999278225,
+          "fps": 56.82867476325026,
+          "freeze_seconds": 0,
+          "generator_fps": 59.995081861495876,
+          "latency_samples": 68,
+          "max_gap_ms": 63.1617916515097,
+          "name": "steady",
+          "send_queue_mean_ms": 3.8884364855962157
+        },
+        {
+          "capture_to_decode_p95_ms": 92.48116667731665,
+          "fps": 58.83289106520774,
+          "freeze_seconds": 0,
+          "generator_fps": 59.999548961684944,
+          "latency_samples": 71,
+          "max_gap_ms": 70.00391665496863,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 5.272961568356505
+        },
+        {
+          "capture_to_decode_p95_ms": 118.93154165591113,
+          "fps": 58.30892569323062,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99632225670032,
+          "latency_samples": 93,
+          "max_gap_ms": 69.58733333158307,
+          "name": "recovery",
+          "send_queue_mean_ms": 5.2404191773971736
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 20.491703314835362,
+          "freeze_seconds": 0,
+          "generator_fps": 19.99190567301011,
+          "latency_samples": 0,
+          "max_gap_ms": 113.46020831842907,
+          "name": "idle",
+          "send_queue_mean_ms": 11.686066687539148
+        },
+        {
+          "capture_to_decode_p95_ms": 1255.8867916523013,
+          "fps": 57.327573106496224,
+          "freeze_seconds": 0.881,
+          "generator_fps": 59.993971855635586,
+          "latency_samples": 69,
+          "max_gap_ms": 339.4576249993406,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 485.52721787800135
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "818aba311a27a73fcf5c7f8b3887fc52044800e3189b01ea4377c566b4b5f1f5",
+          "MacCaster.debug.dylib": "b0c67b3cd10fffbe26dae38b0d58575529bbc7beb8f420b82ee9d0e6216469cb",
+          "__preview.dylib": "e576f2a54edb5c7c6fb0bbddf899881cfed4914ca4df8453a74d07f287fa477a"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "cb92d6b4296aba6c798da4a4f17fdb727cde53de3859e21736180dcab7869eb5",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "25835f121d40b00eec71a68411e5f788d8a400dbc7e90052a2e5ea55801f72c3"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "steady-ordered",
+      "note": "Read-only diagnostic; no production encoder/pacing changes.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 18149,
+          "media_received": 18166,
+          "non_rtp_received": 749
+        },
+        "idle": {
+          "media_forwarded": 449,
+          "media_received": 478,
+          "non_rtp_received": 223,
+          "rtx_forwarded": 242,
+          "rtx_received": 242
+        },
+        "negotiation": {
+          "non_rtp_received": 20
+        },
+        "recovery": {
+          "media_forwarded": 25227,
+          "media_received": 25200,
+          "non_rtp_received": 1028
+        },
+        "resume_motion": {
+          "media_forwarded": 17873,
+          "media_queue_dropped": 55,
+          "media_received": 17883,
+          "non_rtp_received": 744,
+          "rtx_forwarded": 97,
+          "rtx_received": 97
+        },
+        "steady": {
+          "media_forwarded": 20290,
+          "media_received": 20260,
+          "non_rtp_received": 800,
+          "rtx_forwarded": 14,
+          "rtx_received": 14
+        },
+        "warmup": {
+          "media_forwarded": 8330,
+          "media_received": 8386,
+          "non_rtp_received": 299,
+          "rtx_forwarded": 3,
+          "rtx_received": 3
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 90318,
+        "media_queue_dropped": 55,
+        "media_received": 90373,
+        "non_rtp_received": 3863,
+        "rtx_forwarded": 356,
+        "rtx_received": 356
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 135.8299583371263,
+          "fps": 53.32853450574856,
+          "freeze_seconds": null,
+          "generator_fps": 59.99460131896713,
+          "latency_samples": 32,
+          "max_gap_ms": 81.90570832812227,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 86.096874991199,
+          "fps": 59.994509669159285,
+          "freeze_seconds": 0,
+          "generator_fps": 59.994509669159285,
+          "latency_samples": 72,
+          "max_gap_ms": 40.953916643047705,
+          "name": "steady",
+          "send_queue_mean_ms": 0.8931545158821278
+        },
+        {
+          "capture_to_decode_p95_ms": 58.20241666515358,
+          "fps": 59.994698385193196,
+          "freeze_seconds": 0,
+          "generator_fps": 59.994698385193196,
+          "latency_samples": 72,
+          "max_gap_ms": 39.699666667729616,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 1.2722100963894787
+        },
+        {
+          "capture_to_decode_p95_ms": 61.56016667955555,
+          "fps": 59.68595904534573,
+          "freeze_seconds": 0,
+          "generator_fps": 59.998450977520314,
+          "latency_samples": 95,
+          "max_gap_ms": 44.733625021763146,
+          "name": "recovery",
+          "send_queue_mean_ms": 1.1735460284891288
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 20.244260752122333,
+          "freeze_seconds": 0,
+          "generator_fps": 19.994331607034404,
+          "latency_samples": 0,
+          "max_gap_ms": 113.22341667255387,
+          "name": "idle",
+          "send_queue_mean_ms": 1.2420663716814095
+        },
+        {
+          "capture_to_decode_p95_ms": 1556.0359166702256,
+          "fps": 58.66372635107291,
+          "freeze_seconds": 0.176,
+          "generator_fps": 59.99699285905184,
+          "latency_samples": 71,
+          "max_gap_ms": 176.4299166679848,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 593.6000290002831
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "818aba311a27a73fcf5c7f8b3887fc52044800e3189b01ea4377c566b4b5f1f5",
+          "MacCaster.debug.dylib": "b0c67b3cd10fffbe26dae38b0d58575529bbc7beb8f420b82ee9d0e6216469cb",
+          "__preview.dylib": "e576f2a54edb5c7c6fb0bbddf899881cfed4914ca4df8453a74d07f287fa477a"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "cb92d6b4296aba6c798da4a4f17fdb727cde53de3859e21736180dcab7869eb5",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "25835f121d40b00eec71a68411e5f788d8a400dbc7e90052a2e5ea55801f72c3"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "large_frames_first_resume_second": [
+        {
+          "bytes": 168778,
+          "key": false,
+          "offset_seconds": 0.0648
+        },
+        {
+          "bytes": 204463,
+          "key": false,
+          "offset_seconds": 0.0974
+        },
+        {
+          "bytes": 260643,
+          "key": false,
+          "offset_seconds": 0.1153
+        },
+        {
+          "bytes": 181286,
+          "key": false,
+          "offset_seconds": 0.1448
+        },
+        {
+          "bytes": 174408,
+          "key": false,
+          "offset_seconds": 0.1638
+        }
+      ],
+      "name": "steady-ordered-detail",
+      "note": "Read-only diagnostic; no production encoder/pacing changes.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 14404,
+          "media_received": 14423,
+          "non_rtp_received": 650
+        },
+        "idle": {
+          "media_forwarded": 609,
+          "media_received": 609,
+          "non_rtp_received": 219,
+          "rtx_forwarded": 212,
+          "rtx_received": 212
+        },
+        "negotiation": {
+          "non_rtp_received": 20
+        },
+        "recovery": {
+          "media_forwarded": 20027,
+          "media_received": 20008,
+          "non_rtp_received": 878
+        },
+        "resume_motion": {
+          "media_forwarded": 18896,
+          "media_received": 18896,
+          "non_rtp_received": 754,
+          "rtx_forwarded": 2,
+          "rtx_received": 2
+        },
+        "steady": {
+          "media_forwarded": 22348,
+          "media_received": 22309,
+          "non_rtp_received": 877,
+          "rtx_forwarded": 68,
+          "rtx_received": 68
+        },
+        "warmup": {
+          "media_forwarded": 8301,
+          "media_received": 8340,
+          "non_rtp_received": 315,
+          "rtx_forwarded": 3,
+          "rtx_received": 3
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 84585,
+        "media_received": 84585,
+        "non_rtp_received": 3713,
+        "rtx_forwarded": 285,
+        "rtx_received": 285
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 111.35437499615364,
+          "fps": 54.156546914223966,
+          "freeze_seconds": null,
+          "generator_fps": 59.98879042806347,
+          "latency_samples": 32,
+          "max_gap_ms": 74.91850000224076,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 85.85958334151655,
+          "fps": 59.07378963449455,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99030823249094,
+          "latency_samples": 71,
+          "max_gap_ms": 49.704624980222434,
+          "name": "steady",
+          "send_queue_mean_ms": 0.2083165737981076
+        },
+        {
+          "capture_to_decode_p95_ms": 76.25058334087953,
+          "fps": 59.74397851226238,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99395331775302,
+          "latency_samples": 72,
+          "max_gap_ms": 64.33766667032614,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 2.860647819507498
+        },
+        {
+          "capture_to_decode_p95_ms": 75.80462499754503,
+          "fps": 59.9959049669647,
+          "freeze_seconds": 0,
+          "generator_fps": 59.9959049669647,
+          "latency_samples": 96,
+          "max_gap_ms": 53.621083352481946,
+          "name": "recovery",
+          "send_queue_mean_ms": 1.903195364403816
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 20.24649735595015,
+          "freeze_seconds": 0,
+          "generator_fps": 19.996540598469284,
+          "latency_samples": 0,
+          "max_gap_ms": 102.20483332523145,
+          "name": "idle",
+          "send_queue_mean_ms": 4.7400697538100784
+        },
+        {
+          "capture_to_decode_p95_ms": 1634.6872500143945,
+          "fps": 58.66119915770514,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99440822947116,
+          "latency_samples": 70,
+          "max_gap_ms": 143.06345832301304,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 437.16656408431425
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "17c862c2f1fc7c9d4807647e26054b7ec438969b234dae549455cd352c8afdcb",
+          "MacCaster.debug.dylib": "8d37b72b7ad238a02bc6c426cd477b6ac37ca2801fd84ebda4dc99e327943a8d",
+          "__preview.dylib": "1314746c71e4e3c192cdb94b9ddb79c35c63b9eed24aa1e1f319f9e90c8a03cb"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "053672723099cdbf4c0a566340230a912e5d39cb8c89a5fbc5a55b383c25f783",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "da46b3eb44fd2aac7350bda45238e2ae7fa381c85ee5fc237e8039a53063224b"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "large_frames_first_resume_second": [
+        {
+          "bytes": 146691,
+          "key": false,
+          "offset_seconds": 0.0656
+        },
+        {
+          "bytes": 231677,
+          "key": false,
+          "offset_seconds": 0.09
+        },
+        {
+          "bytes": 291846,
+          "key": false,
+          "offset_seconds": 0.106
+        },
+        {
+          "bytes": 216766,
+          "key": false,
+          "offset_seconds": 0.1189
+        },
+        {
+          "bytes": 196904,
+          "key": false,
+          "offset_seconds": 0.1321
+        }
+      ],
+      "name": "cadence-candidate-ordered",
+      "note": "Rejected candidate; helper and test removed, production parameters restored.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 17327,
+          "media_received": 17331,
+          "non_rtp_received": 732
+        },
+        "idle": {
+          "media_forwarded": 506,
+          "media_received": 476,
+          "non_rtp_received": 224,
+          "rtx_forwarded": 230,
+          "rtx_received": 230
+        },
+        "negotiation": {
+          "non_rtp_received": 22
+        },
+        "recovery": {
+          "media_forwarded": 23969,
+          "media_received": 23968,
+          "non_rtp_received": 996
+        },
+        "resume_motion": {
+          "media_forwarded": 17422,
+          "media_received": 17422,
+          "non_rtp_received": 729,
+          "rtx_forwarded": 2,
+          "rtx_received": 2
+        },
+        "steady": {
+          "media_forwarded": 19033,
+          "media_received": 19040,
+          "non_rtp_received": 765
+        },
+        "warmup": {
+          "media_forwarded": 7953,
+          "media_received": 7973,
+          "non_rtp_received": 299,
+          "rtx_forwarded": 3,
+          "rtx_received": 3
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 86210,
+        "media_received": 86210,
+        "non_rtp_received": 3767,
+        "rtx_forwarded": 235,
+        "rtx_received": 235
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 286.2208333099261,
+          "fps": 53.65632999815284,
+          "freeze_seconds": null,
+          "generator_fps": 59.98844347619573,
+          "latency_samples": 32,
+          "max_gap_ms": 78.18287500413135,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 89.77408334612846,
+          "fps": 59.244621699184165,
+          "freeze_seconds": 0,
+          "generator_fps": 59.994553619427,
+          "latency_samples": 71,
+          "max_gap_ms": 55.70079165045172,
+          "name": "steady",
+          "send_queue_mean_ms": 1.2887208299096142
+        },
+        {
+          "capture_to_decode_p95_ms": 66.35574999381788,
+          "fps": 59.82755228840149,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99420285187893,
+          "latency_samples": 72,
+          "max_gap_ms": 41.61370833753608,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 1.4941859735220246
+        },
+        {
+          "capture_to_decode_p95_ms": 61.06137501774356,
+          "fps": 59.80832821332085,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99581513561966,
+          "latency_samples": 95,
+          "max_gap_ms": 56.308458355488256,
+          "name": "recovery",
+          "send_queue_mean_ms": 1.2992184458010245
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 20.248109860057124,
+          "freeze_seconds": 0,
+          "generator_fps": 19.998133195118147,
+          "latency_samples": 0,
+          "max_gap_ms": 103.71604165993631,
+          "name": "idle",
+          "send_queue_mean_ms": 0.14687722908091122
+        },
+        {
+          "capture_to_decode_p95_ms": 1572.398708347464,
+          "fps": 58.661286326817255,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99449737969946,
+          "latency_samples": 70,
+          "max_gap_ms": 151.91466666874476,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 426.8215869363087
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "e74376a79c0fdf0c59946c77d623953a00ab6f9bd65f7df95c95c801e6974331",
+          "MacCaster.debug.dylib": "89cea937a3a50d659df9b08b2bb62288169bd4c2e14785d56b5c1fc52abfbfe5",
+          "__preview.dylib": "d7b77956daa9b157bc535c94da51b4e4c5ba36cfdd61f7c233f9c2a87a98e1fb"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "32c30e6509eea649400bfce8805e0f47e6fe70bca63ec28c31d19887053df400",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "8e3bd8b6575393912defdbd994e4223a89f955ae85084e7adcbbd459673243c1"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": true,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "cadence-candidate-standard",
+      "note": "Rejected candidate; helper and test removed, production parameters restored.",
+      "packet_phases": {
+        "bandwidth_drop": {
+          "media_forwarded": 3762,
+          "media_link_reordered": 328,
+          "media_queue_dropped": 84,
+          "media_received": 3843,
+          "non_rtp_received": 800,
+          "rtx_forwarded": 571,
+          "rtx_link_reordered": 25,
+          "rtx_queue_dropped": 37,
+          "rtx_received": 606
+        },
+        "idle": {
+          "media_forwarded": 998,
+          "media_link_reordered": 442,
+          "media_received": 997,
+          "non_rtp_received": 508,
+          "rtx_forwarded": 1056,
+          "rtx_link_reordered": 362,
+          "rtx_received": 1056
+        },
+        "negotiation": {
+          "non_rtp_received": 20
+        },
+        "recovery": {
+          "media_forwarded": 4063,
+          "media_link_reordered": 1711,
+          "media_received": 4054,
+          "non_rtp_received": 1563,
+          "rtx_forwarded": 1770,
+          "rtx_link_reordered": 512,
+          "rtx_received": 1770
+        },
+        "resume_motion": {
+          "media_forwarded": 6576,
+          "media_link_reordered": 3378,
+          "media_received": 6576,
+          "non_rtp_received": 2354,
+          "rtx_forwarded": 3341,
+          "rtx_link_reordered": 1561,
+          "rtx_received": 3341
+        },
+        "steady": {
+          "media_forwarded": 9946,
+          "media_link_reordered": 4970,
+          "media_received": 9919,
+          "non_rtp_received": 3386,
+          "rtx_forwarded": 5183,
+          "rtx_link_reordered": 2160,
+          "rtx_received": 5173
+        },
+        "warmup": {
+          "media_forwarded": 5328,
+          "media_link_reordered": 2679,
+          "media_received": 5368,
+          "non_rtp_received": 1779,
+          "rtx_forwarded": 3063,
+          "rtx_link_reordered": 1373,
+          "rtx_received": 3075
+        }
+      },
+      "packet_totals": {
+        "media_forwarded": 30673,
+        "media_link_reordered": 13508,
+        "media_queue_dropped": 84,
+        "media_received": 30757,
+        "non_rtp_received": 10410,
+        "rtx_forwarded": 14984,
+        "rtx_link_reordered": 5993,
+        "rtx_queue_dropped": 37,
+        "rtx_received": 15021
+      },
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 396.8052499985788,
+          "fps": 53.662157554754245,
+          "freeze_seconds": null,
+          "generator_fps": 59.9949587568681,
+          "latency_samples": 32,
+          "max_gap_ms": 129.79912498849444,
+          "name": "warmup",
+          "send_queue_mean_ms": null
+        },
+        {
+          "capture_to_decode_p95_ms": 85.6227083131671,
+          "fps": 56.910410868824364,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99340530827752,
+          "latency_samples": 68,
+          "max_gap_ms": 80.61708332388662,
+          "name": "steady",
+          "send_queue_mean_ms": 3.3856804855275455
+        },
+        {
+          "capture_to_decode_p95_ms": 527.7833333238959,
+          "fps": 56.24500337353856,
+          "freeze_seconds": 0.552,
+          "generator_fps": 59.99467026510779,
+          "latency_samples": 68,
+          "max_gap_ms": 312.6594166678842,
+          "name": "bandwidth_drop",
+          "send_queue_mean_ms": 10.608656286721494
+        },
+        {
+          "capture_to_decode_p95_ms": 123.0291250103619,
+          "fps": 59.120888942795844,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99582810262581,
+          "latency_samples": 94,
+          "max_gap_ms": 87.3951250105165,
+          "name": "recovery",
+          "send_queue_mean_ms": 11.682683967112034
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "fps": 19.242128967093084,
+          "freeze_seconds": 1.69,
+          "generator_fps": 19.991822303473334,
+          "latency_samples": 0,
+          "max_gap_ms": 437.0353333360981,
+          "name": "idle",
+          "send_queue_mean_ms": 34.59952452496685
+        },
+        {
+          "capture_to_decode_p95_ms": 1835.4632499977015,
+          "fps": 54.9148826957311,
+          "freeze_seconds": 1.0219999999999998,
+          "generator_fps": 59.99805089670166,
+          "latency_samples": 65,
+          "max_gap_ms": 529.7335000068415,
+          "name": "resume_motion",
+          "send_queue_mean_ms": 620.3752178967576
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "e74376a79c0fdf0c59946c77d623953a00ab6f9bd65f7df95c95c801e6974331",
+          "MacCaster.debug.dylib": "89cea937a3a50d659df9b08b2bb62288169bd4c2e14785d56b5c1fc52abfbfe5",
+          "__preview.dylib": "d7b77956daa9b157bc535c94da51b4e4c5ba36cfdd61f7c233f9c2a87a98e1fb"
+        },
+        "commit": "d11d959f637cee13f25b48371da5c9f326a7af9b",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "32c30e6509eea649400bfce8805e0f47e6fe70bca63ec28c31d19887053df400",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "8e3bd8b6575393912defdbd994e4223a89f955ae85084e7adcbbd459673243c1"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    }
+  ],
+  "limitations": [
+    "RTP header only; SRTP payload and RTX original sequence remain encrypted.",
+    "forwarded means sendto succeeded, not receiver/decode acknowledgement.",
+    "Repeated identity is bounded to 4096 recent identities per stream; streams limited to 32.",
+    "Each condition is a single run; four primary runs share an observed binary, detail/candidate runs have recorded distinct code fingerprints.",
+    "Counts are link receive/forward/drop events; in-flight datagrams at report time need not balance exactly.",
+    "RTP header observations cannot map encrypted RTX original sequence numbers to individual originals.",
+    "FIFO diagnostic clamps sampled due time to previous due time, introducing correlated delivery and possible small bursts; it is a diagnostic condition, not proof of a unique causal mechanism."
+  ],
+  "schema": 1
+}

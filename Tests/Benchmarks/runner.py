@@ -17,6 +17,7 @@ import subprocess
 import tempfile
 import time
 import zlib
+from packet_trace import PacketTrace
 
 PROTOCOL_PATH = Path(__file__).with_name("protocol.json")
 PROTOCOL = json.loads(PROTOCOL_PATH.read_text())
@@ -36,7 +37,7 @@ class Link:
     A sends to sockets[1]; forward from sockets[0] to B. Reverse is symmetric.
     Only the exact ICE endpoints in the control file may use this test link.
     """
-    def __init__(self, host, seed=20261029):
+    def __init__(self, host, seed=20261029, ordered=False):
         self.selector = selectors.DefaultSelector()
         self.sockets = []
         for side in range(2):
@@ -51,6 +52,9 @@ class Link:
         self.next_service = [0.0, 0.0]
         self.pending = []
         self.sequence = 0
+        self.ordered = ordered
+        self.last_due = [0.0, 0.0]
+        self.trace = PacketTrace()
         self.counts = dict(received=0, forwarded=0, queue_dropped=0, random_dropped=0,
                            rejected=0, send_errors=0, bytes_forwarded=0, max_queue_ms=0)
 
@@ -60,6 +64,8 @@ class Link:
 
     def configure(self, value):
         self.endpoints = [tuple(value[k]) if value.get(k) else None for k in ("sender", "receiver")]
+        self.trace.maps = [value.get("rtp_maps", {}).get(str(side), {}) for side in range(2)]
+        self.trace.phase = value.get("phase", "negotiation")
         profile = value.get("profile", {})
         for key in self.profile:
             if key in profile:
@@ -85,8 +91,10 @@ class Link:
                 if address != self.endpoints[source] or self.endpoints[inbound] is None:
                     self.counts["rejected"] += 1
                     continue
+                ticket = self.trace.receive(source, data)
                 if self.random.random() < self.profile["loss"]:
                     self.counts["random_dropped"] += 1
+                    self.trace.outcome(ticket, "random_dropped")
                     continue
                 now = time.monotonic()
                 # Apply the bandwidth ceiling in both directions independently.
@@ -94,16 +102,20 @@ class Link:
                 queued_ms = (service - now) * 1000
                 if queued_ms > self.profile["queue_ms"]:
                     self.counts["queue_dropped"] += 1
+                    self.trace.outcome(ticket, "queue_dropped")
                     continue
                 self.counts["max_queue_ms"] = max(self.counts["max_queue_ms"], queued_ms)
                 self.next_service[source] = service
                 jitter = self.random.uniform(-self.profile["jitter_ms"], self.profile["jitter_ms"])
                 due = service + max(0, self.profile["delay_ms"] + jitter) / 1000
+                if self.ordered:
+                    due = max(due, self.last_due[source])
+                self.last_due[source] = due
                 self.sequence += 1
-                heapq.heappush(self.pending, (due, self.sequence, source, data))
+                heapq.heappush(self.pending, (due, self.sequence, source, data, ticket))
         now = time.monotonic()
         while self.pending and self.pending[0][0] <= now:
-            _, _, source, data = heapq.heappop(self.pending)
+            _, _, source, data, ticket = heapq.heappop(self.pending)
             destination = self.endpoints[1 - source]
             if destination is None:
                 continue
@@ -111,8 +123,10 @@ class Link:
                 self.sockets[source].sendto(data, destination)
                 self.counts["forwarded"] += 1
                 self.counts["bytes_forwarded"] += len(data)
+                self.trace.outcome(ticket, "forwarded")
             except OSError:
                 self.counts["send_errors"] += 1
+                self.trace.outcome(ticket, "send_error")
 
     def close(self):
         self.selector.close()
@@ -248,7 +262,16 @@ def summarize(report, link):
     result["bandwidth_drop_exercised"] = transitions.get("recovery", {}).get("queue_dropped", 0) > transitions.get("bandwidth_drop", {}).get("queue_dropped", 0)
     result["comparison_valid"] = result["functional_pass"] and result["impairment_path_verified"] and result["bandwidth_drop_exercised"] and all(
         p["generator_fps"] >= CRITERIA["generator_min_fps"] for p in result["phases"] if p["name"] not in ("warmup", "idle"))
+    trace = link.get("packet_trace")
+    trace_counts = (trace or {}).get("totals", {})
+    trace_valid = trace is None or (trace_counts.get("media_received", 0) > 0
+        and not trace_counts.get("stream_overflow", 0) and not trace_counts.get("unknown_received", 0))
+    result["diagnostic_valid"] = result["functional_pass"] and result["impairment_path_verified"] and trace_valid and all(
+        p["generator_fps"] >= CRITERIA["generator_min_fps"] for p in result["phases"] if p["name"] not in ("warmup", "idle"))
     result["performance_pass"] = result["comparison_valid"] and bool(graded) and all(p["performance_pass"] for p in graded)
+    if result.get("setup", {}) and result["setup"].get("diagnostic_profile", "standard") != "standard":
+        result["comparison_valid"] = False
+        result["performance_pass"] = False
     return result
 
 
@@ -261,7 +284,9 @@ def run(args):
     image = folder / "document.png"
     digest = document(image, args.seed)
     host = subprocess.check_output(["ipconfig", "getifaddr", "en0"], text=True).strip()
-    link = Link(host, args.seed)
+    variant = getattr(args, "diagnostic_profile", "standard")
+    link = Link(host, args.seed, ordered=variant in ("ordered", "steady-ordered"))
+    plan = [dict(p, mbps=20) if variant.startswith("steady") else p.copy() for p in PHASES]
     control_path, report_path = folder / "control.json", folder / "report.json"
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     patch = subprocess.check_output(["git", "diff", "HEAD", "--"], cwd=root)
@@ -269,7 +294,7 @@ def run(args):
     source_hashes = {p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in sorted(source_paths)
                      if (root / p).is_file() and (Path(p).suffix in (".swift", ".pbxproj", ".xcconfig", ".py", ".json") or p.endswith("Package.resolved"))}
     control = dict(schema=1, run=folder.name, host=host, ports=link.ports, sender=None, receiver=None,
-                   profile=link.profile.copy(), phases=PHASES, image=str(image), report=str(report_path),
+                   profile=link.profile.copy(), phases=plan, diagnostic_profile=variant, image=str(image), report=str(report_path),
                    provenance=dict(protocol_sha256=hashlib.sha256(PROTOCOL_PATH.read_bytes()).hexdigest(), commit=commit, tracked_patch_sha256=hashlib.sha256(patch).hexdigest(),
                                    app_sha256=hashlib.sha256(Path(args.app).read_bytes()).hexdigest(),
                                    source_tree_sha256=hashlib.sha256(json.dumps(source_hashes, sort_keys=True).encode()).hexdigest(),
@@ -300,11 +325,11 @@ def run(args):
             link.step()
             if report_path.exists():
                 report = json.loads(report_path.read_text())
-                summary = summarize(report, dict(totals=link.counts, transitions=phase_counts))
+                summary = summarize(report, dict(totals=link.counts, transitions=phase_counts, packet_trace=link.trace.snapshot()))
                 atomic_json(folder / "summary.json", summary)
                 print(json.dumps(dict(output=str(folder), functional_pass=summary["functional_pass"],
-                                      performance_pass=summary["performance_pass"], comparison_valid=summary["comparison_valid"]), ensure_ascii=False))
-                return 0 if summary["performance_pass"] else 2 if summary["comparison_valid"] else 1
+                                      performance_pass=summary["performance_pass"], comparison_valid=summary["comparison_valid"], diagnostic_valid=summary["diagnostic_valid"]), ensure_ascii=False))
+                return 0 if summary["performance_pass"] else 2 if summary["comparison_valid"] or (variant != "standard" and summary["diagnostic_valid"]) else 1
             if process.poll() is not None:
                 raise RuntimeError(f"benchmark app exited early ({process.returncode}); see {folder}")
         raise TimeoutError(f"benchmark exceeded 150 seconds; see {folder}")
@@ -325,4 +350,6 @@ if __name__ == "__main__":
     parser.add_argument("--app", required=True, help="Built Debug MacCaster executable, not an .app directory")
     parser.add_argument("--seed", type=int, default=PROTOCOL["seed"])
     parser.add_argument("--output-parent", default="/tmp")
+    parser.add_argument("--diagnostic-profile", choices=("standard", "ordered", "steady", "steady-ordered"), default="standard",
+                        help="Diagnostic 2x2: default independent jitter vs FIFO delivery; 20/4/20 vs constant 20 Mbps. Not alternative acceptance tests.")
     raise SystemExit(run(parser.parse_args()))

@@ -110,6 +110,14 @@ private final class BenchmarkRecorder: @unchecked Sendable {
                     pieces[5] = String(ports[side])
                     copy["candidate"] = pieces.joined(separator: " ")
                 } else if let sdp = object["sdp"] as? String {
+                    var maps = configuration["rtp_maps"] as? [String: [String: String]] ?? [:]
+                    var codecs: [String: String] = [:]
+                    for line in sdp.components(separatedBy: "\r\n") where line.hasPrefix("a=rtpmap:") {
+                        let fields = line.dropFirst(9).split(separator: " ")
+                        if fields.count == 2 { codecs[String(fields[0])] = String(fields[1].split(separator: "/")[0]).lowercased() }
+                    }
+                    maps[String(side)] = codecs; configuration["rtp_maps"] = maps
+                    do { try saveControl() } catch { recorder.error("RTP map write: \(error)"); return }
                     // Every media packet must traverse the test link; exclude embedded direct candidates.
                     copy["sdp"] = sdp.components(separatedBy: "\r\n").filter {
                         !$0.hasPrefix("a=candidate:") && $0 != "a=end-of-candidates"
@@ -202,6 +210,10 @@ private final class BenchmarkRecorder: @unchecked Sendable {
         report["phases"] = phases
         report["setup"] = ["width": 1920, "height": 1440, "fps_ceiling": 60, "bitrate_ceiling": 100_000_000,
                            "idle_source_fps": 20, "control_interval_seconds": 2, "observation_interval_seconds": 1, "video": "native H264 SRTP", "network": "local UDP impairment", "os": ProcessInfo.processInfo.operatingSystemVersionString] as [String: Any]
+        if let variant = configuration["diagnostic_profile"] as? String, variant != "standard" {
+            var setup = report["setup"] as? [String: Any] ?? [:]
+            setup["diagnostic_profile"] = variant; report["setup"] = setup
+        }
         report["limitations"] = ["Not ReplayKit/ScreenCaptureKit capture or a cross-NAT test.",
                                  "Barcode latency is submission-to-decoded-frame, not glass-to-glass latency.",
                                  "RTP statistics are sampled at one second; phase boundary deltas have up to one second uncertainty.",
