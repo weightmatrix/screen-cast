@@ -249,8 +249,11 @@ struct NativeVideoBudget {
         let safe = min(Double(upper), available * 0.85)
         if loss > 0.02 || (sendWait > 0.08 && available < Double(limit) * 0.8) {
             limit = max(min(2_000_000, upper), Int(min(Double(limit) * 0.8, safe)))
-        } else if loss < 0.005 && sendWait < 0.05 && safe > Double(limit) * 1.1 {
-            limit = min(upper, Int(min(safe, Double(limit) * 1.25)))
+        } else if loss < 0.005 && safe > Double(limit) * 1.1 {
+            // A starved encoder cannot drain the pacer before recovering. Follow
+            // independent capacity, with a bounded step rather than waiting for zero queue.
+            let step = max(Double(limit) * 1.5, Double(limit) + 2_000_000)
+            limit = min(upper, Int(min(safe, step)))
         }
         return limit
     }

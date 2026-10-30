@@ -25,7 +25,7 @@ Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，通过统一�
 - 两个原生 target 共用 `Shared/AppIdentity.xcconfig` 中的 Bundle ID 和版本号，开发团队不变。统一使用原 iOS 标识，iPhone/iPad 安装身份不变；Mac 标识由 `com.witten.touping.maccaster` 改为统一标识，系统可能要求重新授权屏幕录制，旧 Mac 的偏好设置和日志不会自动迁移。
 - 目录：`Shared/` 为两端共用的原生视频引擎、格式与诊断工具；`MacCaster/MacCaster/` 为 macOS 代码；`iPadReceiver/iPadReceiver/` 为 iOS 代码。
 - 命令行构建：`xcodebuild -project Touping.xcodeproj -scheme Touping-macOS -destination 'platform=macOS' build`；iOS 使用 `-scheme Touping-iOS -destination 'generic/platform=iOS'`。
-- 当前源码为 1.3（build 24），建议两端均安装当前版本。连接建立后必须通过匹配码校验，旧接收端无法连接新版发送端。
+- 当前源码为 1.3（build 25），建议两端均安装当前版本。连接建立后必须通过匹配码校验，旧接收端无法连接新版发送端。
 - 当前仅传视频，不含音频。被关闭的窗口无法继续采集；请重新选择有效窗口或显示器。
 
 ## 故障定位
@@ -37,6 +37,8 @@ Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，通过统一�
 - iPad：连接设置内的“诊断·连接”，以及 App Documents/ConnectionDiag.md。
 
 ## 受控性能对照
+
+当前25版仅修复预算恢复策略，整体性能仍未验收；不增加码率上限或降低采集分辨率。
 
 固定基线及66秒自动网络场景见 [Tests/Benchmarks/README.md](Tests/Benchmarks/README.md)。测试有效与性能通过分开判断，原始材料仅留本机。18、24版有精确源码，21版仅有历史日志，不能伪称同条件对照。
 
