@@ -1,0 +1,536 @@
+{
+  "experiments": [
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "steady_ordered",
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 1241.665000008652,
+          "encode_mean_ms": null,
+          "fps": 42.99805821972688,
+          "freeze_seconds": null,
+          "generator_fps": 59.99729053915379,
+          "latency_samples": 25,
+          "max_gap_ms": 646.8179166840855,
+          "name": "warmup",
+          "performance_pass": null,
+          "send_queue_mean_ms": null,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 38.286249997327104,
+          "encode_mean_ms": 7.54957507082153,
+          "fps": 58.41120643583791,
+          "freeze_seconds": 0,
+          "generator_fps": 59.9943917743271,
+          "latency_samples": 69,
+          "max_gap_ms": 160.00699999858625,
+          "name": "steady",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.254099602604208,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 50.432249990990385,
+          "encode_mean_ms": 7.2161785216178504,
+          "fps": 59.32866037737424,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99527453891777,
+          "latency_samples": 71,
+          "max_gap_ms": 50.8127500070259,
+          "name": "bandwidth_drop",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.03550310791984252,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 55.26516668032855,
+          "encode_mean_ms": 7.014721345951629,
+          "fps": 58.99592989532828,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99586091050334,
+          "latency_samples": 94,
+          "max_gap_ms": 65.65970834344625,
+          "name": "recovery",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.020988838447622928,
+          "sustained_45fps_recovery_seconds": 0
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "encode_mean_ms": 7.468750000000006,
+          "fps": 20.24309025308628,
+          "freeze_seconds": 0,
+          "generator_fps": 19.99317555860373,
+          "latency_samples": 0,
+          "max_gap_ms": 72.61970834224485,
+          "name": "idle",
+          "performance_pass": null,
+          "send_queue_mean_ms": 0.00523670756643447,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 98.20408333325759,
+          "encode_mean_ms": 7.7038690476190474,
+          "fps": 56.91362494967445,
+          "freeze_seconds": 0,
+          "generator_fps": 59.996793504781266,
+          "latency_samples": 69,
+          "max_gap_ms": 102.44724998483434,
+          "name": "resume_motion",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.5718237901293753,
+          "sustained_45fps_recovery_seconds": 0
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "d2ce2b671b976fd2cbbf5d82ae8095bbce0af9cfb978b65b95625294620ff9cd",
+          "MacCaster.debug.dylib": "c394b141cd3799eedb184302127f0a5ba5c5b06079c767093f175b84e9bf78cb",
+          "__preview.dylib": "6ba6ef8abf677b437874776bcb159b4251b59f7dfd9c2f858aa9592b97034bd1"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "5d43a3875cfa2007482fe7b3904997f0b088574a9ec214fab1f30aebc05cf4db",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "67060c2b963c16ccedd1b95ab5da09482f5a230ab96dc6cb90f046e35bda2822"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "steady-ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": true,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "original_stress",
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 1208.115249988623,
+          "encode_mean_ms": null,
+          "fps": 48.3243684918333,
+          "freeze_seconds": null,
+          "generator_fps": 59.98887123124133,
+          "latency_samples": 29,
+          "max_gap_ms": 665.6195000105072,
+          "name": "warmup",
+          "performance_pass": null,
+          "send_queue_mean_ms": null,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 396.2630416499451,
+          "encode_mean_ms": 7.109144542772861,
+          "fps": 54.578314023470654,
+          "freeze_seconds": 1.166,
+          "generator_fps": 59.9944825906853,
+          "latency_samples": 65,
+          "max_gap_ms": 769.1187499731313,
+          "name": "steady",
+          "performance_pass": false,
+          "send_queue_mean_ms": 21.840528546123437,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 904.0680000034627,
+          "encode_mean_ms": 6.9911111111111115,
+          "fps": 55.820328359687075,
+          "freeze_seconds": 0.9119999999999999,
+          "generator_fps": 59.98602450593238,
+          "latency_samples": 67,
+          "max_gap_ms": 353.46083334297873,
+          "name": "bandwidth_drop",
+          "performance_pass": false,
+          "send_queue_mean_ms": 63.63641066666671,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 35.52224999293685,
+          "encode_mean_ms": 7.28941908713693,
+          "fps": 59.74913472680067,
+          "freeze_seconds": 0,
+          "generator_fps": 59.999131106410715,
+          "latency_samples": 96,
+          "max_gap_ms": 39.05875000054948,
+          "name": "recovery",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.0014661838112873804,
+          "sustained_45fps_recovery_seconds": 0
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "encode_mean_ms": 7.348314606741572,
+          "fps": 20.241556319088694,
+          "freeze_seconds": 0,
+          "generator_fps": 19.991660562062908,
+          "latency_samples": 0,
+          "max_gap_ms": 61.31766666658223,
+          "name": "idle",
+          "performance_pass": null,
+          "send_queue_mean_ms": 0.025152694610925008,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 36.952208349248394,
+          "encode_mean_ms": 7.248456790123456,
+          "fps": 58.41079131173966,
+          "freeze_seconds": 0,
+          "generator_fps": 59.993965398648434,
+          "latency_samples": 70,
+          "max_gap_ms": 66.8462916801218,
+          "name": "resume_motion",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.02319763901831658,
+          "sustained_45fps_recovery_seconds": 0
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "0c57cbcfdfd545bc32eae2b0306460d6066aa8fe4571caf12d1ebd9236b98a73",
+          "MacCaster.debug.dylib": "479e02e891cee3a3bcdd01fca2f155751748bc98fd630b039e1196d2e6f3a04f",
+          "__preview.dylib": "dc2a66dfb788f47d9f1ebf0ce8228940f880042b8c140cf3880888006a4bea39"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "abc8ef86abf24cc91df30cf06cec9d6d73c1621b40ce19de85005c3be7f92d34",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "4f8f1daa6b4b25a540b2288e958fe6314aed16a7d35342a4410c9328da541e10"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    },
+    {
+      "comparison_valid": false,
+      "diagnostic_valid": true,
+      "functional_pass": true,
+      "name": "bandwidth_drop_ordered",
+      "performance_pass": false,
+      "phases": [
+        {
+          "capture_to_decode_p95_ms": 904.1203749948181,
+          "encode_mean_ms": null,
+          "fps": 49.497053894240246,
+          "freeze_seconds": null,
+          "generator_fps": 59.99642896271545,
+          "latency_samples": 29,
+          "max_gap_ms": 496.47604164783843,
+          "name": "warmup",
+          "performance_pass": null,
+          "send_queue_mean_ms": null,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 52.53908334998414,
+          "encode_mean_ms": 7.293628808864266,
+          "fps": 59.65989112608764,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99318660723897,
+          "latency_samples": 72,
+          "max_gap_ms": 44.18600001372397,
+          "name": "steady",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.0568041412785333,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 1932.818416680675,
+          "encode_mean_ms": 7.254703328509406,
+          "fps": 57.0775256950312,
+          "freeze_seconds": 1.495,
+          "generator_fps": 59.99389562105469,
+          "latency_samples": 68,
+          "max_gap_ms": 1494.7146250051446,
+          "name": "bandwidth_drop",
+          "performance_pass": false,
+          "send_queue_mean_ms": 262.79860572284144,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 34.42941667162813,
+          "encode_mean_ms": 6.910123966942151,
+          "fps": 59.996857508390725,
+          "freeze_seconds": 0,
+          "generator_fps": 59.996857508390725,
+          "latency_samples": 95,
+          "max_gap_ms": 35.40866664843634,
+          "name": "recovery",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.006622956774431264,
+          "sustained_45fps_recovery_seconds": 0
+        },
+        {
+          "capture_to_decode_p95_ms": null,
+          "encode_mean_ms": 7.4308510638297784,
+          "fps": 20.24901971545071,
+          "freeze_seconds": 0,
+          "generator_fps": 19.999031817729097,
+          "latency_samples": 0,
+          "max_gap_ms": 61.76924999454059,
+          "name": "idle",
+          "performance_pass": null,
+          "send_queue_mean_ms": 0.001752724224888003,
+          "sustained_45fps_recovery_seconds": null
+        },
+        {
+          "capture_to_decode_p95_ms": 46.05033333064057,
+          "encode_mean_ms": 7.3695014662756595,
+          "fps": 57.66134060070842,
+          "freeze_seconds": 0,
+          "generator_fps": 59.99445842848275,
+          "latency_samples": 69,
+          "max_gap_ms": 73.89899998088367,
+          "name": "resume_motion",
+          "performance_pass": true,
+          "send_queue_mean_ms": 0.10315400100651924,
+          "sustained_45fps_recovery_seconds": 0
+        }
+      ],
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "0c57cbcfdfd545bc32eae2b0306460d6066aa8fe4571caf12d1ebd9236b98a73",
+          "MacCaster.debug.dylib": "479e02e891cee3a3bcdd01fca2f155751748bc98fd630b039e1196d2e6f3a04f",
+          "__preview.dylib": "dc2a66dfb788f47d9f1ebf0ce8228940f880042b8c140cf3880888006a4bea39"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "abc8ef86abf24cc91df30cf06cec9d6d73c1621b40ce19de85005c3be7f92d34",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "4f8f1daa6b4b25a540b2288e958fe6314aed16a7d35342a4410c9328da541e10"
+      },
+      "setup": {
+        "bitrate_ceiling": 100000000,
+        "control_interval_seconds": 2,
+        "diagnostic_profile": "ordered",
+        "fps_ceiling": 60,
+        "height": 1440,
+        "idle_source_fps": 20,
+        "network": "local UDP impairment",
+        "observation_interval_seconds": 1,
+        "os": "版本27.2（版号26B123）",
+        "video": "native H264 SRTP",
+        "width": 1920
+      }
+    }
+  ],
+  "limitations": [
+    "Each network condition is a single controlled run. First positive run preceded build27 metadata and fallback-error guard; normal manual-QP behavior is unchanged.",
+    "Original independent-jitter stress still fails steady/constrained latency/freezes. Ordered bandwidth drop still shows1.495s freeze and about1933ms P95 during capacity collapse.",
+    "Steady ordered condition meets all per-phase criteria, but diagnostic profiles never count as original-protocol acceptance.",
+    "Startup warmup retains roughly0.9-1.2s P95 in these runs.",
+    "No cross-network real ReplayKit broadcast acceptance claimed; device functional self-loop checks are separate.",
+    "A late ExpectedFrameRate hint regressed FPS and was removed. Final encoder source hash equals the original-stress run source; no late hint change retained."
+  ],
+  "note": "Retained per-frame H264 quantizer feedback, no resolution or protocol change. Static/idle bytes do not drive QP downward. Hardware capability fallback preserves prior rate-control mode. No VBR/SDK factory replacement retained.",
+  "quality": {
+    "limitations": [
+      "17 matched luma samples and top strip only; no chroma/subjective readability claim.",
+      "Independent fixed15Mbps synthetic probe; not a cross-network quality or throughput acceptance."
+    ],
+    "provenance": {
+      "binary_sha256": "6b5540b6137b4fba35b114fb25539b069606065a6148850d1b7045394f9cde55",
+      "probe_source_sha256": "a146495df58eb79dc6db18a04d4c5b52011f935808c40c6377f15bb4cdb57676",
+      "shared_source_sha256": "7c15623d69bec1700ae29d467c9495fa660424a062145286cb58e8567f46f17b"
+    },
+    "results": {
+      "frame_qp": {
+        "dropped": 0,
+        "encoded_bytes": 17192191,
+        "errors": 0,
+        "frames": 500,
+        "mode": "manual",
+        "quality": {
+          "create_status": 0,
+          "errors": 0,
+          "expected_samples": 17,
+          "luma_psnr_db": 35.05132767618695,
+          "minimum_frame_luma_psnr_db": 32.773259888345684,
+          "samples": 17,
+          "scope": "Sampled luma PSNR and top strip only; not full color, text readability or subjective quality acceptance.",
+          "top_256_rows_luma_psnr_db": 35.26869418863198,
+          "valid": true
+        },
+        "resume_max_100ms_pts_bytes": 206289
+      },
+      "previous_average": {
+        "dropped": 0,
+        "encoded_bytes": 20739094,
+        "errors": 0,
+        "frames": 500,
+        "mode": "average",
+        "quality": {
+          "create_status": 0,
+          "errors": 0,
+          "expected_samples": 17,
+          "luma_psnr_db": 26.82428162209519,
+          "minimum_frame_luma_psnr_db": 19.993118116418827,
+          "samples": 17,
+          "scope": "Sampled luma PSNR and top strip only; not full color, text readability or subjective quality acceptance.",
+          "top_256_rows_luma_psnr_db": 26.18408623149434,
+          "valid": true
+        },
+        "resume_max_100ms_pts_bytes": 889758
+      }
+    },
+    "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000"
+  },
+  "rejected_candidates": [
+    {
+      "diagnostic_valid": true,
+      "name": "vbr_separate_cached_properties",
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "4295be6bf4aebee76a31280a30e29f80ac95c81ef7fc065a3015426203e4f9e6",
+          "MacCaster.debug.dylib": "08301f5100e5bfb0488078f68b2579f98bd1debdc72dd7dce323a4544c5814fa",
+          "__preview.dylib": "8f181a74327e37c7e7ee5ec0707f5babbdb95f30e4391e8da6b1703c4146634b"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "cf3149b90f5889cc79e5b36a03ca0d1f9830f4762ac211f3678ea1235c104583",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "73e239ca17f0c9b2261128735a8bf2862c3bac02f9df7f012869abadf5c28204"
+      },
+      "resume_fps": 47.16551946362559,
+      "resume_p95_ms": 348.6870833148714,
+      "retained": false,
+      "steady_fps": 38.0797482836446
+    },
+    {
+      "diagnostic_valid": true,
+      "name": "vbr_coalesced_updates",
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "a7ed47bba6243152debbde704e96169b9cbd4e4e130a3d83976c438f24165450",
+          "MacCaster.debug.dylib": "54b78f3a177900ca69037844e77c57cf47259fd2ccd2d64d1dc52e76fe808a78",
+          "__preview.dylib": "a7f27a448229b2d16a33650d3236f76065a71601fb15172c9cbe80c3958bfdb6"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "0111aad23859370f9be87331cb0a45e3cc394d3d7615aa92dceb14fb1e983ee9",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "7ac1ff18e0a0200f1dff17e657fe0f3fc5db9ddaac4a84fb8bd8c91191c1bbc5"
+      },
+      "resume_fps": 57.080074616030885,
+      "resume_p95_ms": 140.3146666707471,
+      "retained": false,
+      "steady_fps": 39.16359014908827
+    },
+    {
+      "diagnostic_valid": true,
+      "name": "vbr_speed_hint",
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "fe6f4b43ba46ace14d4f0caa1e8dfa3f0bb529de1457aaaf6d984c33c6d922a7",
+          "MacCaster.debug.dylib": "469f94ee7c42b1ddb9c1f050aa5e4f4a27d0659d21ae8799575bb49ea826f9cc",
+          "__preview.dylib": "f53d2b229adb6c218fb76018b116da3ac72cc7bd423346e27947d5952ecad903"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "3d39acada8d089862cd0c2491e0c529a882d2119ca6781f9587f5fee4bac5b4b",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "b40fca82a77dcfaaae5eb0c02292a0f9615f423c66f5acd92b62bfa532574cda"
+      },
+      "resume_fps": 47.82904200539509,
+      "resume_p95_ms": 240.5646666593384,
+      "retained": false,
+      "steady_fps": 32.830070731034034
+    },
+    {
+      "diagnostic_valid": true,
+      "name": "sdk_default_encoder",
+      "provenance": {
+        "chip": "Apple M4",
+        "code_files": {
+          "MacCaster": "b1c0d35121f16912074d16a84d3a5e89bce8d07e37fee97278b36c6560ffac9e",
+          "MacCaster.debug.dylib": "c7426b9d21440e746f55fbf81b03936d15e79a02386833562fb1bf7e963de300",
+          "__preview.dylib": "da697449c4054991d4867e36d9249aa7167166848c13e4833837ba2d61424945"
+        },
+        "commit": "38f3f3dd5acdf793c9a76afe59869cbb7f72060e",
+        "cpu_count": 10,
+        "hardware": "Mac16,12",
+        "protocol_sha256": "8e1f42f82b88c6a2ab7b611ae978a19482376d35554e9e0ef077cfa8651fc221",
+        "seed": 20261029,
+        "source_image_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+        "source_tree_sha256": "2e9f08dfc40c8e6126ab5325a01ea3f68801692a6ef1dfd1517d178600d2f417",
+        "toolchain": "Xcode 27.1\nBuild version 27A9275",
+        "tracked_patch_sha256": "81b6fa3c5b7703cae4703f588a0f7835297e82e1beb8ffb7c60b0d72a79388cb"
+      },
+      "resume_fps": 58.662918757979924,
+      "resume_p95_ms": 1530.4627083532978,
+      "retained": false,
+      "steady_fps": 57.16436857971734
+    },
+    {
+      "diagnostic_valid": true,
+      "name": "explicit_expected_frame_rate_in_manual_mode",
+      "note": "Rejected hint experiment; production source reverted byte-for-byte to validated original-stress encoder source.",
+      "recovery_fps": 33.4,
+      "resume_fps": 21.7,
+      "retained": false,
+      "steady_fps": 59.0
+    }
+  ],
+  "schema": 1,
+  "source_build": 27,
+  "verification": {
+    "ipad_11": "debugging unreachable; not installed; existing native receive protocol compatible",
+    "ipad_13": "build27 installed; manualQP=true and initial localIP self-loop passed; full device run interrupted with VTInvalidSession (-12903), not reported as pass",
+    "mac_4k": "functional check; synthetic30fps input/configured60fps ceiling, not 4k60 performance acceptance",
+    "mac_native_routes": "four modes and rotation passed",
+    "real_replaykit_wan": "pending human system broadcast confirmation",
+    "unit_and_link_checks": "14 passed"
+  }
+}

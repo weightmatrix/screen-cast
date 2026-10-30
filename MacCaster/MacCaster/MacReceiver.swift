@@ -796,12 +796,12 @@ final class MacReceiverClient: ObservableObject {
         NSLog("NativeDeviceReceive %@ frames=%ld size=%@ status=%@", client.frameCount >= 30 ? "PASS" : "FAIL", client.frameCount, String(describing: client.decoder.frameForDisplay(after: nil)?.image?.extent.size), String(describing: client.status))
     }
     static func run() async {
+        let fourK = ProcessInfo.processInfo.arguments.contains("--verify-native-4k")
         let code = MatchingCode.generate()
         let server = CastingServer(port: 19318, accessCode: code)
-        server.configureNative(bitrate: 8_000_000, fps: 30)
+        server.configureNative(bitrate: 8_000_000, fps: fourK ? 60 : 30)
         server.start()
         defer { server.stop() }
-        let fourK = ProcessInfo.processInfo.arguments.contains("--verify-native-4k")
         let width = fourK ? 3840 : 1280, height = fourK ? 2160 : 720
         var pixel: CVPixelBuffer?
         CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA,

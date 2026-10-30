@@ -11,6 +11,9 @@ struct MacCasterApp: App {
             let url = URL(fileURLWithPath: arguments[index + 1])
             Task { @MainActor in await NativeBenchmark.run(controlURL: url) }
         }
+        if arguments.contains("--verify-native-routes") {
+            Task { @MainActor in await NativeRoutesVerification.run() }
+        }
         #endif
     }
 
@@ -23,7 +26,6 @@ struct MacCasterApp: App {
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-motion") { await NativeRoutesVerification.motion() }
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-receive") { await NativeRoutesVerification.receive() }
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-capture") || ProcessInfo.processInfo.arguments.contains("--verify-native-publish") { await streamer.verifyNativeCapture() }
-                    if ProcessInfo.processInfo.arguments.contains("--verify-native-routes") { await NativeRoutesVerification.run() }
                     if ProcessInfo.processInfo.arguments.contains("--verify-display-pacing") {
                         await MacStreamImageView.verifyPacing()
                     }

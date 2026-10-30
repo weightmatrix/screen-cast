@@ -26,7 +26,9 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     private final class Ticket {
         let frame: RTCVideoFrame
         let started = ProcessInfo.processInfo.systemUptime
-        init(_ frame: RTCVideoFrame) { self.frame = frame }
+        let qp: Int?
+        let budget: Int
+        init(_ frame: RTCVideoFrame, qp: Int?, budget: Int) { self.frame = frame; self.qp = qp; self.budget = budget }
     }
     private let codec: RTCVideoCodecInfo
     private var session: VTCompressionSession?
@@ -34,6 +36,9 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     private let lock = NSLock()
     private var pending = 0
     private var framePacer = EncoderFramePacer()
+    private var quantizer = ScreenFrameQuantizer()
+    private var allowManual = true
+    private var manualQP = false
     private var pacingFPS = 60
     private var pacingUpper = 60
     private var nextEncodedNS: Int64?
@@ -57,7 +62,8 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         width = Int(settings.width); height = Int(settings.height)
         rate = max(1, settings.startBitrate); fps = max(1, settings.maxFramerate)
         lock.lock(); framePacer.reset(upper: Int(fps)); pacingFPS = Int(fps); pacingUpper = Int(fps); lock.unlock()
-        nextEncodedNS = nil; scheduledFPS = 0
+        nextEncodedNS = nil; scheduledFPS = 0; quantizer = ScreenFrameQuantizer()
+        let attemptManual = allowManual && codec.parameters["profile-level-id"]?.hasPrefix("64") == true
         // Normal realtime rate control recovers without the low-latency mode's
         // prolonged frame starvation. Keep the hardware-only low-latency path on
         // older iOS, where the explicit hardware requirement is unavailable.
@@ -66,6 +72,10 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         if #available(iOS 17.4, *) {
             specification = [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true]
             lowLatency = false
+            if attemptManual {
+                specification[kVTVideoEncoderSpecification_EnableLowLatencyRateControl] = true
+                lowLatency = true
+            }
         }
         let attributes: [CFString: Any] = [kCVPixelBufferIOSurfacePropertiesKey: [:],
             kCVPixelBufferMetalCompatibilityKey: true,
@@ -80,6 +90,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
                 owner.output(ticket, status: status, flags: flags, sample: sample)
             }, refcon: Unmanaged.passUnretained(self).toOpaque(), compressionSessionOut: &session)
         guard status == noErr, let session else {
+            if attemptManual { allowManual = false; return startEncode(with: settings, numberOfCores: numberOfCores) }
             PerformanceDisk.shared.write("native.encoder create status=\(status)"); return -1
         }
         let profile = codec.parameters["profile-level-id"]?.hasPrefix("42") == true
@@ -93,11 +104,22 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             let result = VTSessionSetProperty(session, key: key, value: value)
             guard result == noErr else {
                 PerformanceDisk.shared.write("native.encoder property=\(key) status=\(result)")
+                if attemptManual { allowManual = false; return startEncode(with: settings, numberOfCores: numberOfCores) }
                 _ = release(); return -1
             }
         }
         _ = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: 7200 as CFNumber)
         _ = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: 240 as CFNumber)
+        if attemptManual {
+            var support: Unmanaged<CFTypeRef>?
+            let supportStatus = VTSessionCopyProperty(session, key: kVTCompressionPropertyKey_SupportsBaseFrameQP, allocator: nil, valueOut: &support)
+            let supported = (support?.takeRetainedValue() as? NSNumber)?.boolValue == true
+            guard supportStatus == noErr, supported else {
+                allowManual = false
+                return startEncode(with: settings, numberOfCores: numberOfCores)
+            }
+            manualQP = true
+        }
         let result = setBitrate(rate, framerate: fps)
         guard result == 0, VTCompressionSessionPrepareToEncodeFrames(session) == noErr else { _ = release(); return -1 }
         pool = VTCompressionSessionGetPixelBufferPool(session)
@@ -108,7 +130,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             hardwareStatus = VTSessionCopyProperty(session, key: kVTCompressionPropertyKey_UsingHardwareAcceleratedVideoEncoder, allocator: nil, valueOut: &hardware)
         }
         let hardwareValue = hardware?.takeRetainedValue()
-        PerformanceDisk.shared.write("native.encoder ready=\(width)x\(height) lowLatencyRequested=\(lowLatency) hardware=\(String(describing: hardwareValue)) hardwareStatus=\(hardwareStatus) profile=\(profile)")
+        PerformanceDisk.shared.write("native.encoder ready=\(width)x\(height) lowLatencyRequested=\(lowLatency) manualQP=\(manualQP) hardware=\(String(describing: hardwareValue)) hardwareStatus=\(hardwareStatus) profile=\(profile)")
         return 0
     }
     func release() -> Int {
@@ -116,7 +138,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             VTCompressionSessionCompleteFrames(session, untilPresentationTimeStamp: .invalid)
             VTCompressionSessionInvalidate(session)
         }
-        session = nil; pool = nil; appliedRate = 0; appliedFPS = 0
+        session = nil; pool = nil; appliedRate = 0; appliedFPS = 0; manualQP = false
         return 0
     }
     func setBitrate(_ bitrateKbit: UInt32, framerate: UInt32) -> Int32 {
@@ -131,6 +153,11 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             PerformanceDisk.shared.write("native.encoder rateApply rateKbit=\(rate) expectedFPS=\(effectiveFPS) inputLimitFPS=\(inputLimitFPS)")
         }
         #endif
+        if manualQP {
+            // BaseFrameQP controls every frame; Apple documents average/data limits as ignored in this mode.
+            appliedRate = rate; appliedFPS = effectiveFPS
+            return 0
+        }
         let status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: (Int(rate) * 1000) as CFNumber)
         let frameStatus = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ExpectedFrameRate, value: Int(effectiveFPS) as CFNumber)
         // Bound one-second output to 1.5x the current target, as in the native SDK.
@@ -161,6 +188,8 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             return 0
         }
         pending += 1
+        let frameQP: Int? = manualQP ? quantizer.qp : nil
+        let frameBudget = max(256, Int(rate) * 1000 / 8 / max(1, pacingFPS))
         if let next = nextEncodedNS, frame.timeStampNs < next + interval { nextEncodedNS = next + interval }
         else { nextEncodedNS = frame.timeStampNs + interval }
         lock.unlock()
@@ -180,10 +209,13 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             input = output; perf.record("converted")
         }
         let force = keyNeeded || frameTypes.contains { $0.intValue == Int(RTCFrameType.videoFrameKey.rawValue) }
-        let ticket = Unmanaged.passRetained(Ticket(frame)).toOpaque()
+        var properties: [CFString: Any] = [:]
+        if force { properties[kVTEncodeFrameOptionKey_ForceKeyFrame] = true }
+        if let frameQP { properties[kVTEncodeFrameOptionKey_BaseFrameQP] = frameQP }
+        let ticket = Unmanaged.passRetained(Ticket(frame, qp: frameQP, budget: frameBudget)).toOpaque()
         let status = VTCompressionSessionEncodeFrame(session, imageBuffer: input,
             presentationTimeStamp: CMTime(value: frame.timeStampNs, timescale: 1_000_000_000), duration: .invalid,
-            frameProperties: force ? [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary : nil,
+            frameProperties: properties as CFDictionary,
             sourceFrameRefcon: ticket, infoFlagsOut: nil)
         if status != noErr {
             Unmanaged<Ticket>.fromOpaque(ticket).release()
@@ -241,12 +273,15 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             PerformanceDisk.shared.write("native.encoder largeFrame bytes=\(data.count) key=\(key) sourceNS=\(ticket.frame.timeStampNs)")
         }
         #endif
+        if let qp = ticket.qp {
+            lock.lock(); quantizer.observe(bytes: data.count, budget: ticket.budget, usedQP: qp, key: key); lock.unlock()
+        }
         let encoded = RTCEncodedImage()
         encoded.buffer = data; encoded.encodedWidth = Int32(width); encoded.encodedHeight = Int32(height)
         encoded.timeStamp = UInt32(bitPattern: ticket.frame.timeStamp)
         encoded.captureTimeMs = ticket.frame.timeStampNs / 1_000_000
         encoded.rotation = ticket.frame.rotation; encoded.frameType = key ? .videoFrameKey : .videoFrameDelta
-        encoded.contentType = .screenshare; encoded.flags = 255; encoded.qp = -1
+        encoded.contentType = .screenshare; encoded.flags = 255; encoded.qp = NSNumber(value: ticket.qp ?? -1)
         let info = RTCCodecSpecificInfoH264(); info.packetizationMode = .nonInterleaved
         _ = callback(encoded, info)
     }

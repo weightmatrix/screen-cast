@@ -2,6 +2,9 @@
 import Foundation
 import CoreImage
 import ReplayKit
+#if os(iOS)
+import UIKit
+#endif
 
 @MainActor enum BroadcastVerification {
     static func run() async {
@@ -233,6 +236,11 @@ import ReplayKit
 #if DEBUG
 @MainActor enum NativeRoutesVerification {
     static func run() async {
+        #if os(iOS)
+        let previousIdleTimer = UIApplication.shared.isIdleTimerDisabled
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer { UIApplication.shared.isIdleTimerDisabled = previousIdleTimer }
+        #endif
         let code = MatchingCode.generate()
         let server = CastingServer(port: 19318, accessCode: code)
         server.configureNative(bitrate: 8_000_000, fps: 30)
@@ -248,6 +256,14 @@ import ReplayKit
         server.onInternetStatus = { text in if text.contains("匹配就绪") { registered = true } }
         try? await Task.sleep(nanoseconds: 500_000_000)
         for mode in ["localIP", "localCode", "internetIP", "internetCode"] {
+            #if os(iOS)
+            let appState = UIApplication.shared.applicationState.rawValue
+            PerformanceDisk.shared.write("NativeRoutes BEGIN mode=\(mode) appState=\(appState)")
+            guard UIApplication.shared.applicationState == .active else {
+                PerformanceDisk.shared.write("NativeRoutes SKIP foreground required")
+                return
+            }
+            #endif
             if mode == "internetIP" { server.setInternetMatchingEnabled(false); server.setInternetEnabled(true) }
             if mode == "internetCode" {
                 server.setInternetMatchingEnabled(true)

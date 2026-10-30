@@ -131,7 +131,7 @@ python3 Tests/Benchmarks/runner.py --app /tmp/touping-unified/Build/Products/Deb
 独立工具`encoder_burst_probe.swift`只运行本机硬件H.264：3秒运动、4秒静止、4秒重新运动，1920×1440、固定15Mbps，共500帧。输入为本套生成的document.png，不采集用户屏幕。它不包含WebRTC、网络、应用的两/三帧在途上限，也不作画质验收；不能代替App性能基线。示例（先将TP_PROBE_IMAGE设为一次本机测试生成的PNG绝对路径）：
 
 ```sh
-swiftc Tests/Benchmarks/encoder_burst_probe.swift -o /tmp/touping-encoder-burst-probe
+swiftc -O Shared/StreamFormat.swift Tests/Benchmarks/encoder_burst_probe.swift -o /tmp/touping-encoder-burst-probe
 /tmp/touping-encoder-burst-probe 1 invalid "$TP_PROBE_IMAGE"
 /tmp/touping-encoder-burst-probe 0.1 valid "$TP_PROBE_IMAGE" long-first
 /tmp/touping-encoder-burst-probe 0.1 valid "$TP_PROBE_IMAGE" vbr
@@ -144,3 +144,21 @@ swiftc Tests/Benchmarks/encoder_burst_probe.swift -o /tmp/touping-encoder-burst-
 三项完整App诊断（恒定20Mbps、FIFO交付）：短长窗口+明确帧时长导致恢复约1.7fps；VBR+两帧在途恢复P95约176ms、稳定34.2fps；VBR+三帧在途恢复P95约94ms、稳定36.2fps。三者均未达到原目标，全部撤销，没有把低延迟与帧率回退交换后发布。VBR确实启用、硬件状态为true，但回调耗时约20–56ms，包含内部排队，不能直接视为纯硬件计算时间。
 
 按项目三次试调止损暂停追加参数。最终只读固定码率VBR探针500帧全部完成，最多三帧在途、末尾无积压，不能据App回调时长就认定硬件跑不了60fps。下一轮优先验证动态码率/FPS更新是否频繁重配置，再评估速度与解码画质；不能无限加在途帧。保持源码26、现有协议和设备安装版；Mac Debug已恢复构建，独立工具编译及500帧参考检查通过。第5步仍未通过。
+
+## 帧级QP反馈（27版交付）
+
+最终采用公开BaseFrameQP硬件接口，逐帧用实际输出字节对比WebRTC当前预算调整QP；单次上调最多6、下调1，QP限制10–51，静止小包不继续降低QP，避免静止后突然积累大帧。每帧都带QP，按Apple接口约定不再依赖该模式下被忽略的AverageBitRate/DataRateLimits。保持原尺寸、无B帧、最多两帧在途；不支持接口或约束High的情况重新创建旧模式编码器。四个入口仍共用原生H.264轨道，服务端不变。
+
+`reference-frame-qp.json`保留最终三个场景与画质采样。恒定20Mbps/FIFO诊断的各计分阶段指标均达到原阈值：约57–59fps、恢复运动P95约98ms、冻结0；该诊断仍不算原协议整体通过。原高乱序压力场景恢复运动约58.4fps/P95约37ms、恢复阶段无冻结，但稳定/骤降阶段仍未通过；FIFO带宽骤降期间P95约1933ms、冻结1.495秒，恢复后约60fps/P95约34ms。
+
+独立15Mbps同素材17帧解码亮度采样：旧平均码控约26.82dB，新控制约35.05dB；顶端256行约26.18→35.27dB。输出字节约20.74→17.19MB。仅是采样亮度/顶部条带，不能外推为全色彩、文字可读性或真机跨网画质验收。新增`manual --quality`工具模式，编码结束后离线解码测量，不干扰编码计时。
+
+```sh
+/tmp/touping-encoder-burst-probe 1 invalid "$TP_PROBE_IMAGE" --quality
+/tmp/touping-encoder-burst-probe 1 invalid "$TP_PROBE_IMAGE" manual --quality
+```
+
+14项定向检查、Mac/iOS Debug与Mac Release构建通过；Mac四路功能及旋转回归通过。13英寸已更新，设备自测须保持前台，后台暂停会使VT会话无效；不把受后台影响的运行当通过。11英寸当前不可调试，旧接收协议仍兼容。真实ReplayKit跨网广播仍需系统确认后复测。该交付解决主要静止恢复问题，第5步的弱网骤降/高乱序仍未全面验收，不宣称全部性能目标已完成。
+
+
+27版补充验证：3840×2160功能回归使用30fps合成注入、配置60fps上限，不等于4K60性能验收。单独追加ExpectedFrameRate提示曾造成帧率回退，已撤销，最终编码器源码指纹与已验证的原压力场景版本完全一致。13英寸完整设备自测遇VTInvalidSession(-12903)及系统暂停，未计为通过；已退出测试恢复普通界面，真实广播等待用户确认。

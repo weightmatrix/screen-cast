@@ -239,6 +239,21 @@ struct EncoderFramePacer {
     }
 }
 
+/// Hardware per-frame feedback without banking unused static-frame bitrate.
+struct ScreenFrameQuantizer {
+    private(set) var qp = 28
+    mutating func observe(bytes: Int, budget: Int, usedQP: Int, key: Bool) {
+        guard !key, budget > 0 else { return }
+        let ratio = Double(bytes) / Double(budget)
+        if ratio > 1.1 {
+            let step = min(6, max(1, Int(ceil(6 * log2(ratio)))))
+            qp = min(51, max(qp, usedQP + step))
+        } else if ratio >= 0.15 && ratio < 0.8 && usedQP == qp {
+            qp = max(10, qp - 1)
+        }
+    }
+}
+
 /// Smooth encoder demand only. Never lower the connection's BWE/probing ceiling.
 struct NativeVideoBudget {
     private(set) var limit = 8_000_000
