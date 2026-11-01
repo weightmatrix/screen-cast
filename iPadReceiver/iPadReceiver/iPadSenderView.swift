@@ -5,6 +5,8 @@ import ReplayKit
 struct iPadSenderView: View {
     @AppStorage("appMode") private var appMode = "cast"
     @State private var code = ""
+    @State private var pageAudio = false
+    @State private var micAudio = false
     @State private var bitrate = 8_000_000
     @State private var internetEnabled = false
     @State private var internetMatchingEnabled = true
@@ -84,6 +86,9 @@ struct iPadSenderView: View {
                         Text(active ? internetStatus : "公网 IP 使用端口 9318；匹配码仅交换连接信息，视频不经服务器。")
                             .foregroundStyle(.secondary)
                     }
+                    Toggle("发送页面声音", isOn: $pageAudio).toggleStyle(.switch)
+                    Toggle("发送话筒声音", isOn: $micAudio).toggleStyle(.switch)
+                    Text("话筒需先在系统广播面板打开麦克风；此处可随时静音或恢复。").foregroundStyle(.secondary)
                     HStack(spacing: 18) {
                         SystemBroadcastButton().frame(width: 64, height: 64)
                             .allowsHitTesting(MatchingCode.isValid(code) && configurationReady).opacity(MatchingCode.isValid(code) && configurationReady ? 1 : 0.35)
@@ -95,7 +100,7 @@ struct iPadSenderView: View {
                     Text(status).foregroundStyle(active ? .green : .secondary)
                 }.padding(28).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
-                Text("在系统弹窗中确认开始后，可以切换到其他应用继续投屏。系统不允许静默启动录屏；受保护的视频可能不会显示。当前仅传视频。")
+                Text("在系统弹窗中确认开始后，可以切换到其他应用继续投屏。系统不允许静默启动录屏；受保护的视频可能不会显示。声音可分别选择页面与话筒。")
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.font(.system(size: 18)).padding(32).frame(maxWidth: 900)
                 .frame(maxWidth: .infinity)
@@ -105,6 +110,8 @@ struct iPadSenderView: View {
         .onReceive(timer) { _ in refreshStatus() }
         .onAppear {
             loadedConfiguration = false
+            pageAudio = BroadcastSettings.store.bool(forKey: "broadcastPageAudio")
+            micAudio = BroadcastSettings.store.bool(forKey: "broadcastMicAudio")
             let storedResolution = BroadcastSettings.store.string(forKey: "broadcastResolution")
             PerformanceDisk.shared.write("resolution.loaded stored=\(storedResolution ?? "missing") screen=\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")
             let savedCode = BroadcastSettings.store.string(forKey: "broadcastCode")
@@ -129,6 +136,8 @@ struct iPadSenderView: View {
             saveConfiguration()
             refreshStatus()
         }
+        .onChange(of: pageAudio) { _ in saveConfiguration() }
+        .onChange(of: micAudio) { _ in saveConfiguration() }
         .onChange(of: bitrate) { _ in saveConfiguration() }
         .onChange(of: fps) { _ in saveConfiguration() }
         .onChange(of: internetEnabled) { _ in saveConfiguration() }
@@ -138,6 +147,8 @@ struct iPadSenderView: View {
     private func saveConfiguration() {
         guard loadedConfiguration else { return }
         let store = BroadcastSettings.store
+        store.set(pageAudio, forKey: "broadcastPageAudio")
+        store.set(micAudio, forKey: "broadcastMicAudio")
         guard MatchingCode.isValid(code) else {
             configurationReady = false
             status = "请输入 6–36 位数字匹配码"
@@ -171,7 +182,7 @@ private struct SystemBroadcastButton: UIViewRepresentable {
     func makeUIView(context: Context) -> RPSystemBroadcastPickerView {
         let picker = RPSystemBroadcastPickerView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
         picker.preferredExtension = (Bundle.main.bundleIdentifier ?? "") + ".broadcast"
-        picker.showsMicrophoneButton = false
+        picker.showsMicrophoneButton = true
         picker.tintColor = .systemBlue
         picker.accessibilityLabel = "开始或停止屏幕投屏"
         return picker

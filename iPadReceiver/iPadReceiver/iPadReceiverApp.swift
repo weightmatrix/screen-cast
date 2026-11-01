@@ -28,6 +28,7 @@ struct RootView: View {
         }.preferredColorScheme(.dark)
         .task {
             #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--verify-native-audio") { await NativeAudioVerification.run() }
             if ProcessInfo.processInfo.arguments.contains("--verify-native-routes") { await NativeRoutesVerification.run() }
             if ProcessInfo.processInfo.arguments.contains("--verify-broadcast-encoder") {
                 await BroadcastVerification.run()

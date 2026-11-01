@@ -185,6 +185,8 @@ private struct SessionRow: View {
                 }
                 Spacer()
                 Toggle("显示光标", isOn: $session.showsCursor).toggleStyle(.switch).fixedSize()
+                Toggle("页面声音", isOn: $session.sendsPageAudio).toggleStyle(.switch)
+                Toggle("话筒声音", isOn: $session.sendsMicrophone).toggleStyle(.switch)
             }
             HStack(spacing: 18) {
                 Text("码率").foregroundStyle(.secondary)
@@ -540,7 +542,7 @@ private struct AppGroupPicker: View {
                 }
                 Text(group.application.applicationName).font(.system(size: 16)).bold()
                 Spacer()
-                if group.windows.count > 1, let display = streamer.bestDisplay(for: [group.application]) {
+                if let display = streamer.bestDisplay(for: [group.application]) {
                     let key = "app-\(group.application.bundleIdentifier)-\(display.displayID)"
                     Button(selected.contains(key) ? "已选" : "投屏整个应用") {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }

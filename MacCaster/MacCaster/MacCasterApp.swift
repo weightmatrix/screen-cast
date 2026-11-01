@@ -11,6 +11,7 @@ struct MacCasterApp: App {
             let url = URL(fileURLWithPath: arguments[index + 1])
             Task { @MainActor in await NativeBenchmark.run(controlURL: url) }
         }
+        if arguments.contains("--verify-native-audio") { Task { @MainActor in await NativeAudioVerification.run() } }
         if arguments.contains("--verify-native-routes") {
             Task { @MainActor in await NativeRoutesVerification.run() }
         }

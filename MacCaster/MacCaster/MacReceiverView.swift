@@ -35,6 +35,12 @@ struct MacReceiverView: View {
             }
         }
         .background(Color.black)
+        .overlay {
+            if client.status == .connecting {
+                ProgressView("等待首帧画面…").padding(24)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+            }
+        }
         .overlay(alignment: .top) {
             if !drawerOpen {
                 Button("连接设置") { openDrawer() }
@@ -129,7 +135,11 @@ struct MacReceiverView: View {
                     .frame(width: 180)
             }
 
-            Button(action: toggleConnection) {
+            VStack(alignment: .leading, spacing: 12) {
+                    Toggle("接收页面声音", isOn: $client.receivesPageAudio)
+                    Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
+                }.toggleStyle(.switch)
+                Button(action: toggleConnection) {
                 Text(isConnected || client.status == .connecting ? "断开" : "连接").frame(maxWidth: .infinity)
             }
             .buttonStyle(CastButtonStyle(primary: true))

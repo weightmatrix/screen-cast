@@ -15,6 +15,9 @@ final class StreamClient: ObservableObject {
     @Published private(set) var frameCount: Int = 0
     let decoder = ImageDecoder()
 
+    @Published var receivesPageAudio = true { didSet { updateAudio() } }
+    @Published var receivesMicrophone = true { didSet { updateAudio() } }
+    private func updateAudio() { nativePeer?.receiveAudio(page: receivesPageAudio, microphone: receivesMicrophone) }
     private var nativePeer: NativeVideoPeer?
     private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
@@ -53,6 +56,7 @@ final class StreamClient: ObservableObject {
 
     private func configureNativePeer(_ video: NativeVideoPeer) {
         nativePeer = video
+        updateAudio()
         var count = 0
         video.onImage = { [weak self, weak video] image in
             guard let self, video != nil else { return }
@@ -68,7 +72,7 @@ final class StreamClient: ObservableObject {
                 }
             }
         }
-        video.onConnected = { [weak self] in self?.connectionTimeout?.cancel(); self?.setStatus(.connected) }
+        video.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         video.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
     }
 
@@ -80,7 +84,7 @@ final class StreamClient: ObservableObject {
         let room = NativeVideoRoom(code: code)
         nativeRoom = room
         configureNativePeer(room.video)
-        room.onConnected = { [weak self] in self?.setStatus(.connected) }
+        room.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         room.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
         room.start()
     }

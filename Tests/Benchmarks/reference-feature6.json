@@ -1,0 +1,310 @@
+{
+  "version": "1.4",
+  "build": 29,
+  "scope": "Synthetic CMSampleBuffer -> conversion -> Opus/SRTP -> playout/mutes. Mac and physical iPad11 loopback, not real microphone or ReplayKit capture. Spectral leakage includes finite 10ms measurement windows.",
+  "audio": {
+    "mac": [
+      {
+        "result": "PASS",
+        "mode": "both",
+        "samples": "26880",
+        "pageAmplitude": "0.1625",
+        "micAmplitude": "0.1601"
+      },
+      {
+        "result": "PASS",
+        "mode": "page",
+        "samples": "27360",
+        "pageAmplitude": "0.1587",
+        "micAmplitude": "0.0112"
+      },
+      {
+        "result": "PASS",
+        "mode": "mic",
+        "samples": "26880",
+        "pageAmplitude": "0.0112",
+        "micAmplitude": "0.1557"
+      },
+      {
+        "result": "PASS",
+        "mode": "muted",
+        "samples": "26400",
+        "pageAmplitude": "0.0000",
+        "micAmplitude": "0.0000"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourcePageOff",
+        "samples": "26400",
+        "pageAmplitude": "0.0112",
+        "micAmplitude": "0.1584"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourceMicOff",
+        "samples": "26880",
+        "pageAmplitude": "0.1550",
+        "micAmplitude": "0.0113"
+      }
+    ],
+    "ipad11": [
+      {
+        "result": "PASS",
+        "mode": "both",
+        "samples": "27360",
+        "pageAmplitude": "0.1513",
+        "micAmplitude": "0.1487"
+      },
+      {
+        "result": "PASS",
+        "mode": "page",
+        "samples": "27840",
+        "pageAmplitude": "0.1489",
+        "micAmplitude": "0.0112"
+      },
+      {
+        "result": "PASS",
+        "mode": "mic",
+        "samples": "27360",
+        "pageAmplitude": "0.0108",
+        "micAmplitude": "0.1489"
+      },
+      {
+        "result": "PASS",
+        "mode": "muted",
+        "samples": "27360",
+        "pageAmplitude": "0.0000",
+        "micAmplitude": "0.0000"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourcePageOff",
+        "samples": "27360",
+        "pageAmplitude": "0.0109",
+        "micAmplitude": "0.1497"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourceMicOff",
+        "samples": "11520",
+        "pageAmplitude": "0.1551",
+        "micAmplitude": "0.0116"
+      }
+    ]
+  },
+  "videoRoutes": [
+    {
+      "result": "PASS",
+      "mode": "localIP",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "localCode",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "internetIP",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "internetCode",
+      "frames": 210
+    }
+  ],
+  "rotation": "PASS",
+  "finalBuild": 31,
+  "finalVideoRoutes": [
+    {
+      "result": "PASS",
+      "mode": "localIP",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "localCode",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "internetIP",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "internetCode",
+      "frames": 210
+    }
+  ],
+  "finalRotation": "PASS",
+  "live29": {
+    "video": "1920x1440; first stats sample at 2s contains38 decoded frames",
+    "audio": "Opus negotiated; received bytes increase; human listening not yet confirmed",
+    "limitations": "Freezes/pacer backlog observed during idle; 2s periodic keyframe change withdrawn in30. ReplayKit -5808 root cause unresolved."
+  },
+  "finalAudioMac": [
+    {
+      "result": "PASS",
+      "mode": "both",
+      "samples": "26400",
+      "pageAmplitude": "0.1603",
+      "micAmplitude": "0.1574"
+    },
+    {
+      "result": "PASS",
+      "mode": "page",
+      "samples": "10080",
+      "pageAmplitude": "0.1604",
+      "micAmplitude": "0.0113"
+    },
+    {
+      "result": "PASS",
+      "mode": "mic",
+      "samples": "26400",
+      "pageAmplitude": "0.0114",
+      "micAmplitude": "0.1582"
+    },
+    {
+      "result": "PASS",
+      "mode": "muted",
+      "samples": "26400",
+      "pageAmplitude": "0.0000",
+      "micAmplitude": "0.0000"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourcePageOff",
+      "samples": "26880",
+      "pageAmplitude": "0.0115",
+      "micAmplitude": "0.1590"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourceMicOff",
+      "samples": "26400",
+      "pageAmplitude": "0.1610",
+      "micAmplitude": "0.0116"
+    }
+  ],
+  "finalAudioMac31": [
+    {
+      "result": "PASS",
+      "mode": "both",
+      "samples": "27840",
+      "pageAmplitude": "0.0616",
+      "micAmplitude": "0.0755"
+    },
+    {
+      "result": "PASS",
+      "mode": "page",
+      "samples": "27840",
+      "pageAmplitude": "0.1104",
+      "micAmplitude": "0.0088"
+    },
+    {
+      "result": "PASS",
+      "mode": "mic",
+      "samples": "27840",
+      "pageAmplitude": "0.0116",
+      "micAmplitude": "0.1534"
+    },
+    {
+      "result": "PASS",
+      "mode": "muted",
+      "samples": "27840",
+      "pageAmplitude": "0.0000",
+      "micAmplitude": "0.0000"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourcePageOff",
+      "samples": "28320",
+      "pageAmplitude": "0.0057",
+      "micAmplitude": "0.0738"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourceMicOff",
+      "samples": "27840",
+      "pageAmplitude": "0.0568",
+      "micAmplitude": "0.0045"
+    }
+  ],
+  "finalAudioIPad31": [
+    {
+      "result": "PASS",
+      "mode": "both",
+      "samples": "28800",
+      "pageAmplitude": "0.0542",
+      "micAmplitude": "0.0700"
+    },
+    {
+      "result": "PASS",
+      "mode": "page",
+      "samples": "28800",
+      "pageAmplitude": "0.1035",
+      "micAmplitude": "0.0077"
+    },
+    {
+      "result": "PASS",
+      "mode": "mic",
+      "samples": "28800",
+      "pageAmplitude": "0.0103",
+      "micAmplitude": "0.1393"
+    },
+    {
+      "result": "PASS",
+      "mode": "muted",
+      "samples": "28320",
+      "pageAmplitude": "0.0000",
+      "micAmplitude": "0.0000"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourcePageOff",
+      "samples": "28800",
+      "pageAmplitude": "0.0053",
+      "micAmplitude": "0.0704"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourceMicOff",
+      "samples": "28800",
+      "pageAmplitude": "0.0531",
+      "micAmplitude": "0.0038"
+    }
+  ],
+  "finalVideoRoutes31": [
+    {
+      "result": "PASS",
+      "mode": "localIP",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "localCode",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "internetIP",
+      "frames": 210
+    },
+    {
+      "result": "PASS",
+      "mode": "internetCode",
+      "frames": 210
+    }
+  ],
+  "audio31Input": "Page: 44.1kHz Float32 stereo, 1024-frame chunks; microphone:48kHz mono Int16,480-frame chunks. Persistent conversion,30ms page prebuffer, mix headroom. Does not establish subjective noise resolution.",
+  "final4K": {
+    "result": "PASS",
+    "width": 3840,
+    "height": 2160,
+    "decodedFrames": 210,
+    "scope": "Synthetic30fps input with60fps configured ceiling; pixel correctness only, not4K60 throughput acceptance."
+  },
+  "lastKeyframeGuard": "Final serialization/accepted-callback guard compiled for Mac/iOS;4K functional decode passed after the guard change."
+}

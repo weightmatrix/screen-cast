@@ -25,6 +25,10 @@ struct ContentView: View {
                 StreamingView(decoder: client.decoder)
                     .frame(width: geo.size.width, height: geo.size.height)
 
+                if client.status == .connecting {
+                    ProgressView("等待首帧画面…").padding(24)
+                        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+                }
                 if drawerOpen {
                     Color.black.opacity(0.35)
                         .frame(width: geo.size.width, height: geo.size.height)
@@ -185,6 +189,10 @@ struct ContentView: View {
                         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
                         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
                 }
+                VStack(alignment: .leading, spacing: 12) {
+                    Toggle("接收页面声音", isOn: $client.receivesPageAudio)
+                    Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
+                }.toggleStyle(.switch)
                 Button(action: toggleConnection) {
                     Label(isConnected || client.status == .connecting ? "断开连接" : "连接画面", systemImage: isConnected ? "stop.fill" : "arrow.up.right")
                         .font(.system(size: 19, weight: .semibold))

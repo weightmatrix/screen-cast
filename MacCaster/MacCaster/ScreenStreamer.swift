@@ -8,6 +8,7 @@ import VideoToolbox
 import AppKit
 import SwiftUI
 import ApplicationServices
+import AVFoundation
 
 final class ScreenStreamer: NSObject, ObservableObject {
     let annotation = AnnotationEngine()
@@ -230,6 +231,9 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var internetMatchingEnabled = true { didSet { server.setInternetMatchingEnabled(internetMatchingEnabled) } }
     @Published var internetEnabled = false { didSet { server.setInternetEnabled(internetEnabled) } }
     @Published var internetStatus = "广域网已关闭"
+    @Published var sendsPageAudio = false { didSet { updateAudio() } }
+    @Published var sendsMicrophone = false { didSet { updateAudio() } }
+    private var captureConfiguration: SCStreamConfiguration?
     @Published var showsCursor: Bool
     // Remote touch is suspended; retained implementation cannot be enabled.
     let touchEnabled = false
@@ -446,7 +450,12 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         config.scalesToFit = true
         config.preservesAspectRatio = true
         config.showsCursor = showsCursor
-        config.capturesAudio = false
+        config.capturesAudio = sendsPageAudio
+        config.excludesCurrentProcessAudio = true
+        config.sampleRate = 48000; config.channelCount = 1
+        if #available(macOS 15.0, *) { config.captureMicrophone = sendsMicrophone }
+        captureConfiguration = config
+        server.nativeSource.audio.configure(page: sendsPageAudio, microphone: sendsMicrophone)
         config.pixelFormat = annotationEngine.isActive ? kCVPixelFormatType_32BGRA : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
         encWidth = config.width
         encHeight = config.height
@@ -456,6 +465,8 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         do {
             let s = SCStream(filter: f, configuration: config, delegate: self)
             try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: workQueue)
+            try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: workQueue)
+            if #available(macOS 15.0, *) { try s.addStreamOutput(self, type: .microphone, sampleHandlerQueue: workQueue) }
             stream = s
             workQueue.sync { self.activeCapture = s }
             try await s.startCapture()
@@ -485,6 +496,25 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         }
         keepAliveTimer = timer
         timer.resume()
+    }
+
+    private func updateAudio() {
+        if sendsMicrophone {
+            if #unavailable(macOS 15.0) { sendsMicrophone = false; return }
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+                AVCaptureDevice.requestAccess(for: .audio) { [weak self] allowed in
+                    DispatchQueue.main.async { if !allowed { self?.sendsMicrophone = false } else { self?.updateAudio() } }
+                }; return
+            }
+            if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized { sendsMicrophone = false; return }
+        }
+        server.nativeSource.audio.configure(page: sendsPageAudio, microphone: sendsMicrophone)
+        guard let config = captureConfiguration, let stream else { return }
+        config.capturesAudio = sendsPageAudio
+        if #available(macOS 15.0, *) { config.captureMicrophone = sendsMicrophone }
+        Task { do { try await stream.updateConfiguration(config) }
+            catch { PerformanceDisk.shared.write("audio.capture updateError=\(error)") }
+        }
     }
 
     /// Per-stream settings; existing TCP connections survive a capture restart.
@@ -529,7 +559,10 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
 
 extension StreamSession: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard stream === activeCapture, type == .screen,
+        guard stream === activeCapture else { return }
+        if type == .audio { server.nativeSource.audio.append(sampleBuffer, microphone: false); return }
+        if #available(macOS 15.0, *), type == .microphone { server.nativeSource.audio.append(sampleBuffer, microphone: true); return }
+        guard type == .screen,
               sampleBuffer.isValid,
               let attachments = CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]],
               let statusRaw = attachments.first?[.status] as? Int,

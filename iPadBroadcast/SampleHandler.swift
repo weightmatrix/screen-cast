@@ -7,8 +7,17 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var heartbeat: Timer?
     private var observation: AnyCancellable?
     private var running = false
+    private let lifecycleLock = NSLock()
+    private var lifecycle: UUID?
+
+    private func isCurrent(_ token: UUID) -> Bool {
+        lifecycleLock.lock(); defer { lifecycleLock.unlock() }; return lifecycle == token
+    }
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+        let token = UUID()
+        lifecycleLock.lock(); lifecycle = token; lifecycleLock.unlock()
+        PerformanceDisk.shared.write("broadcast.lifecycle started token=\(token) version=\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "unknown") build=\(Bundle.main.infoDictionary?["CFBundleVersion"] ?? "unknown")")
         nativeCapture.setPaused(false)
         let defaults = BroadcastSettings.store
         let code = defaults.string(forKey: "broadcastCode") ?? "67890123"
@@ -23,7 +32,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         PerformanceDisk.shared.write("broadcast.settings storedResolution=\(storedResolution ?? "missing") requestedLimit=\(requestedResolution) screen=\(defaults.string(forKey: "broadcastScreenPixels") ?? "unknown")")
         defaults.set("等待系统提供画面", forKey: "broadcastResolutionStatus")
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.isCurrent(token) else { return }
             self.running = true
             let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
             server.configureNative(bitrate: bitrate, fps: fps, dimension: requestedResolution)
@@ -38,35 +47,47 @@ final class SampleHandler: RPBroadcastSampleHandler {
             server.setInternetMatchingEnabled(defaults.string(forKey: "broadcastInternetMode") != "ipOnly")
             server.setInternetEnabled(defaults.bool(forKey: "broadcastInternetEnabled"))
             server.start()
+            guard self.isCurrent(token) else { server.stop(); return }
             DiscoveryBroadcaster.shared.start()
             DiscoveryBroadcaster.shared.update(entries: [(code, 8318)])
             defaults.set(true, forKey: "broadcastActive")
             defaults.set("正在投屏", forKey: "broadcastStatus")
             defaults.set(Date().timeIntervalSince1970, forKey: "broadcastHeartbeat")
-            self.heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            self.nativeCapture.audio.configure(page: defaults.bool(forKey: "broadcastPageAudio"), microphone: defaults.bool(forKey: "broadcastMicAudio"))
+            self.heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+                self?.nativeCapture.audio.configure(page: defaults.bool(forKey: "broadcastPageAudio"), microphone: defaults.bool(forKey: "broadcastMicAudio"))
                 defaults.set(Date().timeIntervalSince1970, forKey: "broadcastHeartbeat")
             }
         }
     }
 
     override func processSampleBuffer(_ sampleBuffer: CMSampleBuffer, with sampleBufferType: RPSampleBufferType) {
-        guard sampleBufferType == .video else { return }
-        nativeCapture.append(sampleBuffer)
+        switch sampleBufferType {
+        case .video: nativeCapture.append(sampleBuffer)
+        case .audioApp: nativeCapture.audio.append(sampleBuffer, microphone: false)
+        case .audioMic: nativeCapture.audio.append(sampleBuffer, microphone: true)
+        @unknown default: break
+        }
     }
     override func broadcastPaused() {
+        PerformanceDisk.shared.write("broadcast.lifecycle paused")
         nativeCapture.setPaused(true)
         BroadcastSettings.store.set("投屏已暂停", forKey: "broadcastStatus")
     }
     override func broadcastResumed() {
+        PerformanceDisk.shared.write("broadcast.lifecycle resumed")
         nativeCapture.setPaused(false)
         BroadcastSettings.store.set("正在投屏", forKey: "broadcastStatus")
     }
     override func broadcastFinished() {
+        lifecycleLock.lock(); lifecycle = nil; lifecycleLock.unlock()
+        PerformanceDisk.shared.write("broadcast.lifecycle finished")
         nativeCapture.setPaused(true)
         DispatchQueue.main.async { [weak self] in self?.cleanup() }
     }
     private func cleanup() {
         running = false
+        PerformanceDisk.shared.relay = nil
         heartbeat?.invalidate(); heartbeat = nil
         observation = nil
         server?.stop(); server = nil
@@ -77,8 +98,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
         }
     }
     private func fail(_ message: String) {
+        lifecycleLock.lock(); let wasActive = lifecycle != nil; lifecycle = nil; lifecycleLock.unlock()
+        guard wasActive else { return }
+        PerformanceDisk.shared.write("broadcast.lifecycle failed reason=\(message)")
         BroadcastSettings.store.set(message, forKey: "broadcastStatus")
         BroadcastSettings.store.set(false, forKey: "broadcastActive")
+        nativeCapture.setPaused(true)
+        DispatchQueue.main.async { [weak self] in self?.cleanup() }
         finishBroadcastWithError(NSError(domain: "Touping.Broadcast", code: 1,
             userInfo: [NSLocalizedDescriptionKey: message]))
     }

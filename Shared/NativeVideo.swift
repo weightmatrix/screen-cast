@@ -15,9 +15,17 @@ private enum ScreenH264Formats {
     }
 }
 private final class ScreenH264EncoderFactory: NSObject, RTCVideoEncoderFactory {
+    private let lock = NSLock()
+    private let encoders = NSHashTable<AppleScreenEncoder>.weakObjects()
+    func requestKeyFrame() {
+        lock.lock(); let active = encoders.allObjects; lock.unlock()
+        active.forEach { $0.requestKeyFrame() }
+    }
     func supportedCodecs() -> [RTCVideoCodecInfo] { ScreenH264Formats.codecs }
     func createEncoder(_ info: RTCVideoCodecInfo) -> (any RTCVideoEncoder)? {
-        AppleScreenEncoder(info)
+        let encoder = AppleScreenEncoder(info)
+        lock.lock(); encoders.add(encoder); lock.unlock()
+        return encoder
     }
 }
 /// Public WebRTC encoder adapter: hardware VideoToolbox realtime H264, native RTP output.
@@ -54,6 +62,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
     var resolutionAlignment: Int { 2 }
     var applyAlignmentToAllSimulcastLayers: Bool { true }
     var supportsNativeHandle: Bool { true }
+    func requestKeyFrame() { lock.lock(); keyNeeded = true; lock.unlock() }
     func implementationName() -> String { "AppleScreenVideoToolbox" }
     func scalingSettings() -> RTCVideoEncoderQpThresholds? { nil }
     func setCallback(_ callback: RTCVideoEncoderCallback?) { lock.lock(); self.callback = callback; lock.unlock() }
@@ -208,9 +217,10 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             context.render(cropped.transformed(by: CGAffineTransform(scaleX: CGFloat(width) / rect.width, y: CGFloat(height) / rect.height)), to: output)
             input = output; perf.record("converted")
         }
-        let force = keyNeeded || frameTypes.contains { $0.intValue == Int(RTCFrameType.videoFrameKey.rawValue) }
+        lock.lock(); let needsKey = keyNeeded; lock.unlock()
+        let force = needsKey || frameTypes.contains { $0.intValue == Int(RTCFrameType.videoFrameKey.rawValue) }
         var properties: [CFString: Any] = [:]
-        if force { properties[kVTEncodeFrameOptionKey_ForceKeyFrame] = true }
+        if force { lock.lock(); keyNeeded = true; lock.unlock(); properties[kVTEncodeFrameOptionKey_ForceKeyFrame] = true }
         if let frameQP { properties[kVTEncodeFrameOptionKey_BaseFrameQP] = frameQP }
         let ticket = Unmanaged.passRetained(Ticket(frame, qp: frameQP, budget: frameBudget)).toOpaque()
         let status = VTCompressionSessionEncodeFrame(session, imageBuffer: input,
@@ -219,10 +229,10 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             sourceFrameRefcon: ticket, infoFlagsOut: nil)
         if status != noErr {
             Unmanaged<Ticket>.fromOpaque(ticket).release()
-            lock.lock(); pending -= 1; lock.unlock(); keyNeeded = true
+            lock.lock(); pending -= 1; keyNeeded = true; lock.unlock()
             PerformanceDisk.shared.write("native.encoder submit status=\(status)"); return -1
         }
-        keyNeeded = false; return 0
+        return 0
     }
     private func output(_ ticket: Ticket, status: OSStatus, flags: VTEncodeInfoFlags, sample: CMSampleBuffer?) {
         lock.lock(); pending -= 1; let callback = callback
@@ -283,7 +293,8 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         encoded.rotation = ticket.frame.rotation; encoded.frameType = key ? .videoFrameKey : .videoFrameDelta
         encoded.contentType = .screenshare; encoded.flags = 255; encoded.qp = NSNumber(value: ticket.qp ?? -1)
         let info = RTCCodecSpecificInfoH264(); info.packetizationMode = .nonInterleaved
-        _ = callback(encoded, info)
+        let accepted = callback(encoded, info)
+        if key && accepted { lock.lock(); keyNeeded = false; lock.unlock(); perf.record("keyframe") }
     }
 }
 
@@ -299,7 +310,7 @@ enum NativeVideo {
         logger.start { PerformanceDisk.shared.write("native.sdk \($0.prefix(1200))") }
         return logger
     }()
-    static let factory: RTCPeerConnectionFactory = {
+    static let initialize: Void = {
         // These parameters are verified against the pinned M156 binary/source.
         // Apply before creating any WebRTC object. The ObjC factory does not yet expose per-factory trials.
         RTCInitFieldTrialDictionary([
@@ -313,8 +324,7 @@ enum NativeVideo {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--verify-native-capture") { RTCSetMinDebugLogLevel(.info) }
         #endif
-        return RTCPeerConnectionFactory(encoderFactory: ScreenH264EncoderFactory(),
-                                        decoderFactory: ScreenH264DecoderFactory())
+
     }()
     static func packet(_ object: [String: Any]) -> Data? {
         guard let data = try? JSONSerialization.data(withJSONObject: object), data.count <= 16384 else { return nil }
@@ -330,7 +340,20 @@ enum NativeVideo {
 
 /// Capture once; each PeerConnection has its own encoder and congestion controller.
 final class NativeScreenSource: @unchecked Sendable {
-    let source = NativeVideo.factory.videoSource(forScreenCast: true)
+    let audio: NativeAudioInput
+    let audioDevice: NativeAudioDevice
+    let factory: RTCPeerConnectionFactory
+    private let encoderFactory = ScreenH264EncoderFactory()
+    func requestKeyFrame() { encoderFactory.requestKeyFrame() }
+    let source: RTCVideoSource
+    init() {
+        _ = NativeVideo.initialize
+        let audio = NativeAudioInput(), device: NativeAudioDevice
+        self.audio = audio
+        device = NativeAudioDevice(input: audio); audioDevice = device
+        factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: ScreenH264DecoderFactory(), audioDevice: device)
+        source = factory.videoSource(forScreenCast: true)
+    }
     private lazy var capturer = RTCVideoCapturer(delegate: source)
     private let queue = DispatchQueue(label: "casting.native.capture", qos: .userInteractive)
     private let slot = DispatchSemaphore(value: 1)
@@ -399,6 +422,17 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     var onSendingFPS: ((Double) -> Void)?
     var onError: ((String) -> Void)?
     private var peer: RTCPeerConnection?
+    private weak var captureSource: NativeScreenSource?
+    private var mediaFactory: RTCPeerConnectionFactory?
+    private var audioDevice: NativeAudioDevice?
+    private var audioTrack: RTCAudioTrack?
+    #if DEBUG
+    var onVerificationAudio: (([Int16], [Float]) -> Void)? {
+        get { audioDevice?.onVerificationPCM }
+        set { audioDevice?.onVerificationPCM = newValue }
+    }
+    #endif
+    func receiveAudio(page: Bool, microphone: Bool) { audioDevice?.receive(page: page, microphone: microphone) }
     private var diagnostics: RTCDataChannel?
     private var lastRemoteStat = 0.0
     private var remoteTrack: RTCVideoTrack?
@@ -416,19 +450,31 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60) {
         self.bitrate = bitrate; self.fps = fps; self.internet = internet; sending = source != nil
         super.init()
+        captureSource = source
         let config = RTCConfiguration()
         config.sdpSemantics = .unifiedPlan
         config.iceServers = internet ? [RTCIceServer(urlStrings: [InternetSettings.stunURL, "stun:stun.cloudflare.com:3478"])] : []
         config.iceTransportPolicy = .all
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
-        peer = NativeVideo.factory.peerConnection(with: config, constraints: constraints, delegate: self)
+        _ = NativeVideo.initialize
+        let audio = source?.audioDevice ?? NativeAudioDevice(input: nil)
+        audioDevice = audio
+        let factory = source?.factory ?? RTCPeerConnectionFactory(encoderFactory: ScreenH264EncoderFactory(), decoderFactory: ScreenH264DecoderFactory(), audioDevice: audio)
+        mediaFactory = factory
+        peer = factory.peerConnection(with: config, constraints: constraints, delegate: self)
+        let audioOptions = RTCRtpTransceiverInit(); audioOptions.direction = source == nil ? .recvOnly : .sendOnly
+        if source != nil {
+            let constraints = RTCMediaConstraints(mandatoryConstraints: ["googEchoCancellation":"false", "googAutoGainControl":"false", "googNoiseSuppression":"false"], optionalConstraints: nil)
+            let track = factory.audioTrack(with: factory.audioSource(with: constraints), trackId: "page-left-mic-right-v1")
+            audioTrack = track; _ = peer?.addTransceiver(with: track, init: audioOptions)
+        } else { _ = peer?.addTransceiver(of: .audio, init: audioOptions) }
         let control = RTCDataChannelConfiguration()
         control.isNegotiated = true; control.channelId = 0
         control.isOrdered = false; control.maxRetransmits = 0
         diagnostics = peer?.dataChannel(forLabel: "native-video-stats-v1", configuration: control)
         diagnostics?.delegate = self
         if let source {
-            let track = NativeVideo.factory.videoTrack(with: source.source, trackId: UUID().uuidString)
+            let track = factory.videoTrack(with: source.source, trackId: UUID().uuidString)
             let options = RTCRtpTransceiverInit(); options.direction = .sendOnly
             let transceiver = peer?.addTransceiver(with: track, init: options)
             sender = transceiver?.sender
@@ -459,12 +505,29 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         sender.parameters = params
         _ = peer.setBweMinBitrateBps(nil, currentBitrateBps: nil, maxBitrateBps: NSNumber(value: bitrate))
     }
+    private static func audioSDP(_ source: String) -> String {
+        var lines = source.components(separatedBy: "\r\n")
+        let opus = lines.first { $0.hasPrefix("a=rtpmap:") && $0.lowercased().contains("opus/48000") }?.dropFirst(9).split(separator: " ").first.map(String.init)
+        if let opus {
+            let prefix = "a=fmtp:\(opus) "
+            if let i = lines.firstIndex(where: { $0.hasPrefix(prefix) }) {
+                let retained = lines[i].dropFirst(prefix.count).split(separator: ";").filter {
+                    let key = $0.trimmingCharacters(in: .whitespaces).split(separator: "=").first.map(String.init) ?? ""
+                    return !["stereo", "sprop-stereo", "usedtx", "maxaveragebitrate"].contains(key)
+                }
+                lines[i] = prefix + retained.joined(separator: ";") + ";stereo=1;sprop-stereo=1;usedtx=0;maxaveragebitrate=128000"
+            }
+        }
+        if !lines.contains("a=x-touping-audio:split-v1") { lines.insert("a=x-touping-audio:split-v1", at: min(4, lines.count)) }
+        return lines.joined(separator: "\r\n")
+    }
     func offer() { armTimeout(); description(offer: true) }
     private func description(offer: Bool) {
         let completion: (RTCSessionDescription?, Error?) -> Void = { [weak self] sdp, error in
             DispatchQueue.main.async {
                 guard let self, !self.closed else { return }
-                guard let sdp, error == nil else { self.fail("无法创建视频协商"); return }
+                guard let original = sdp, error == nil else { self.fail("无法创建视频协商"); return }
+                let sdp = RTCSessionDescription(type: original.type, sdp: Self.audioSDP(original.sdp))
                 self.peer?.setLocalDescription(sdp) { [weak self] error in
                     DispatchQueue.main.async {
                         guard let self, !self.closed else { return }
@@ -484,7 +547,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         case "offer", "answer":
             armTimeout()
             guard let sdp = object["sdp"] as? String, sdp.utf8.count <= 12288,
-                  sdp.contains("m=video"), !sdp.contains("m=audio") else {
+                  sdp.contains("m=video"), (!sdp.contains("m=audio") || sdp.contains("a=x-touping-audio:split-v1")) else {
                 fail("对端未使用原生视频协议，请更新两端"); return
             }
             let offer = object["type"] as? String == "offer"
@@ -514,7 +577,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         remoteTrack?.remove(self); remoteTrack = nil
         diagnostics?.delegate = nil; diagnostics?.close(); diagnostics = nil
         peer?.delegate = nil; peer?.close(); peer = nil; sender = nil
-        candidates.removeAll(); onImage = nil
+        candidates.removeAll(); audioTrack = nil; audioDevice = nil; mediaFactory = nil; onImage = nil
     }
     private func fail(_ message: String) { guard !closed else { return }; stop(); onError?(message) }
     #if DEBUG
@@ -525,9 +588,9 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         peer?.statistics { [weak self] report in
             guard let self, !self.closed else { return }
             if let observer = self.onVerificationStats {
-                let keys = Set(["targetBitrate", "encoderImplementation", "decoderImplementation", "mimeType", "framesEncoded", "framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesSent", "bytesReceived", "packetsSent", "packetsReceived", "packetsLost", "totalPacketSendDelay", "totalEncodeTime", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "availableOutgoingBitrate", "currentRoundTripTime", "fractionLost", "retransmittedPacketsSent", "nackCount", "pliCount"])
+                let keys = Set(["targetBitrate", "encoderImplementation", "decoderImplementation", "mimeType", "framesEncoded", "framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesSent", "bytesReceived", "packetsSent", "packetsReceived", "packetsLost", "totalPacketSendDelay", "totalEncodeTime", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "availableOutgoingBitrate", "currentRoundTripTime", "fractionLost", "kind", "retransmittedPacketsSent", "nackCount", "pliCount"])
                 let selected = report.statistics.values.first { $0.type == "transport" }?.values["selectedCandidatePairId"] as? String
-                observer(report.statistics.values.filter { ["outbound-rtp", "inbound-rtp", "remote-inbound-rtp"].contains($0.type) || $0.id == selected }.map { stat in
+                observer(report.statistics.values.filter { (["outbound-rtp", "inbound-rtp", "remote-inbound-rtp"].contains($0.type) && ($0.values["kind"] as? String == "video" || $0.values["mediaType"] as? String == "video")) || $0.id == selected }.map { stat in
                     ["type": stat.type, "values": stat.values.filter { keys.contains($0.key) }]
                 })
             }
@@ -539,7 +602,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         peer?.statistics { [weak self] report in
             guard let self, !self.closed else { return }
             if !self.sending {
-                for stat in report.statistics.values where stat.type == "inbound-rtp" {
+                for stat in report.statistics.values where stat.type == "inbound-rtp" && (stat.values["kind"] as? String == "video" || stat.values["mediaType"] as? String == "video") {
                     let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]
                     var values: [String: Any] = ["v":1]
                     for key in allowed { if let value = stat.values[key] { values[key] = value } }
@@ -565,7 +628,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     PerformanceDisk.shared.write("native.path id=\(self.id) pair=\(pathID) \(detail)")
                 }
             }
-            for stat in report.statistics.values where stat.type == "outbound-rtp" {
+            for stat in report.statistics.values where stat.type == "outbound-rtp" && (stat.values["kind"] as? String == "video" || stat.values["mediaType"] as? String == "video") {
                 if let count = stat.values["packetsSent"] as? NSNumber, let delay = stat.values["totalPacketSendDelay"] as? NSNumber {
                     let packets = count.doubleValue, totalDelay = delay.doubleValue
                     DispatchQueue.main.async { [weak self] in
@@ -618,7 +681,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             PerformanceDisk.shared.write("native.ice id=\(self.id) state=\(newState.rawValue)")
             if newState == .connected || newState == .completed {
                 guard !self.connected else { return }; self.connected = true
-                self.timeout?.cancel(); self.applyQuality(); self.stats(); self.onConnected?()
+                self.timeout?.cancel(); self.captureSource?.requestKeyFrame(); self.applyQuality(); self.stats(); self.onConnected?()
                 self.renderLock.lock(); let hasFrames = self.frames > 0; self.renderLock.unlock()
                 if !self.sending && !hasFrames {
                     let work = DispatchWorkItem { [weak self] in self?.fail("已直连但未收到可解码画面，请检查发送端编码状态") }
@@ -738,3 +801,81 @@ final class NativeVideoRoom: @unchecked Sendable {
         }
     }
 }
+
+#if DEBUG
+/// Exercises real Opus/SRTP, stereo bus isolation and live receive/source mutes.
+@MainActor enum NativeAudioVerification {
+    static func run() async {
+        let source = NativeScreenSource()
+        let sender = NativeVideoPeer(source: source, internet: false)
+        let receiver = NativeVideoPeer(internet: false)
+        sender.sendSignal = { [weak receiver] in receiver?.receive($0) }
+        receiver.sendSignal = { [weak sender] in sender?.receive($0) }
+        defer { sender.stop(); receiver.stop() }
+        sender.onError = { NSLog("NativeAudio FAIL sender=%@", $0) }
+        receiver.onError = { NSLog("NativeAudio FAIL receiver=%@", $0) }
+        sender.offer()
+        let lock = NSLock()
+        var captured: [Float] = []
+        receiver.onVerificationAudio = { _, mixed in lock.lock(); captured.append(contentsOf: mixed); lock.unlock() }
+        func sample(_ values: [Int16], offset: Int, pageFormat: Bool = false) -> CMSampleBuffer? {
+            let rate: Int32 = pageFormat ? 44100 : 48000
+            let stride = pageFormat ? 8 : 2
+            let bytes: Data = pageFormat ? values.flatMap { [Float($0) / 32768, Float($0) / 32768] }.withUnsafeBytes { Data($0) } : values.withUnsafeBytes { Data($0) }
+            var description = AudioStreamBasicDescription(mSampleRate: Double(rate), mFormatID: kAudioFormatLinearPCM,
+                mFormatFlags: (pageFormat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger) | kAudioFormatFlagIsPacked,
+                mBytesPerPacket: UInt32(stride), mFramesPerPacket: 1, mBytesPerFrame: UInt32(stride), mChannelsPerFrame: pageFormat ? 2 : 1, mBitsPerChannel: pageFormat ? 32 : 16, mReserved: 0)
+            var format: CMAudioFormatDescription?, block: CMBlockBuffer?, result: CMSampleBuffer?
+            guard CMAudioFormatDescriptionCreate(allocator: nil, asbd: &description, layoutSize: 0, layout: nil,
+                magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format) == noErr,
+                CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: bytes.count,
+                    blockAllocator: nil, customBlockSource: nil, offsetToData: 0, dataLength: bytes.count, flags: 0,
+                    blockBufferOut: &block) == noErr, let block, let format else { return nil }
+            bytes.withUnsafeBytes { _ = CMBlockBufferReplaceDataBytes(with: $0.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: $0.count) }
+            var timing = CMSampleTimingInfo(duration: CMTime(value: 1, timescale: rate),
+                presentationTimeStamp: CMTime(value: Int64(offset), timescale: rate), decodeTimeStamp: .invalid)
+            var size = stride
+            guard CMSampleBufferCreateReady(allocator: nil, dataBuffer: block, formatDescription: format, sampleCount: values.count,
+                sampleTimingEntryCount: 1, sampleTimingArray: &timing, sampleSizeEntryCount: 1, sampleSizeArray: &size,
+                sampleBufferOut: &result) == noErr else { return nil }
+            return result
+        }
+        var offset = 0, pageOffset = 0, pageDue = 0
+        for (name, receivePage, receiveMic, sendPage, sendMic) in [
+            ("both", true, true, true, true), ("page", true, false, true, true),
+            ("mic", false, true, true, true), ("muted", false, false, true, true),
+            ("sourcePageOff", true, true, false, true), ("sourceMicOff", true, true, true, false)
+        ] {
+            receiver.receiveAudio(page: receivePage, microphone: receiveMic)
+            source.audio.configure(page: sendPage, microphone: sendMic)
+            for tick in 0..<120 {
+                pageDue += 441
+                if pageDue >= 1024 {
+                    let page = (0..<1024).map { Int16(6000 * sin(2 * .pi * 440 * Double(pageOffset + $0) / 44100)) }
+                    if let p = sample(page, offset: pageOffset, pageFormat: true) { source.audio.append(p, microphone: false) }
+                    pageOffset += 1024; pageDue -= 1024
+                }
+                let mic = (0..<480).map { Int16(6000 * sin(2 * .pi * 880 * Double(offset + $0) / 48000)) }
+                if let m = sample(mic, offset: offset) { source.audio.append(m, microphone: true) }
+                offset += 480
+                if tick == 70 { lock.lock(); captured.removeAll(); lock.unlock() }
+                try? await Task.sleep(nanoseconds: 10_000_000)
+            }
+            lock.lock(); let samples = captured; lock.unlock()
+            func amplitude(_ hz: Double) -> Double {
+                guard !samples.isEmpty else { return 0 }
+                var total = 0.0, blocks = 0
+                for start in stride(from: 0, to: samples.count - 479, by: 480) {
+                    var real = 0.0, imag = 0.0
+                    for i in 0..<480 { let angle = 2 * .pi * hz * Double(i) / 48000; real += Double(samples[start + i]) * cos(angle); imag += Double(samples[start + i]) * sin(angle) }
+                    total += 2 * hypot(real, imag) / 480; blocks += 1
+                }
+                return total / Double(max(1, blocks))
+            }
+            let p = amplitude(440), m = amplitude(880)
+            let passed = samples.count > 4800 && ((receivePage && sendPage) ? p > 0.03 : p < 0.02) && ((receiveMic && sendMic) ? m > 0.03 : m < 0.02)
+            NSLog("NativeAudio %@ mode=%@ samples=%ld page=%.4f mic=%.4f", passed ? "PASS" : "FAIL", name, samples.count, p, m)
+        }
+    }
+}
+#endif
