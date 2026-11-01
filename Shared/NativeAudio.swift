@@ -23,7 +23,8 @@ final class NativeAudioInput {
     }
     func append(_ sample: CMSampleBuffer, microphone: Bool) {
         lock.lock(); let enabled = microphone ? micEnabled : pageEnabled; lock.unlock()
-        guard enabled, slots.wait(timeout: .now()) == .success else { return }
+        guard enabled else { return }
+        guard slots.wait(timeout: .now()) == .success else { perf.record(microphone ? "micCaptureDrop" : "pageCaptureDrop"); return }
         conversion.async {
             defer { self.slots.signal() }
             guard let desc = CMSampleBufferGetFormatDescription(sample),
@@ -92,6 +93,13 @@ final class NativeAudioInput {
 
 }
 
+private final class AudioRenderStorage {
+    let capacity = 8192
+    let pcm = UnsafeMutablePointer<Int16>.allocate(capacity: 16384)
+    init() { pcm.initialize(repeating: 0, count: 16384) }
+    deinit { pcm.deallocate() }
+}
+
 final class NativeAudioDevice: NSObject, RTCAudioDevice {
     #if DEBUG
     var onVerificationPCM: (([Int16], [Float]) -> Void)?
@@ -102,9 +110,9 @@ final class NativeAudioDevice: NSObject, RTCAudioDevice {
     private var delegate: (any RTCAudioDeviceDelegate)?
     private var timer: DispatchSourceTimer?
     private var engine: AVAudioEngine?
-    private var player: AVAudioPlayerNode?
+    private var sourceNode: AVAudioSourceNode?
     private let state = NSLock()
-    private var page = true, mic = true, scheduled = 0
+    private var page = true, mic = true
     private(set) var isInitialized = false
     private(set) var isPlayoutInitialized = false
     private(set) var isRecordingInitialized = false
@@ -122,13 +130,14 @@ final class NativeAudioDevice: NSObject, RTCAudioDevice {
     func receive(page: Bool, microphone: Bool) { state.lock(); self.page = page; mic = microphone; state.unlock() }
     func initialize(with delegate: any RTCAudioDeviceDelegate) -> Bool {
         queue.sync { self.delegate = delegate; isInitialized = true
+            guard input != nil else { return }
             let timer = DispatchSource.makeTimerSource(queue: queue)
             timer.schedule(deadline: .now(), repeating: .milliseconds(10))
             timer.setEventHandler { [weak self] in self?.tick() }; self.timer = timer; timer.resume()
         }; return true
     }
     func terminateDevice() -> Bool {
-        queue.sync { timer?.cancel(); timer = nil; player?.stop(); engine?.stop(); player = nil; engine = nil
+        queue.sync { timer?.cancel(); timer = nil; engine?.stop(); sourceNode = nil; engine = nil
             input?.remove(consumer: consumer); delegate = nil; isInitialized = false; isPlaying = false; isRecording = false
         }; return true
     }
@@ -145,15 +154,43 @@ final class NativeAudioDevice: NSObject, RTCAudioDevice {
                 try AVAudioSession.sharedInstance().setActive(true)
             } catch { PerformanceDisk.shared.write("audio.playback sessionError=\(error)"); return }
             #endif
-            state.lock(); scheduled = 0; state.unlock()
-            let engine = AVAudioEngine(), player = AVAudioPlayerNode()
-            engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1))
-            do { try engine.start(); player.play(); self.engine = engine; self.player = player; isPlaying = true }
+            guard let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1) else { return }
+            let engine = AVAudioEngine(), storage = AudioRenderStorage()
+            // Pull PCM only when the hardware requests it. Never consume and
+            // discard decoded audio because a software-scheduled queue is full.
+            let node = AVAudioSourceNode(format: format) { [weak self, storage] silence, timestamp, frames, output in
+                guard let self, let delegate = self.delegate, frames <= storage.capacity else {
+                    for buffer in UnsafeMutableAudioBufferListPointer(output) { if let data = buffer.mData { memset(data, 0, Int(buffer.mDataByteSize)) } }
+                    silence.pointee = true; return noErr
+                }
+                var flags = AudioUnitRenderActionFlags()
+                var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2,
+                    mDataByteSize: frames * 4, mData: storage.pcm))
+                let status = delegate.getPlayoutData(&flags, timestamp, 0, frames, &list)
+                self.state.lock(); let page = self.page, mic = self.mic; self.state.unlock()
+                let gain: Float = page && mic ? 0.5 : 1
+                for buffer in UnsafeMutableAudioBufferListPointer(output) {
+                    guard let target = buffer.mData?.assumingMemoryBound(to: Float.self) else { continue }
+                    for n in 0..<Int(frames) {
+                        let value = status == noErr ? (page ? Int(storage.pcm[n * 2]) : 0) + (mic ? Int(storage.pcm[n * 2 + 1]) : 0) : 0
+                        target[n] = Float(value) / 32768 * gain
+                    }
+                }
+                silence.pointee = ObjCBool(!page && !mic)
+                #if DEBUG
+                if let verify = self.onVerificationPCM, let buffer = UnsafeMutableAudioBufferListPointer(output).first,
+                   let floats = buffer.mData?.assumingMemoryBound(to: Float.self) {
+                    verify(Array(UnsafeBufferPointer(start: storage.pcm, count: Int(frames) * 2)), Array(UnsafeBufferPointer(start: floats, count: Int(frames))))
+                }
+                #endif
+                return noErr
+            }
+            engine.attach(node); engine.connect(node, to: engine.mainMixerNode, format: format)
+            do { try engine.start(); self.engine = engine; sourceNode = node; isPlaying = true }
             catch { PerformanceDisk.shared.write("audio.playback startError=\(error)") }
         }; return isPlaying || input != nil
     }
-    func stopPlayout() -> Bool { queue.sync { isPlaying = false; player?.stop(); engine?.stop(); player = nil; engine = nil }; return true }
+    func stopPlayout() -> Bool { queue.sync { isPlaying = false; engine?.stop(); sourceNode = nil; engine = nil }; return true }
     private func tick() {
         guard let delegate else { return }
         var flags = AudioUnitRenderActionFlags(); var timestamp = AudioTimeStamp()
@@ -168,26 +205,6 @@ final class NativeAudioDevice: NSObject, RTCAudioDevice {
                     return noErr
                 }
             }
-        }
-        if isPlaying, let player {
-            var pcm = [Int16](repeating: 0, count: 960)
-            pcm.withUnsafeMutableBytes { bytes in
-                var list = AudioBufferList(mNumberBuffers: 1, mBuffers: AudioBuffer(mNumberChannels: 2, mDataByteSize: UInt32(bytes.count), mData: bytes.baseAddress))
-                _ = delegate.getPlayoutData(&flags, &timestamp, 0, 480, &list)
-            }
-            state.lock(); let page = self.page, mic = self.mic, canSchedule = scheduled < 3
-            if canSchedule { scheduled += 1 }; state.unlock()
-            guard canSchedule, let format = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1),
-                  let out = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 480), let data = out.floatChannelData?[0] else { return }
-            out.frameLength = 480
-            for n in 0..<480 {
-                let value = (page ? Int(pcm[n * 2]) : 0) + (mic ? Int(pcm[n * 2 + 1]) : 0)
-                data[n] = Float(value) / 32768 * (page && mic ? 0.5 : 1)
-            }
-            #if DEBUG
-            onVerificationPCM?(pcm, Array(UnsafeBufferPointer(start: data, count: 480)))
-            #endif
-            player.scheduleBuffer(out) { [weak self] in guard let self else { return }; self.state.lock(); self.scheduled = max(0, self.scheduled - 1); self.state.unlock() }
         }
     }
 }

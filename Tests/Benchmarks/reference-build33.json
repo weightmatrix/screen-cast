@@ -1,0 +1,115 @@
+{
+  "version": "1.4",
+  "build": 33,
+  "scope": "Synthetic Opus/SRTP playback with44.1kHz16bit big-endian stereo page and48kHz Int16 mono mic. No claim of real music noise resolution.",
+  "observed32": {
+    "pageFlags": "0xe",
+    "pageBits": 16,
+    "pageRate": 44100,
+    "pageChannels": 2,
+    "pageUnderruns": 603,
+    "approximateSeconds": 939
+  },
+  "tests": {
+    "mac": [
+      {
+        "result": "PASS",
+        "mode": "both",
+        "samples": "27648",
+        "pageAmplitude": "0.0882",
+        "micAmplitude": "0.0804",
+        "maxStep": "0.0335"
+      },
+      {
+        "result": "PASS",
+        "mode": "page",
+        "samples": "28160",
+        "pageAmplitude": "0.1773",
+        "micAmplitude": "0.0124",
+        "maxStep": "0.0103"
+      },
+      {
+        "result": "PASS",
+        "mode": "mic",
+        "samples": "27648",
+        "pageAmplitude": "0.0117",
+        "micAmplitude": "0.1676",
+        "maxStep": "0.0579"
+      },
+      {
+        "result": "PASS",
+        "mode": "muted",
+        "samples": "28160",
+        "pageAmplitude": "0.0000",
+        "micAmplitude": "0.0000",
+        "maxStep": "0.0000"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourcePageOff",
+        "samples": "28160",
+        "pageAmplitude": "0.0061",
+        "micAmplitude": "0.0870",
+        "maxStep": "0.0102"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourceMicOff",
+        "samples": "27648",
+        "pageAmplitude": "0.0889",
+        "micAmplitude": "0.0062",
+        "maxStep": "0.0051"
+      }
+    ],
+    "ipad11": [
+      {
+        "result": "PASS",
+        "mode": "both",
+        "samples": "27648",
+        "pageAmplitude": "0.0891",
+        "micAmplitude": "0.0820",
+        "maxStep": "0.0357"
+      },
+      {
+        "result": "PASS",
+        "mode": "page",
+        "samples": "29696",
+        "pageAmplitude": "0.1775",
+        "micAmplitude": "0.0123",
+        "maxStep": "0.0103"
+      },
+      {
+        "result": "PASS",
+        "mode": "mic",
+        "samples": "29696",
+        "pageAmplitude": "0.0118",
+        "micAmplitude": "0.1537",
+        "maxStep": "0.0681"
+      },
+      {
+        "result": "PASS",
+        "mode": "muted",
+        "samples": "28672",
+        "pageAmplitude": "0.0000",
+        "micAmplitude": "0.0000",
+        "maxStep": "0.0000"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourcePageOff",
+        "samples": "29696",
+        "pageAmplitude": "0.0060",
+        "micAmplitude": "0.0867",
+        "maxStep": "0.0105"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourceMicOff",
+        "samples": "30720",
+        "pageAmplitude": "0.0887",
+        "micAmplitude": "0.0062",
+        "maxStep": "0.0051"
+      }
+    ]
+  }
+}

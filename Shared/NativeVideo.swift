@@ -820,10 +820,16 @@ final class NativeVideoRoom: @unchecked Sendable {
         receiver.onVerificationAudio = { _, mixed in lock.lock(); captured.append(contentsOf: mixed); lock.unlock() }
         func sample(_ values: [Int16], offset: Int, pageFormat: Bool = false) -> CMSampleBuffer? {
             let rate: Int32 = pageFormat ? 44100 : 48000
+            let replay = pageFormat && ProcessInfo.processInfo.arguments.contains("--verify-replaykit-audio")
             let packed = pageFormat && ProcessInfo.processInfo.arguments.contains("--verify-packed-audio")
-            let stride = packed ? 6 : (pageFormat ? 8 : 2)
+            let stride = replay ? 4 : (packed ? 6 : (pageFormat ? 8 : 2))
             let bytes: Data
-            if packed {
+            if replay {
+                bytes = Data(values.flatMap { value -> [UInt8] in
+                    let raw = UInt16(bitPattern: value)
+                    return [UInt8(truncatingIfNeeded: raw >> 8), UInt8(truncatingIfNeeded: raw), UInt8(truncatingIfNeeded: raw >> 8), UInt8(truncatingIfNeeded: raw)]
+                })
+            } else if packed {
                 bytes = Data(values.flatMap { value -> [UInt8] in
                     let raw = UInt32(bitPattern: Int32(value) << 8)
                     let sample = [UInt8(truncatingIfNeeded: raw >> 16), UInt8(truncatingIfNeeded: raw >> 8), UInt8(truncatingIfNeeded: raw)]
@@ -831,8 +837,8 @@ final class NativeVideoRoom: @unchecked Sendable {
                 })
             } else { bytes = pageFormat ? values.flatMap { [Float($0) / 32768, Float($0) / 32768] }.withUnsafeBytes { Data($0) } : values.withUnsafeBytes { Data($0) } }
             var description = AudioStreamBasicDescription(mSampleRate: Double(rate), mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: (packed ? kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian : (pageFormat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)) | kAudioFormatFlagIsPacked,
-                mBytesPerPacket: UInt32(stride), mFramesPerPacket: 1, mBytesPerFrame: UInt32(stride), mChannelsPerFrame: pageFormat ? 2 : 1, mBitsPerChannel: packed ? 24 : (pageFormat ? 32 : 16), mReserved: 0)
+                mFormatFlags: (packed || replay ? kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian : (pageFormat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)) | kAudioFormatFlagIsPacked,
+                mBytesPerPacket: UInt32(stride), mFramesPerPacket: 1, mBytesPerFrame: UInt32(stride), mChannelsPerFrame: pageFormat ? 2 : 1, mBitsPerChannel: replay ? 16 : (packed ? 24 : (pageFormat ? 32 : 16)), mReserved: 0)
             var format: CMAudioFormatDescription?, block: CMBlockBuffer?, result: CMSampleBuffer?
             guard CMAudioFormatDescriptionCreate(allocator: nil, asbd: &description, layoutSize: 0, layout: nil,
                 magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format) == noErr,
@@ -848,7 +854,8 @@ final class NativeVideoRoom: @unchecked Sendable {
                 sampleBufferOut: &result) == noErr else { return nil }
             return result
         }
-        var offset = 0, pageOffset = 0, pageDue = 0
+        var offset = 0, pageOffset = 0
+        let clock = ProcessInfo.processInfo.systemUptime
         for (name, receivePage, receiveMic, sendPage, sendMic) in [
             ("both", true, true, true, true), ("page", true, false, true, true),
             ("mic", false, true, true, true), ("muted", false, false, true, true),
@@ -857,15 +864,17 @@ final class NativeVideoRoom: @unchecked Sendable {
             receiver.receiveAudio(page: receivePage, microphone: receiveMic)
             source.audio.configure(page: sendPage, microphone: sendMic)
             for tick in 0..<120 {
-                pageDue += 441
-                if pageDue >= 1024 {
+                let elapsed = ProcessInfo.processInfo.systemUptime - clock
+                while pageOffset + 1024 <= Int(elapsed * 44100) {
                     let page = (0..<1024).map { Int16(6000 * sin(2 * .pi * 440 * Double(pageOffset + $0) / 44100)) }
                     if let p = sample(page, offset: pageOffset, pageFormat: true) { source.audio.append(p, microphone: false) }
-                    pageOffset += 1024; pageDue -= 1024
+                    pageOffset += 1024
                 }
+                while offset + 480 <= Int(elapsed * 48000) {
                 let mic = (0..<480).map { Int16(6000 * sin(2 * .pi * 880 * Double(offset + $0) / 48000)) }
                 if let m = sample(mic, offset: offset) { source.audio.append(m, microphone: true) }
                 offset += 480
+                }
                 if tick == 70 { lock.lock(); captured.removeAll(); lock.unlock() }
                 try? await Task.sleep(nanoseconds: 10_000_000)
             }
@@ -881,8 +890,9 @@ final class NativeVideoRoom: @unchecked Sendable {
                 return total / Double(max(1, blocks))
             }
             let p = amplitude(440), m = amplitude(880)
-            let passed = samples.count > 4800 && ((receivePage && sendPage) ? p > 0.03 : p < 0.02) && ((receiveMic && sendMic) ? m > 0.03 : m < 0.02)
-            NSLog("NativeAudio %@ mode=%@ samples=%ld page=%.4f mic=%.4f", passed ? "PASS" : "FAIL", name, samples.count, p, m)
+            let maxStep = zip(samples.dropFirst(), samples).map { abs($0 - $1) }.max() ?? 0
+            let passed = samples.count > 4800 && maxStep < 0.08 && ((receivePage && sendPage) ? p > 0.03 : p < 0.02) && ((receiveMic && sendMic) ? m > 0.03 : m < 0.02)
+            NSLog("NativeAudio %@ mode=%@ samples=%ld page=%.4f mic=%.4f maxStep=%.4f", passed ? "PASS" : "FAIL", name, samples.count, p, m, maxStep)
         }
     }
 }
