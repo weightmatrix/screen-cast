@@ -1,0 +1,62 @@
+{
+  "build": 34,
+  "version": "1.4",
+  "scope": "Synthetic audio and isolated starvation/restart boundaries; real listening pending",
+  "pagePrebufferMs": 60,
+  "boundaryFadeMs": 5,
+  "addedLatencyMs": 30,
+  "checks": [
+    "ScreenAudioEdgeCheck PASS",
+    "ScreenAudioPCMCheck PASS"
+  ],
+  "audio": [
+    {
+      "result": "PASS",
+      "mode": "both",
+      "samples": "28160",
+      "pageAmplitude": "0.0888",
+      "micAmplitude": "0.0843",
+      "maxStep": "0.0224"
+    },
+    {
+      "result": "PASS",
+      "mode": "page",
+      "samples": "28160",
+      "pageAmplitude": "0.1771",
+      "micAmplitude": "0.0124",
+      "maxStep": "0.0103"
+    },
+    {
+      "result": "PASS",
+      "mode": "mic",
+      "samples": "28160",
+      "pageAmplitude": "0.0117",
+      "micAmplitude": "0.1643",
+      "maxStep": "0.0574"
+    },
+    {
+      "result": "PASS",
+      "mode": "muted",
+      "samples": "27648",
+      "pageAmplitude": "0.0000",
+      "micAmplitude": "0.0000",
+      "maxStep": "0.0000"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourcePageOff",
+      "samples": "27648",
+      "pageAmplitude": "0.0061",
+      "micAmplitude": "0.0870",
+      "maxStep": "0.0102"
+    },
+    {
+      "result": "PASS",
+      "mode": "sourceMicOff",
+      "samples": "27136",
+      "pageAmplitude": "0.0889",
+      "micAmplitude": "0.0061",
+      "maxStep": "0.0052"
+    }
+  ]
+}

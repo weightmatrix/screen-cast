@@ -12,6 +12,7 @@ final class NativeAudioInput {
     private var converters: [Bool: AVAudioConverter] = [:]
     private var inputFormats: [Bool: AVAudioFormat] = [:]
     private var pageReady = Set<UUID>()
+    private var pageEdges: [UUID: ScreenAudioEdge] = [:]
     private var cursors: [UUID: (Int, Int)] = [:]
     private var pageBase = 0, micBase = 0
     private var pageEnabled = false, micEnabled = false
@@ -71,11 +72,11 @@ final class NativeAudioInput {
     }
     func read(frames: Int, consumer: UUID) -> [Int16] {
         lock.lock(); defer { lock.unlock() }
-        let old = cursors[consumer] ?? (pageBase + max(0, page.count - 1440), micBase + max(0, mic.count - frames))
+        let old = cursors[consumer] ?? (pageBase + max(0, page.count - 2880), micBase + max(0, mic.count - frames))
         var p = max(0, min(page.count, old.0 - pageBase))
         let m = max(0, min(mic.count, old.1 - micBase))
-        if !pageReady.contains(consumer), page.count - p >= 1440 {
-            p = max(p, page.count - 1440); pageReady.insert(consumer)
+        if !pageReady.contains(consumer), page.count - p >= 2880 {
+            p = max(p, page.count - 2880); pageReady.insert(consumer)
         }
         let pageAvailable = page.count - p
         let pn = pageReady.contains(consumer) && pageAvailable >= frames ? frames : 0
@@ -84,12 +85,15 @@ final class NativeAudioInput {
             pageReady.remove(consumer); perf.record("pageUnderrun")
         }
         var out = [Int16](repeating: 0, count: frames * 2)
-        for n in 0..<pn { out[n * 2] = page[p + n] }
+        var edge = pageEdges[consumer] ?? ScreenAudioEdge()
+        let softened = edge.apply(pn > 0 ? Array(page[p..<(p + pn)]) : [], frames: frames)
+        pageEdges[consumer] = edge
+        for n in 0..<frames { out[n * 2] = pageEnabled ? softened[n] : 0 }
         for n in 0..<mn { out[n * 2 + 1] = mic[m + n] }
         cursors[consumer] = (pageBase + p + pn, micBase + m + mn)
         return out
     }
-    func remove(consumer: UUID) { lock.lock(); cursors.removeValue(forKey: consumer); pageReady.remove(consumer); lock.unlock() }
+    func remove(consumer: UUID) { lock.lock(); cursors.removeValue(forKey: consumer); pageReady.remove(consumer); pageEdges.removeValue(forKey: consumer); lock.unlock() }
 
 }
 

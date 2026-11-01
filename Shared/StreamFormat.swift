@@ -330,3 +330,28 @@ enum ScreenAudioPCM {
         return result
     }
 }
+
+/// Smooth only actual starvation/restart boundaries, never normal audio blocks.
+struct ScreenAudioEdge {
+    private var last: Int16 = 0
+    private var restarting = true
+    mutating func apply(_ samples: [Int16], frames: Int) -> [Int16] {
+        guard frames > 0 else { return [] }
+        let count = min(frames, samples.count)
+        var result = [Int16](repeating: 0, count: frames)
+        if count == 0 {
+            let ramp = min(frames, 240)
+            for n in 0..<ramp { result[n] = Int16(Int(last) * (ramp - n - 1) / ramp) }
+            last = 0; restarting = true
+            return result
+        }
+        for n in 0..<count { result[n] = samples[n] }
+        if restarting {
+            let ramp = min(count, 240)
+            for n in 0..<ramp { result[n] = Int16(Int(result[n]) * n / ramp) }
+            restarting = false
+        }
+        last = result[count - 1]
+        return result
+    }
+}
