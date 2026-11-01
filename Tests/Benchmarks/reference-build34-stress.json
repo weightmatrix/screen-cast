@@ -1,0 +1,56 @@
+{
+  "functional_pass": true,
+  "performance_pass": false,
+  "comparison_valid": true,
+  "limitations": [
+    "Not ReplayKit/ScreenCaptureKit capture or a cross-NAT test.",
+    "Barcode latency is submission-to-decoded-frame, not glass-to-glass latency.",
+    "RTP statistics are sampled at one second; phase boundary deltas have up to one second uncertainty.",
+    "Idle repeats an unchanged frame; its barcode age is not a latency score."
+  ],
+  "build": 34,
+  "phases": [
+    {
+      "name": "warmup",
+      "fps": 34.993602732004355,
+      "capture_to_decode_p95_ms": 1510.9777500038035,
+      "freeze_seconds": null,
+      "performance_pass": null
+    },
+    {
+      "name": "steady",
+      "fps": 57.24798558651077,
+      "capture_to_decode_p95_ms": 35.923958334024064,
+      "freeze_seconds": 0,
+      "performance_pass": true
+    },
+    {
+      "name": "bandwidth_drop",
+      "fps": 57.91134284475201,
+      "capture_to_decode_p95_ms": 541.1248750024242,
+      "freeze_seconds": 0.191,
+      "performance_pass": false
+    },
+    {
+      "name": "recovery",
+      "fps": 55.9337656928211,
+      "capture_to_decode_p95_ms": 28.162499991594814,
+      "freeze_seconds": 0,
+      "performance_pass": true
+    },
+    {
+      "name": "idle",
+      "fps": 20.116591683770345,
+      "capture_to_decode_p95_ms": null,
+      "freeze_seconds": 0,
+      "performance_pass": null
+    },
+    {
+      "name": "resume_motion",
+      "fps": 54.07812024009814,
+      "capture_to_decode_p95_ms": 41.44441666721832,
+      "freeze_seconds": 0,
+      "performance_pass": true
+    }
+  ]
+}
