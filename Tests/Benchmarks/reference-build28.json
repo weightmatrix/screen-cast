@@ -1,0 +1,411 @@
+{
+  "functional_pass": true,
+  "performance_pass": false,
+  "comparison_valid": true,
+  "diagnostic_valid": true,
+  "limitations": [
+    "Not ReplayKit/ScreenCaptureKit capture or a cross-NAT test.",
+    "Barcode latency is submission-to-decoded-frame, not glass-to-glass latency.",
+    "RTP statistics are sampled at one second; phase boundary deltas have up to one second uncertainty.",
+    "Idle repeats an unchanged frame; its barcode age is not a latency score."
+  ],
+  "build": 28,
+  "commit": "7f8639cd1b11ec104a75e19278a273fd9a5bbf2d",
+  "phases": [
+    {
+      "name": "warmup",
+      "fps": 42.82542549961768,
+      "capture_to_decode_p95_ms": 1473.590208333917,
+      "freeze_seconds": null,
+      "performance_pass": null,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 123,
+          "max_ms": 30.19,
+          "mean_ms": 13.005934959349592
+        },
+        "mac.display.drawInterval": {
+          "count": 123,
+          "max_ms": 1578.69,
+          "mean_ms": 35.43959349593496
+        },
+        "mac.display.drawableWait": {
+          "count": 124,
+          "max_ms": 16.81,
+          "mean_ms": 9.663709677419357
+        },
+        "mac.display.gpuCompletionInterval": {
+          "count": 123,
+          "max_ms": 1582.59,
+          "mean_ms": 35.43162601626016
+        },
+        "mac.display.mainQueueWait": {
+          "count": 166,
+          "max_ms": 106.01,
+          "mean_ms": 6.338253012048192
+        },
+        "mac.display.rendered": {
+          "count": 124,
+          "max_ms": 6.49,
+          "mean_ms": 1.6866129032258064
+        },
+        "mac.display.skipped": {
+          "count": 52,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.capture.queueWait": {
+          "count": 326,
+          "max_ms": 0.18,
+          "mean_ms": 0.023711656441717792
+        },
+        "native.capture.sourceInterval": {
+          "count": 326,
+          "max_ms": 63.22,
+          "mean_ms": 16.564570552147238
+        },
+        "native.encoder.dropPaced": {
+          "count": 8,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.encoder.encode": {
+          "count": 154,
+          "max_ms": 85.73,
+          "mean_ms": 6.8761038961038965
+        },
+        "native.encoder.output": {
+          "count": 153,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        }
+      }
+    },
+    {
+      "name": "steady",
+      "fps": 59.244684435326036,
+      "capture_to_decode_p95_ms": 33.724458335200325,
+      "freeze_seconds": 0,
+      "performance_pass": true,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 702,
+          "max_ms": 15.93,
+          "mean_ms": 0.8705270655270655
+        },
+        "mac.display.drawInterval": {
+          "count": 702,
+          "max_ms": 66.41,
+          "mean_ms": 17.134131054131053
+        },
+        "mac.display.drawableWait": {
+          "count": 702,
+          "max_ms": 8.25,
+          "mean_ms": 0.06421652421652421
+        },
+        "mac.display.gpuCompletionInterval": {
+          "count": 702,
+          "max_ms": 66.34,
+          "mean_ms": 17.12934472934473
+        },
+        "mac.display.mainQueueWait": {
+          "count": 1403,
+          "max_ms": 21.82,
+          "mean_ms": 0.5562865288667143
+        },
+        "mac.display.rendered": {
+          "count": 702,
+          "max_ms": 6.97,
+          "mean_ms": 1.6611823361823363
+        },
+        "native.capture.queueWait": {
+          "count": 722,
+          "max_ms": 0.12,
+          "mean_ms": 0.026675900277008308
+        },
+        "native.capture.sourceInterval": {
+          "count": 722,
+          "max_ms": 26.49,
+          "mean_ms": 16.673324099722993
+        },
+        "native.encoder.dropPaced": {
+          "count": 17,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.encoder.encode": {
+          "count": 703,
+          "max_ms": 19.02,
+          "mean_ms": 6.434694167852062
+        },
+        "native.encoder.output": {
+          "count": 703,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        }
+      }
+    },
+    {
+      "name": "bandwidth_drop",
+      "fps": 58.41445381355835,
+      "capture_to_decode_p95_ms": 839.0851666626986,
+      "freeze_seconds": 0.67,
+      "performance_pass": false,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 664,
+          "max_ms": 26.74,
+          "mean_ms": 2.610060240963855
+        },
+        "mac.display.drawInterval": {
+          "count": 664,
+          "max_ms": 235.33,
+          "mean_ms": 18.30710843373494
+        },
+        "mac.display.drawableWait": {
+          "count": 664,
+          "max_ms": 16.13,
+          "mean_ms": 1.2495180722891568
+        },
+        "mac.display.gpuCompletionInterval": {
+          "count": 664,
+          "max_ms": 235.86,
+          "mean_ms": 18.310180722891566
+        },
+        "mac.display.mainQueueWait": {
+          "count": 1274,
+          "max_ms": 21.25,
+          "mean_ms": 1.1493720565149137
+        },
+        "mac.display.rendered": {
+          "count": 664,
+          "max_ms": 3.76,
+          "mean_ms": 1.6843975903614459
+        },
+        "mac.display.skipped": {
+          "count": 47,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.capture.queueWait": {
+          "count": 723,
+          "max_ms": 0.2,
+          "mean_ms": 0.029999999999999995
+        },
+        "native.capture.sourceInterval": {
+          "count": 723,
+          "max_ms": 34.79,
+          "mean_ms": 16.680871369294607
+        },
+        "native.encoder.dropPaced": {
+          "count": 16,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.encoder.encode": {
+          "count": 704,
+          "max_ms": 7.19,
+          "mean_ms": 6.491960227272727
+        },
+        "native.encoder.output": {
+          "count": 704,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        }
+      }
+    },
+    {
+      "name": "recovery",
+      "fps": 59.870729688995766,
+      "capture_to_decode_p95_ms": 31.329749996075407,
+      "freeze_seconds": 0,
+      "performance_pass": true,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 963,
+          "max_ms": 11.18,
+          "mean_ms": 0.7848494288681203
+        },
+        "mac.display.drawInterval": {
+          "count": 963,
+          "max_ms": 43.87,
+          "mean_ms": 16.69121495327103
+        },
+        "mac.display.drawableWait": {
+          "count": 963,
+          "max_ms": 11.14,
+          "mean_ms": 0.5023260643821391
+        },
+        "mac.display.gpuCompletionInterval": {
+          "count": 963,
+          "max_ms": 41.17,
+          "mean_ms": 16.692481827622014
+        },
+        "mac.display.mainQueueWait": {
+          "count": 1926,
+          "max_ms": 5.06,
+          "mean_ms": 0.3361889927310488
+        },
+        "mac.display.rendered": {
+          "count": 963,
+          "max_ms": 3.53,
+          "mean_ms": 1.680041536863967
+        },
+        "native.capture.queueWait": {
+          "count": 965,
+          "max_ms": 0.14,
+          "mean_ms": 0.027502590673575127
+        },
+        "native.capture.sourceInterval": {
+          "count": 965,
+          "max_ms": 24.2,
+          "mean_ms": 16.66121243523316
+        },
+        "native.encoder.dropPaced": {
+          "count": 3,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.encoder.encode": {
+          "count": 962,
+          "max_ms": 7.09,
+          "mean_ms": 6.4287318087318095
+        },
+        "native.encoder.output": {
+          "count": 962,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        }
+      }
+    },
+    {
+      "name": "idle",
+      "fps": 20.249283470687054,
+      "capture_to_decode_p95_ms": null,
+      "freeze_seconds": 0,
+      "performance_pass": null,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 214,
+          "max_ms": 3.37,
+          "mean_ms": 0.34971962616822433
+        },
+        "mac.display.drawInterval": {
+          "count": 214,
+          "max_ms": 75.91,
+          "mean_ms": 37.764953271028034
+        },
+        "mac.display.drawableWait": {
+          "count": 214,
+          "max_ms": 0.1,
+          "mean_ms": 0.05757009345794393
+        },
+        "mac.display.gpuCompletionInterval": {
+          "count": 214,
+          "max_ms": 74.91,
+          "mean_ms": 37.76682242990655
+        },
+        "mac.display.mainQueueWait": {
+          "count": 426,
+          "max_ms": 3.97,
+          "mean_ms": 0.1811267605633803
+        },
+        "mac.display.rendered": {
+          "count": 213,
+          "max_ms": 4.5,
+          "mean_ms": 1.5913145539906102
+        },
+        "native.capture.queueWait": {
+          "count": 178,
+          "max_ms": 0.15,
+          "mean_ms": 0.04679775280898876
+        },
+        "native.capture.sourceInterval": {
+          "count": 178,
+          "max_ms": 53.49,
+          "mean_ms": 45.51550561797753
+        },
+        "native.encoder.dropPaced": {
+          "count": 1,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.encoder.encode": {
+          "count": 233,
+          "max_ms": 7.92,
+          "mean_ms": 6.592703862660944
+        },
+        "native.encoder.output": {
+          "count": 233,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        }
+      }
+    },
+    {
+      "name": "resume_motion",
+      "fps": 59.07774658882899,
+      "capture_to_decode_p95_ms": 47.781000001123175,
+      "freeze_seconds": 0,
+      "performance_pass": true,
+      "window_metrics": {
+        "mac.display.decodedToDraw": {
+          "count": 664,
+          "max_ms": 19.09,
+          "mean_ms": 1.4364759036144576
+        },
+        "mac.display.drawInterval": {
+          "count": 664,
+          "max_ms": 61.93,
+          "mean_ms": 18.11831325301205
+        },
+        "mac.display.drawableWait": {
+          "count": 664,
+          "max_ms": 16.5,
+          "mean_ms": 0.5785542168674699
+        },
+        "mac.display.gpuCompletionInterval": {
+          "count": 664,
+          "max_ms": 62.31,
+          "mean_ms": 18.116506024096385
+        },
+        "mac.display.mainQueueWait": {
+          "count": 1311,
+          "max_ms": 17.55,
+          "mean_ms": 0.7320061022120518
+        },
+        "mac.display.rendered": {
+          "count": 665,
+          "max_ms": 3.15,
+          "mean_ms": 1.5780751879699249
+        },
+        "native.capture.queueWait": {
+          "count": 710,
+          "max_ms": 0.14,
+          "mean_ms": 0.028295774647887323
+        },
+        "native.capture.sourceInterval": {
+          "count": 710,
+          "max_ms": 55.5,
+          "mean_ms": 16.954267605633802
+        },
+        "native.encoder.dropPaced": {
+          "count": 5,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        },
+        "native.encoder.encode": {
+          "count": 649,
+          "max_ms": 7.1,
+          "mean_ms": 6.449553158705702
+        },
+        "native.encoder.output": {
+          "count": 649,
+          "max_ms": 0.0,
+          "mean_ms": 0.0
+        }
+      }
+    }
+  ],
+  "scope": "One original-protocol synthetic Mac loopback run. Not cross-NAT or long-duration device acceptance."
+}
