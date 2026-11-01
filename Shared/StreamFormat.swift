@@ -279,3 +279,54 @@ struct NativeVideoBudget {
         return limit
     }
 }
+
+/// Normalize declared LPCM bytes before handing them to AVAudioPCMBuffer.
+/// In particular, packed24-bit, big-endian and fixed-point are not native Int32.
+enum ScreenAudioPCM {
+    static func mono(_ format: AudioStreamBasicDescription, buffers: UnsafePointer<AudioBufferList>, frames: Int) -> [Float]? {
+        let channels = Int(format.mChannelsPerFrame), bits = Int(format.mBitsPerChannel)
+        let flags = format.mFormatFlags
+        let planar = flags & kAudioFormatFlagIsNonInterleaved != 0
+        guard format.mFormatID == kAudioFormatLinearPCM, format.mSampleRate.isFinite,
+              format.mSampleRate > 0, (1...8).contains(channels), (1...64).contains(bits),
+              (1...192000).contains(frames), format.mBytesPerFrame > 0 else { return nil }
+        let stride = Int(format.mBytesPerFrame)
+        guard planar || stride % channels == 0 else { return nil }
+        let bytes = stride / (planar ? 1 : channels)
+        let floating = flags & kAudioFormatFlagIsFloat != 0
+        guard (1...8).contains(bytes), bits <= bytes * 8,
+              !floating || ((bits == 32 || bits == 64) && bits == bytes * 8) else { return nil }
+        let list = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: buffers))
+        guard list.count >= (planar ? channels : 1) else { return nil }
+        for channel in 0..<(planar ? channels : 1) {
+            guard list[channel].mData != nil,
+                  Int(list[channel].mDataByteSize) >= (frames - 1) * stride + (planar ? bytes : channels * bytes) else { return nil }
+        }
+        let bigEndian = flags & kAudioFormatFlagIsBigEndian != 0
+        let high = flags & kAudioFormatFlagIsAlignedHigh != 0
+        let signed = flags & kAudioFormatFlagIsSignedInteger != 0
+        let fractional = Int((flags & kLinearPCMFormatFlagsSampleFractionMask) >> kLinearPCMFormatFlagsSampleFractionShift)
+        let scale = pow(2.0, Double(fractional > 0 ? fractional : bits - 1))
+        var result = [Float](repeating: 0, count: frames)
+        for frame in 0..<frames {
+            var sum = 0.0
+            for channel in 0..<channels {
+                let data = list[planar ? channel : 0].mData!.assumingMemoryBound(to: UInt8.self)
+                let offset = frame * stride + (planar ? 0 : channel * bytes)
+                var raw: UInt64 = 0
+                for byte in 0..<bytes { raw |= UInt64(data[offset + byte]) << ((bigEndian ? bytes - 1 - byte : byte) * 8) }
+                let value: Double
+                if floating { value = bits == 32 ? Double(Float(bitPattern: UInt32(truncatingIfNeeded: raw))) : Double(bitPattern: raw) }
+                else {
+                    if high { raw >>= bytes * 8 - bits }
+                    if bits < 64 { raw &= (UInt64(1) << bits) - 1 }
+                    if signed { value = Double(Int64(bitPattern: raw << (64 - bits)) >> (64 - bits)) / scale }
+                    else { value = (Double(raw) - scale) / scale }
+                }
+                sum += value.isFinite ? value : 0
+            }
+            result[frame] = Float(max(-1, min(1, sum / Double(channels))))
+        }
+        return result
+    }
+}

@@ -820,11 +820,19 @@ final class NativeVideoRoom: @unchecked Sendable {
         receiver.onVerificationAudio = { _, mixed in lock.lock(); captured.append(contentsOf: mixed); lock.unlock() }
         func sample(_ values: [Int16], offset: Int, pageFormat: Bool = false) -> CMSampleBuffer? {
             let rate: Int32 = pageFormat ? 44100 : 48000
-            let stride = pageFormat ? 8 : 2
-            let bytes: Data = pageFormat ? values.flatMap { [Float($0) / 32768, Float($0) / 32768] }.withUnsafeBytes { Data($0) } : values.withUnsafeBytes { Data($0) }
+            let packed = pageFormat && ProcessInfo.processInfo.arguments.contains("--verify-packed-audio")
+            let stride = packed ? 6 : (pageFormat ? 8 : 2)
+            let bytes: Data
+            if packed {
+                bytes = Data(values.flatMap { value -> [UInt8] in
+                    let raw = UInt32(bitPattern: Int32(value) << 8)
+                    let sample = [UInt8(truncatingIfNeeded: raw >> 16), UInt8(truncatingIfNeeded: raw >> 8), UInt8(truncatingIfNeeded: raw)]
+                    return sample + sample
+                })
+            } else { bytes = pageFormat ? values.flatMap { [Float($0) / 32768, Float($0) / 32768] }.withUnsafeBytes { Data($0) } : values.withUnsafeBytes { Data($0) } }
             var description = AudioStreamBasicDescription(mSampleRate: Double(rate), mFormatID: kAudioFormatLinearPCM,
-                mFormatFlags: (pageFormat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger) | kAudioFormatFlagIsPacked,
-                mBytesPerPacket: UInt32(stride), mFramesPerPacket: 1, mBytesPerFrame: UInt32(stride), mChannelsPerFrame: pageFormat ? 2 : 1, mBitsPerChannel: pageFormat ? 32 : 16, mReserved: 0)
+                mFormatFlags: (packed ? kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsBigEndian : (pageFormat ? kAudioFormatFlagIsFloat : kAudioFormatFlagIsSignedInteger)) | kAudioFormatFlagIsPacked,
+                mBytesPerPacket: UInt32(stride), mFramesPerPacket: 1, mBytesPerFrame: UInt32(stride), mChannelsPerFrame: pageFormat ? 2 : 1, mBitsPerChannel: packed ? 24 : (pageFormat ? 32 : 16), mReserved: 0)
             var format: CMAudioFormatDescription?, block: CMBlockBuffer?, result: CMSampleBuffer?
             guard CMAudioFormatDescriptionCreate(allocator: nil, asbd: &description, layoutSize: 0, layout: nil,
                 magicCookieSize: 0, magicCookie: nil, extensions: nil, formatDescriptionOut: &format) == noErr,

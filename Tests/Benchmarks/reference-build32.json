@@ -1,0 +1,126 @@
+{
+  "version": "1.4",
+  "build": 32,
+  "observed31": {
+    "page": {
+      "rate": 44100,
+      "channels": 2,
+      "interleaved": true,
+      "commonFormat": 0,
+      "bitDepthAndFlags": "Not recorded in31; do not infer from commonFormat alone"
+    },
+    "microphone": {
+      "rate": 48000,
+      "channels": 1,
+      "commonFormat": 3
+    },
+    "pageUnderruns": 15,
+    "approximateSeconds": 305,
+    "userReport": "Noise persists with receiver microphone muted"
+  },
+  "tests": {
+    "PCMByteFormats": "PASS: signed16/24/32,LE/BE,aligned24,fixed8.24,float32/64,planar/interleaved,unsigned8,bounds,padding,24-bit tone continuity",
+    "opusPacked24": [
+      {
+        "result": "PASS",
+        "mode": "both",
+        "samples": "28320",
+        "pageAmplitude": "0.0564",
+        "micAmplitude": "0.0741"
+      },
+      {
+        "result": "PASS",
+        "mode": "page",
+        "samples": "5280",
+        "pageAmplitude": "0.1250",
+        "micAmplitude": "0.0103"
+      },
+      {
+        "result": "PASS",
+        "mode": "mic",
+        "samples": "28320",
+        "pageAmplitude": "0.0110",
+        "micAmplitude": "0.1446"
+      },
+      {
+        "result": "PASS",
+        "mode": "muted",
+        "samples": "27840",
+        "pageAmplitude": "0.0000",
+        "micAmplitude": "0.0000"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourcePageOff",
+        "samples": "27840",
+        "pageAmplitude": "0.0054",
+        "micAmplitude": "0.0734"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourceMicOff",
+        "samples": "28800",
+        "pageAmplitude": "0.0549",
+        "micAmplitude": "0.0042"
+      }
+    ],
+    "opusFloat32": [
+      {
+        "result": "PASS",
+        "mode": "both",
+        "samples": "27360",
+        "pageAmplitude": "0.0566",
+        "micAmplitude": "0.0765"
+      },
+      {
+        "result": "PASS",
+        "mode": "page",
+        "samples": "26880",
+        "pageAmplitude": "0.1175",
+        "micAmplitude": "0.0084"
+      },
+      {
+        "result": "PASS",
+        "mode": "mic",
+        "samples": "26880",
+        "pageAmplitude": "0.0112",
+        "micAmplitude": "0.1537"
+      },
+      {
+        "result": "PASS",
+        "mode": "muted",
+        "samples": "27840",
+        "pageAmplitude": "0.0000",
+        "micAmplitude": "0.0000"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourcePageOff",
+        "samples": "27360",
+        "pageAmplitude": "0.0055",
+        "micAmplitude": "0.0765"
+      },
+      {
+        "result": "PASS",
+        "mode": "sourceMicOff",
+        "samples": "27360",
+        "pageAmplitude": "0.0576",
+        "micAmplitude": "0.0042"
+      }
+    ]
+  },
+  "limitations": [
+    "Real32 ASBD details and human listening still pending.",
+    "Synthetic frequency/mute results do not prove noise-free audio."
+  ],
+  "builds": {
+    "macDebug": "PASS",
+    "iosDebug": "PASS",
+    "macRelease": "PASS"
+  },
+  "installed": {
+    "Mac": "1.4(32) Release,strict signature verified",
+    "iPad13": "1.4(32)",
+    "iPad11": "1.4(31),receive protocol compatible"
+  }
+}

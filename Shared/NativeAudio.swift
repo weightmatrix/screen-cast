@@ -29,12 +29,13 @@ final class NativeAudioInput {
             guard let desc = CMSampleBufferGetFormatDescription(sample),
                   let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc),
                   let format = AVAudioFormat(streamDescription: asbd),
+                  let normalized = AVAudioFormat(standardFormatWithSampleRate: format.sampleRate, channels: 1),
                   let target = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48000, channels: 1, interleaved: true) else { return }
             if self.inputFormats[microphone] != format {
                 self.inputFormats[microphone] = format
-                self.converters[microphone] = AVAudioConverter(from: format, to: target)
+                self.converters[microphone] = AVAudioConverter(from: normalized, to: target)
                 self.converters[microphone]?.primeMethod = .none
-                PerformanceDisk.shared.write("audio.input bus=\(microphone ? "mic" : "page") rate=\(format.sampleRate) channels=\(format.channelCount) interleaved=\(format.isInterleaved) format=\(format.commonFormat.rawValue)")
+                PerformanceDisk.shared.write("audio.input bus=\(microphone ? "mic" : "page") rate=\(format.sampleRate) channels=\(format.channelCount) interleaved=\(format.isInterleaved) format=\(format.commonFormat.rawValue) fourcc=\(asbd.pointee.mFormatID) flags=\(String(asbd.pointee.mFormatFlags, radix: 16)) bits=\(asbd.pointee.mBitsPerChannel) bytesPerFrame=\(asbd.pointee.mBytesPerFrame)")
             }
             guard let converter = self.converters[microphone] else { return }
             var needed = 0
@@ -49,18 +50,22 @@ final class NativeAudioInput {
             guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(sample, bufferListSizeNeededOut: nil,
                 bufferListOut: list, bufferListSize: needed, blockBufferAllocator: nil, blockBufferMemoryAllocator: nil,
                 flags: UInt32(kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment), blockBufferOut: &retained) == noErr,
-                  let input = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: list, deallocator: nil),
-                  let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: AVAudioFrameCount(Double(input.frameLength) * 48000 / format.sampleRate + 32)) else { return }
+                  let values = ScreenAudioPCM.mono(asbd.pointee, buffers: list, frames: CMSampleBufferGetNumSamples(sample)),
+                  let input = AVAudioPCMBuffer(pcmFormat: normalized, frameCapacity: AVAudioFrameCount(values.count)),
+                  let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: AVAudioFrameCount(Double(values.count) * 48000 / format.sampleRate + 32)) else { return }
+            input.frameLength = AVAudioFrameCount(values.count)
+            guard let samples = input.floatChannelData?[0] else { return }
+            values.withUnsafeBufferPointer { samples.update(from: $0.baseAddress!, count: $0.count) }
             var supplied = false; var error: NSError?
             let status = converter.convert(to: output, error: &error) { _, state in
                 if supplied { state.pointee = .noDataNow; return nil }
                 supplied = true; state.pointee = .haveData; return input
             }
             guard status != .error, error == nil, let pcm = output.int16ChannelData?[0] else { return }
-            let values = Array(UnsafeBufferPointer(start: pcm, count: Int(output.frameLength)))
+            let converted = Array(UnsafeBufferPointer(start: pcm, count: Int(output.frameLength)))
             self.lock.lock(); defer { self.lock.unlock() }
-            if microphone, self.micEnabled { self.mic.append(contentsOf: values); let drop = max(0, self.mic.count - 4800); self.mic.removeFirst(drop); self.micBase += drop }
-            if !microphone, self.pageEnabled { self.page.append(contentsOf: values); let drop = max(0, self.page.count - 4800); self.page.removeFirst(drop); self.pageBase += drop }
+            if microphone, self.micEnabled { self.mic.append(contentsOf: converted); let drop = max(0, self.mic.count - 4800); self.mic.removeFirst(drop); self.micBase += drop }
+            if !microphone, self.pageEnabled { self.page.append(contentsOf: converted); let drop = max(0, self.page.count - 4800); self.page.removeFirst(drop); self.pageBase += drop }
         }
     }
     func read(frames: Int, consumer: UUID) -> [Int16] {
