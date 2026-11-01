@@ -1,0 +1,160 @@
+{
+  "runs": [
+    {
+      "experiment": "250ms feedback (reverted)",
+      "functional_pass": true,
+      "comparison_valid": false,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 41.53764011900604,
+          "generator_fps": 46.20151550078917,
+          "capture_to_decode_p95_ms": 1393.2653333322378,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 3.9159308115973452,
+          "generator_fps": 59.988727326597626,
+          "capture_to_decode_p95_ms": 2762.6778333215043,
+          "freeze_seconds": 4.907
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.32283854647971,
+          "generator_fps": 59.989387294192966,
+          "capture_to_decode_p95_ms": 1396.6219166613882,
+          "freeze_seconds": 0.4119999999999999
+        },
+        {
+          "name": "recovery",
+          "fps": 30.43542088031312,
+          "generator_fps": 59.995901529980685,
+          "capture_to_decode_p95_ms": 2349.420958344126,
+          "freeze_seconds": 4.098999999999999
+        },
+        {
+          "name": "idle",
+          "fps": 28.453323952156353,
+          "generator_fps": 19.967244878706214,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 34.828435221830965,
+          "generator_fps": 59.99156306152702,
+          "capture_to_decode_p95_ms": 129.68308333074674,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "experiment": "unmodified34 repeat",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 30.33296512480732,
+          "generator_fps": 59.99927167544305,
+          "capture_to_decode_p95_ms": 1743.5467083269032,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 60.73933771540638,
+          "generator_fps": 59.98946934854951,
+          "capture_to_decode_p95_ms": 57.88466666126624,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 58.046940417918336,
+          "generator_fps": 59.79333833880126,
+          "capture_to_decode_p95_ms": 994.5616666664137,
+          "freeze_seconds": 0.76
+        },
+        {
+          "name": "recovery",
+          "fps": 22.17865770417937,
+          "generator_fps": 59.97608843947097,
+          "capture_to_decode_p95_ms": 61.50020833592862,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 16.835025932400836,
+          "generator_fps": 19.95262332728988,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 22.141798505466653,
+          "generator_fps": 59.84944783996437,
+          "capture_to_decode_p95_ms": 35.71404165995773,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "experiment": "unmodified34 repeat",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 37.99211241537598,
+          "generator_fps": 59.9875459190147,
+          "capture_to_decode_p95_ms": 1100.6639166735113,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 59.91397074602686,
+          "generator_fps": 59.99730032981828,
+          "capture_to_decode_p95_ms": 39.64729167637415,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 58.40164061400835,
+          "generator_fps": 59.98456667915265,
+          "capture_to_decode_p95_ms": 745.546166668646,
+          "freeze_seconds": 0.364
+        },
+        {
+          "name": "recovery",
+          "fps": 21.49713393940565,
+          "generator_fps": 59.9920016913646,
+          "capture_to_decode_p95_ms": 31.406750000314787,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 19.48351258485626,
+          "generator_fps": 19.983089830621804,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 21.571473292394927,
+          "generator_fps": 59.9670300020245,
+          "capture_to_decode_p95_ms": 42.264208328560926,
+          "freeze_seconds": 0
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "21 exact baseline unavailable",
+    "No long-duration device/crossNAT acceptance performed",
+    "Fast-feedback candidate reverted; installed34 unchanged",
+    "Repeated low recovery FPS requires further stage attribution; do not infer thermal or pacer cause without evidence"
+  ]
+}

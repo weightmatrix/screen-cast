@@ -1,0 +1,23 @@
+{
+  "results" : [
+    {
+      "bytesPerCopy" : 4147200,
+      "copyMeanMs" : 0.16739201394860478,
+      "copyP95Ms" : 0.2053333300864324,
+      "extraReadWriteMBpsAt60fps" : 497.66399999999999,
+      "height" : 1440,
+      "pixelCheck" : "PASS",
+      "width" : 1920
+    },
+    {
+      "bytesPerCopy" : 12441600,
+      "copyMeanMs" : 0.37954166655254085,
+      "copyP95Ms" : 0.52400000276975334,
+      "extraReadWriteMBpsAt60fps" : 1492.992,
+      "height" : 2160,
+      "pixelCheck" : "PASS",
+      "width" : 3840
+    }
+  ],
+  "scope" : "Optional CPU full-frame copy only; current matching-size native path already bypasses it. No before\/after app or power saving claim."
+}
