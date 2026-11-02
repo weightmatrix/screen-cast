@@ -1,5 +1,5 @@
 """Bounded pairing and STUN only. No media, TURN, database, or external dependencies."""
-import asyncio, base64, collections, hashlib, ipaddress, json, os, re, struct, time, uuid
+import asyncio, base64, collections, hashlib, ipaddress, json, os, re, secrets, struct, time, uuid
 from audit import AuditLog, AuditUnavailable
 MAX_FRAME = 16384
 MAX_TOTAL = 65536
@@ -84,12 +84,29 @@ async def keepalive(ws):
 async def exchange(ws):
     hello = await asyncio.wait_for(ws.receive(), 10)
     role, key = hello.get('role'), hello.get('room')
+    if role == 'suggest':
+        excluded = hello.get('exclude', [])
+        if set(hello) - {'role', 'exclude'} or not isinstance(excluded, list) or len(excluded) > 32 or any(
+                not isinstance(value, str) or not re.fullmatch('[a-f0-9]{64}', value) for value in excluded): raise Rejected()
+        ws.context['role'] = 'suggest'
+        for _ in range(128):
+            candidate = f'{secrets.randbelow(100_000_000):08d}'
+            digest = hashlib.sha256(candidate.encode()).hexdigest()
+            if digest not in ROOMS and digest not in excluded:
+                audit('code_suggested', **ws.context)
+                await ws.send({'type': 'suggestion', 'code': candidate})
+                return
+        await ws.send({'type': 'error', 'message': '暂时无法生成建议码，请稍后重试'})
+        return
     if role not in ('sender', 'receiver') or not isinstance(key, str) or not re.fullmatch('[a-f0-9]{64}', key): raise Rejected()
     ws.context['role'] = role
     if role == 'sender':
-        if key in ROOMS or len(ROOMS) >= 32:
+        if key in ROOMS:
             audit('pairing_rejected', **ws.context, reason='room_unavailable')
-            await ws.send({'type':'error','message':'匹配码已使用或服务繁忙'}); return
+            await ws.send({'type':'error','code':'code_in_use','message':'匹配码已使用，请修改匹配码'}); return
+        if len(ROOMS) >= 32:
+            audit('pairing_rejected', **ws.context, reason='server_busy')
+            await ws.send({'type':'error','code':'server_busy','message':'配对服务繁忙，请稍后重试'}); return
         room = {'sender': ws, 'receiver': None, 'finished': False, 'done': set(), 'bytes': 0, 'id': uuid.uuid4().hex}
         ROOMS[key] = room
     else:

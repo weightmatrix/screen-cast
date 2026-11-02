@@ -143,6 +143,8 @@ private struct SessionRow: View {
     @State private var codeError = false
     @FocusState private var codeFocused: Bool
     @State private var codeEditorFrame = CGRect.zero
+    @StateObject private var codeSuggestion = MatchingCodeSuggestion()
+    @State private var localCodeSuggestion: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -178,9 +180,19 @@ private struct SessionRow: View {
                 if session.internetCodeConflict {
                     Text("另一台发送设备正在使用这个匹配码。请停止那台设备的广播，或为本机换码后让接收端输入新码。")
                         .font(.system(size: 14)).foregroundStyle(.red)
-                    Button("换码并重试") {
-                        codeDraft = MatchingCode.generate()
-                        commitCode()
+                    if codeSuggestion.isLoading {
+                        ProgressView("正在查找未占用的新码…")
+                    } else if let candidate = codeSuggestion.code {
+                        Text("建议新码：\(candidate)").font(.system(size: 20, design: .monospaced)).textSelection(.enabled)
+                        HStack {
+                            Button("采用建议码并重试") { codeDraft = candidate; commitCode() }
+                            Button("换一个建议") { requestSuggestion(force: true) }
+                        }
+                        Text("服务器检查时未被占用；采用后请让接收端输入新码。")
+                            .font(.system(size: 13)).foregroundStyle(.secondary)
+                    } else {
+                        Text(codeSuggestion.errorText ?? "正在准备建议码").font(.system(size: 14)).foregroundStyle(.secondary)
+                        Button("重新获取建议码") { requestSuggestion(force: true) }
                     }
                 }
             }
@@ -208,7 +220,13 @@ private struct SessionRow: View {
                                 .tracking(4).foregroundStyle(CastStyle.accent)
                         }.buttonStyle(.plain).help("修改匹配码")
                     }
-                    if codeError { Text("匹配码已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red) }
+                    if codeError {
+                        Text("匹配码已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
+                        if let candidate = localCodeSuggestion {
+                            Button("采用本机未使用的新码 \(candidate)") { codeDraft = candidate; commitCode() }
+                                .font(.system(size: 13))
+                        }
+                    }
                 }
                 Spacer()
                 Toggle("显示光标", isOn: $session.showsCursor).toggleStyle(.switch).fixedSize()
@@ -236,6 +254,11 @@ private struct SessionRow: View {
             }
         }
         .onChange(of: codeFocused) { _, focused in if !focused && editingCode { commitCode() } }
+        .onChange(of: codeError) { _, invalid in localCodeSuggestion = invalid ? streamer.suggestedLocalCode() : nil }
+        .onChange(of: session.internetCodeConflict) { _, conflict in if conflict { requestSuggestion() } }
+        .onChange(of: session.code) { _, _ in codeSuggestion.reset() }
+        .onAppear { if session.internetCodeConflict { requestSuggestion() } }
+        .onDisappear { codeSuggestion.reset() }
         .onPreferenceChange(CodeEditorFrameKey.self) { codeEditorFrame = $0 }
         .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("code-card")).onEnded { event in
             if codeFocused && !codeEditorFrame.contains(event.location) { codeFocused = false }
@@ -258,6 +281,10 @@ private struct SessionRow: View {
             codeError = true
             editingCode = false
         }
+    }
+
+    private func requestSuggestion(force: Bool = false) {
+        codeSuggestion.request(for: session.code, excluding: streamer.sessions.map(\.code), force: force)
     }
 
     private var statusDot: some View {

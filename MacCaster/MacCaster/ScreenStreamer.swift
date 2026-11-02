@@ -170,6 +170,8 @@ final class ScreenStreamer: NSObject, ObservableObject {
         return candidate
     }
 
+    func suggestedLocalCode() -> String { uniqueCode(for: "") }
+
     func canChangeCode(_ session: StreamSession, to newCode: String) -> Bool {
         let used = Set(sessions.filter { $0.id != session.id }.map { $0.code })
         return MatchingCode.isValid(newCode) && !used.contains(newCode)
@@ -221,7 +223,10 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     let port: UInt16
     @Published var contentName: String
     @Published var code: String {
-        didSet { server.accessCode = code }
+        didSet {
+            if oldValue != code, internetEnabled { internetStatus = "正在注册新匹配码…" }
+            server.accessCode = code
+        }
     }
 
     @Published var phase: Phase = .idle

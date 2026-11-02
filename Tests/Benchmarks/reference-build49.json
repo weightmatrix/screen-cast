@@ -1,0 +1,20 @@
+{
+  "build": 49,
+  "date": "2026-11-03",
+  "started_date": "2026-11-02",
+  "server_checks_passed": 17,
+  "live_swift_suggestion_check_passed": true,
+  "checks": ["skip occupied and excluded codes", "protect original sender during claim race", "separate capacity from conflict", "bound exclusion list and generation attempts", "format and exclusion in live lookup", "deduplicate repeated conflict", "cancel without stale publication"],
+  "server_deployed": true,
+  "suggestion_scope": "current server pairing registry plus client exclusions; not all offline or unregistered sessions",
+  "suggestion_reserves_code": false,
+  "user_confirmation_before_switch": true,
+  "final_sender_registration_checks_collision": true,
+  "lookup_timeout_seconds": 8,
+  "media_orientation_changed": false,
+  "code_values_or_exclusion_hashes_logged": false,
+  "builds": {"macos_release": "passed", "ios_release": "passed"},
+  "device_installation": ["macOS", "iPad Pro 10.5", "iPad mini 5", "iPad Air 11 M2", "iPad Air 13 M2"],
+  "installation_note": "Final Pro/Air11 sync initially hit device transport reset; one retry succeeded",
+  "ui_visual_verification": "not performed; live networking helper and backend tested"
+}

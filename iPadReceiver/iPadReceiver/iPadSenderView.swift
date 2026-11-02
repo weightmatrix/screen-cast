@@ -26,6 +26,7 @@ struct iPadSenderView: View {
     @State private var saveGeneration = UUID()
     @State private var queuedConfiguration = ""
     @State private var refreshing = false
+    @StateObject private var codeSuggestion = MatchingCodeSuggestion()
     private static let settingsQueue = DispatchQueue(label: "casting.sender.settings", qos: .userInitiated)
     private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -53,6 +54,8 @@ struct iPadSenderView: View {
                         .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
                         .frame(maxWidth: 260).disabled(active)
                         .onChange(of: code) { value in
+                            codeSuggestion.reset()
+                            if !active { internetStatus = "" }
                             saveConfiguration()
                         }
                     Text("接收设备选择匹配码连接。投屏包含屏幕上的所有可采集内容，请先关闭不想分享的信息。")
@@ -95,6 +98,21 @@ struct iPadSenderView: View {
                         Toggle("允许广域网匹配码", isOn: $internetMatchingEnabled).toggleStyle(.switch).disabled(active)
                         Text(active ? internetStatus : "公网 IP 使用端口 9318；匹配码仅交换连接信息，视频不经服务器。")
                             .foregroundStyle(.secondary)
+                        if internetStatus.contains("匹配码已使用") || codeSuggestion.code != nil || codeSuggestion.isLoading || codeSuggestion.errorText != nil {
+                            Text("该匹配码发生冲突，建议修改。").foregroundStyle(.red)
+                            if codeSuggestion.isLoading {
+                                ProgressView("正在查找未占用的新码…")
+                            } else if let candidate = codeSuggestion.code {
+                                Text("建议新码：\(candidate)").font(.system(size: 22, design: .monospaced)).textSelection(.enabled)
+                                Button("采用建议码") { code = candidate }.buttonStyle(.borderedProminent).disabled(active)
+                                Text(active ? "请先通过系统录屏面板停止广播，再采用新码并重新开始。" : "采用后请让接收端输入新码；服务器会在连接时再次检查占用。")
+                                    .foregroundStyle(.secondary)
+                                Button("换一个建议") { requestSuggestion(force: true) }
+                            } else {
+                                Text(codeSuggestion.errorText ?? "正在准备建议码").foregroundStyle(.secondary)
+                                Button("重新获取建议码") { requestSuggestion(force: true) }
+                            }
+                        }
                     }
                     Toggle("发送页面声音", isOn: $pageAudio).toggleStyle(.switch)
                     Toggle("发送话筒声音", isOn: $micAudio).toggleStyle(.switch)
@@ -162,8 +180,25 @@ struct iPadSenderView: View {
         .onChange(of: micAudio) { _ in saveConfiguration() }
         .onChange(of: bitrate) { _ in saveConfiguration() }
         .onChange(of: fps) { _ in saveConfiguration() }
-        .onChange(of: internetEnabled) { _ in saveConfiguration() }
-        .onChange(of: internetMatchingEnabled) { _ in saveConfiguration() }
+        .onChange(of: internetEnabled) { enabled in
+            saveConfiguration()
+            if !enabled { codeSuggestion.reset() }
+            else if internetStatus.contains("匹配码已使用") { requestSuggestion() }
+        }
+        .onChange(of: internetMatchingEnabled) { enabled in
+            saveConfiguration()
+            if !enabled { codeSuggestion.reset() }
+            else if internetStatus.contains("匹配码已使用") { requestSuggestion() }
+        }
+        .onChange(of: internetStatus) { value in
+            if value.contains("匹配码已使用") { requestSuggestion() }
+        }
+        .onDisappear { codeSuggestion.reset() }
+    }
+
+    private func requestSuggestion(force: Bool = false) {
+        guard internetEnabled, internetMatchingEnabled else { return }
+        codeSuggestion.request(for: code, excluding: [code], force: force)
     }
 
     private func saveConfiguration() {
@@ -184,8 +219,12 @@ struct iPadSenderView: View {
         queuedConfiguration = fingerprint
         let generation = UUID(); saveGeneration = generation
         configurationReady = false
+        let updatedCode = code
         Self.settingsQueue.async {
             let store = BroadcastSettings.store
+            if store.string(forKey: "broadcastCode") != updatedCode {
+                store.set("", forKey: "broadcastInternetStatus")
+            }
             let saved = values.map { store.set($0.1, forKey: $0.0) }.allSatisfy { $0 }
             DispatchQueue.main.async {
                 guard saveGeneration == generation else { return }

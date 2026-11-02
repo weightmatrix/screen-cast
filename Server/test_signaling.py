@@ -1,4 +1,4 @@
-import asyncio, base64, json, os, struct, unittest, tempfile
+import asyncio, base64, hashlib, json, os, struct, unittest, tempfile
 from unittest import mock
 from audit import AuditLog, AuditUnavailable
 import signaling as service
@@ -74,6 +74,46 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         a=await self.client('sender'); await a.receive()
         b=await self.client('sender'); self.assertEqual((await b.receive())[1]['type'],'error')
         self.assertIsNotNone(service.ROOMS.get('a'*64))
+    async def test_suggestion_skips_occupied_and_excluded_codes(self):
+        occupied='12345678'; excluded='87654321'; expected='23456789'
+        digest=lambda value: hashlib.sha256(value.encode()).hexdigest()
+        sender=await self.client('sender', digest(occupied)); await sender.receive()
+        suggestion=await Client.open(self.port); self.clients.append(suggestion)
+        with mock.patch.object(service.secrets,'randbelow',side_effect=[int(occupied),int(excluded),int(expected)]):
+            await suggestion.send({'role':'suggest','exclude':[digest(excluded)]})
+            reply=(await suggestion.receive())[1]
+        self.assertEqual(reply,{'type':'suggestion','code':expected})
+        self.assertNotIn(digest(expected),service.ROOMS, 'A suggestion must not replace/register a sender')
+        self.assertIn(digest(occupied),service.ROOMS)
+        with open(self.audit_path) as stream: raw=stream.read()
+        self.assertIn('code_suggested',raw)
+        self.assertNotIn('"code":',raw); self.assertNotIn(digest(excluded),raw)
+    async def test_suggestion_race_still_rejects_second_sender(self):
+        key=hashlib.sha256(b'23456789').hexdigest()
+        first=await self.client('sender',key); await first.receive()
+        original=service.ROOMS[key]
+        second=await self.client('sender',key)
+        response=(await second.receive())[1]
+        self.assertEqual(response['code'],'code_in_use')
+        self.assertIs(service.ROOMS[key],original)
+        self.assertEqual(len(service.ROOMS),1)
+    async def test_server_full_is_not_reported_as_code_collision(self):
+        service.ROOMS.update({f'{index:064x}':{} for index in range(32)})
+        sender=await self.client('sender','f'*64)
+        response=(await sender.receive())[1]
+        self.assertEqual(response['code'],'server_busy')
+        self.assertNotIn('匹配码已使用',response['message'])
+    async def test_suggestion_rejects_unbounded_exclusion_list(self):
+        suggestion=await Client.open(self.port); self.clients.append(suggestion)
+        await suggestion.send({'role':'suggest','exclude':['a'*64]*33})
+        self.assertEqual((await suggestion.receive())[0],8)
+    async def test_suggestion_generation_has_bounded_attempts(self):
+        sender=await self.client('sender',hashlib.sha256(b'12345678').hexdigest()); await sender.receive()
+        suggestion=await Client.open(self.port); self.clients.append(suggestion)
+        with mock.patch.object(service.secrets,'randbelow',return_value=12345678) as generate:
+            await suggestion.send({'role':'suggest','exclude':[]})
+            response=(await suggestion.receive())[1]
+        self.assertEqual(response['type'],'error'); self.assertEqual(generate.call_count,128)
     async def test_connection_audit_correlates_without_payloads(self):
         a,b=await self.pair()
         await a.send({'type':'offer','sdp':'v=0\r\nPRIVATE-SDP'})

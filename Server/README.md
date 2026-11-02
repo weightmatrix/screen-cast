@@ -43,6 +43,14 @@ docker compose -p touping -f compose.yml up -d --build
 
 ## 验证与回滚
 
+### 49版建议匹配码
+
+同一WebSocket入口新增一次性`{"role":"suggest","exclude":["已有码的SHA256", "..."]}`，排除列表最多32项。服务器用安全随机数生成8位数字，跳过当前配对注册表及排除列表，最多128次，返回`{"type":"suggestion","code":"建议码"}`后结束查询，不注册发送房间、不预留该码、不轮询、不传视频。原限流/数据限额继续适用；审计只增加`code_suggested`元数据事件，不记录建议码或排除摘要。
+
+建议只表示检查当时未在服务器配对注册表中占用，不代表离线局域设备或未登记会话的全局独占。正式发送注册仍原子检查占用；若确认前被抢占，会再次提示冲突并可重新取建议。占码返回`code_in_use`，房间容量满返回`server_busy`，不再用同一句话混淆。老客户端继续兼容。
+
+49升级前文件位于`backups/build49-before-suggestions/`，镜像`touping-signaling:before-build49`；恢复signaling.py并重建独立服务即可回滚，保留审计目录。
+
 47版服务升级前的三个文件在`backups/build47-before-audit/`，旧镜像保留为`touping-signaling:before-build47`。仅回滚本次服务升级时，恢复备份的signaling.py、Dockerfile、compose.yml并重建独立signaling容器；保留audit目录，不删除已产生的连接记录，也不需要撤销nginx路由。
 
 ```sh
