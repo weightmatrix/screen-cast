@@ -28,13 +28,19 @@ final class Trace {
  }
 }
 // Standalone encoder-only probe, not the application performance acceptance test.
-// Usage: probe <window-seconds> <valid|invalid> <synthetic-document.png> [long-first|short-first|vbr]
+// Usage: probe <window-seconds> <valid|invalid> <synthetic-document.png> [long-first|short-first|vbr|manual]
+// Quality diagnostics: manual --quality [--static-only] [--fixed-qp 10...51]
 @main enum EncoderBurstProbe {
 static func main() throws {
 let args = CommandLine.arguments
 precondition(args.count >= 4, "window duration image [mode] required")
 let seconds = Double(args[1])!, durationValid = args[2] == "valid"
 let manual = args.count > 4 && args[4] == "manual"
+let fixedQP: Int? = args.firstIndex(of:"--fixed-qp").map { index in
+ precondition(index+1 < args.count, "--fixed-qp requires10...51")
+ let value = Int(args[index+1])!; precondition((10...51).contains(value)); return value
+}
+precondition(fixedQP == nil || manual, "--fixed-qp requires manual mode")
 let trace = Trace()
 let quality = args.contains("--quality"); trace.collectQuality = quality
 var specification: [CFString: Any] = [kVTVideoEncoderSpecification_RequireHardwareAcceleratedVideoEncoder: true]
@@ -83,7 +89,8 @@ let context = CIContext(options:[.cacheIntermediates:false])
 let start = ProcessInfo.processInfo.systemUptime
 var held: CVPixelBuffer?, movement = 0
 var phases: [[String:Any]] = []
-for (name,count,fps,motion) in [("motion",180,60,true),("idle",80,20,false),("resume",240,60,true)] {
+let scenarios = args.contains("--static-only") ? [("static",180,20,false)] : [("motion",180,60,true),("idle",80,20,false),("resume",240,60,true)]
+for (name,count,fps,motion) in scenarios {
  let begin = ProcessInfo.processInfo.systemUptime
  statuses["ExpectedFrameRate-"+name] = VTSessionSetProperty(session,key:kVTCompressionPropertyKey_ExpectedFrameRate,value:fps as CFNumber)
  for n in 0..<count {
@@ -99,7 +106,7 @@ for (name,count,fps,motion) in [("motion",180,60,true),("idle",80,20,false),("re
   let pts = CMTime(seconds:now,preferredTimescale:1_000_000_000)
   if quality && n % 30 == 0 { trace.references[pts.value] = held! }
   trace.submitted()
-  trace.lock.lock(); let qp = trace.quantizer.qp; trace.lock.unlock()
+  trace.lock.lock(); let qp = fixedQP ?? trace.quantizer.qp; trace.lock.unlock()
   let ticket = manual ? Unmanaged.passRetained(QPTicket(qp,max(256,15_000_000/8/60))).toOpaque() : nil
   let status=VTCompressionSessionEncodeFrame(session,imageBuffer:held!,presentationTimeStamp:pts,duration:durationValid ? CMTime(value:1,timescale:Int32(fps)) : .invalid,frameProperties:manual ? [kVTEncodeFrameOptionKey_BaseFrameQP:qp] as CFDictionary : nil,sourceFrameRefcon:ticket,infoFlagsOut:nil)
   if status != 0 { if let ticket { Unmanaged<QPTicket>.fromOpaque(ticket).release() }; trace.lock.lock(); trace.errors += 1; trace.pending = max(0,trace.pending-1); trace.lock.unlock() }
@@ -122,6 +129,7 @@ func window(_ samples:[[String:Double]], _ key:String) -> Double {
 let resume=phases.last!["start"] as! Double
 let selected=trace.samples.filter{$0["pts"]!>=resume && $0["pts"]!<resume+1}
 var output:[String:Any] = ["mode":manual ? "manual" : speed ? "vbr-speed" : vbr ? "vbr" : "average", "limit_seconds":seconds,"valid_duration":durationValid,"set_status":statuses,"vbv_readback":vbvReadback,"readback_status":copyStatus,"readback":readback,"hardware":hwStatus == 0 ? (hardware as Any) : NSNull(),"hardware_required":true,"hardware_status":hwStatus,"prepare":prepare,"errors":trace.errors,"max_inflight":trace.maxPending,"tail_output_ms":max(0,(trace.samples.map{$0["arrival"]!}.max() ?? start)-(phases.last!["end"] as! Double))*1000,"dropped":trace.dropped,"frames":trace.samples.count,"resume_first_second_frames":selected.count,"resume_max_frame_bytes":selected.map{$0["bytes"]!}.max() ?? 0,"resume_max_100ms_pts_bytes":window(selected,"pts"),"resume_max_100ms_arrival_bytes":window(selected,"arrival"),"requested_100ms_bytes":281250,"phases":phases.map{p -> [String:Any] in var v=p;v["start"]=(p["start"] as! Double)-start;v["end"]=(p["end"] as! Double)-start;return v}]
+output["fixed_qp"] = fixedQP.map { $0 as Any } ?? NSNull()
 if quality {
  let measurement = LumaQuality(trace.references)
  var decoder: VTDecompressionSession?
@@ -152,6 +160,7 @@ final class LumaQuality {
  let references: [Int64: CVPixelBuffer]
  let lock = NSLock()
  var samples = 0, errors = 0, sum: Double = 0, pixels: Double = 0, topSum: Double = 0, topPixels: Double = 0
+ var framePSNR: [Double] = []
  var minimum = Double.infinity
  init(_ references: [Int64: CVPixelBuffer]) { self.references = references }
  func observe(_ status: OSStatus, _ pixel: CVPixelBuffer?, _ pts: CMTime) {
@@ -172,11 +181,12 @@ final class LumaQuality {
   }
   let count = Double(width*height)
   sum += Double(squared); pixels += count; topSum += Double(top); topPixels += Double(width*min(256,height)); samples += 1
-  minimum = min(minimum,10*log10(65025*count/max(1,Double(squared))))
+  let psnr = 10*log10(65025*count/max(1,Double(squared)))
+  framePSNR.append(psnr); minimum = min(minimum,psnr)
  }
  func report(_ create: OSStatus,_ decodeErrors: Int) -> [String:Any] {
   ["valid":create == 0 && decodeErrors == 0 && errors == 0 && samples == references.count,
-   "samples":samples,"expected_samples":references.count,"create_status":create,"errors":errors+decodeErrors,
+   "sample_frame_luma_psnr_db":framePSNR,"samples":samples,"expected_samples":references.count,"create_status":create,"errors":errors+decodeErrors,
    "luma_psnr_db":10*log10(65025*max(1,pixels)/max(1,sum)),"top_256_rows_luma_psnr_db":10*log10(65025*max(1,topPixels)/max(1,topSum)),
    "minimum_frame_luma_psnr_db":minimum.isFinite ? minimum : 0,
    "scope":"Sampled luma PSNR and top strip only; not full color, text readability or subjective quality acceptance."]

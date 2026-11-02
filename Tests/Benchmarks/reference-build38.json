@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 38,
+  "change": "Static quality refinement floor28 ->24 only; initial QP42, first30 feedback hold, motion/backoff and audio unchanged.",
+  "physical_feedback_on37": "User: very slight residual blur, difficult to notice without close inspection. Not claimed fully sharp.",
+  "fixed_qp_quality_reference": "reference-static-quality.json",
+  "functional_pass": true,
+  "comparison_valid": true,
+  "performance_pass": false,
+  "phases": [
+    {
+      "name": "warmup",
+      "fps": 43.99170359231834,
+      "capture_to_decode_p95_ms": 1557.2937083488796,
+      "freeze_seconds": null
+    },
+    {
+      "name": "steady",
+      "fps": 59.99822380259088,
+      "capture_to_decode_p95_ms": 32.58520833333023,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "bandwidth_drop",
+      "fps": 59.997786748289364,
+      "capture_to_decode_p95_ms": 796.0627499851398,
+      "freeze_seconds": 0.712
+    },
+    {
+      "name": "recovery",
+      "fps": 60.058253381037694,
+      "capture_to_decode_p95_ms": 26.172958343522623,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "idle",
+      "fps": 19.991781815785973,
+      "capture_to_decode_p95_ms": null,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "resume_motion",
+      "fps": 59.90637733035645,
+      "capture_to_decode_p95_ms": 33.80129166180268,
+      "freeze_seconds": 0
+    }
+  ],
+  "limitations": [
+    "Overall sudden-drop acceptance still fails.",
+    "Single motion performance run is not proof of no long-term regression.",
+    "38 physical clarity pending.",
+    "Capture remains1920x1440 in current device logs; encoding cannot reconstruct absent native-screen details."
+  ],
+  "verification": {
+    "quantizer_targeted_check": true,
+    "mac_debug_build": true,
+    "mac_release_build": true,
+    "ios_debug_build": true,
+    "standalone_probe_final_source_compiles": true,
+    "installed": [
+      "Mac Release38 (signature verified)",
+      "13-inch iPad Debug38"
+    ],
+    "physical_clarity": "Pending;35 receiver compatible"
+  }
+}

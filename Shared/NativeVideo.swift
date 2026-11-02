@@ -289,7 +289,7 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
             lock.lock(); let previousQP = quantizer.qp
             quantizer.observe(bytes: data.count, budget: ticket.budget, usedQP: qp, key: key)
             let nextQP = quantizer.qp; lock.unlock()
-            if previousQP > 28 && nextQP <= 28 {
+            if previousQP > 24 && nextQP <= 24 {
                 PerformanceDisk.shared.write("native.encoder qualityRefined qp=\(nextQP) bytes=\(data.count) budget=\(ticket.budget)")
             }
         }

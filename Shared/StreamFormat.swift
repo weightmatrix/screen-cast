@@ -252,7 +252,7 @@ struct ScreenFrameQuantizer {
         // Expiring it after startup can leave a stationary screen stuck at QP51.
         let settling = startupRemaining <= 60
         startupRemaining = max(0, startupRemaining - 1)
-        if settling && ratio < 0.15 && qp > 28 && usedQP == qp {
+        if settling && ratio < 0.15 && qp > 24 && usedQP == qp {
             // Refine an initially static screen instead of keeping startup QP forever.
             qp -= 1
         } else if ratio > 1.1 {

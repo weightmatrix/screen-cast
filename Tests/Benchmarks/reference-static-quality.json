@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "scope": "Standalone hardware-required H264 encode/decode; 1920x1440 crop from same generated synthetic document.180 identical frames at20fps per fixed-QP run. Six decoded reference samples. No WebRTC or network.",
+  "command": "encoder_burst_probe 1 invalid document.png manual --quality --static-only --fixed-qp {28|24}",
+  "fixture_sha256": "fa9e8b7e2f54baec8d8bda669f6b9b62fd604cdac238a1d1dc034a44c0620000",
+  "runs": [
+    {
+      "fixed_qp": 28,
+      "frames": 180,
+      "errors": 0,
+      "dropped": 0,
+      "encoded_bytes": 1018084,
+      "quality": {
+        "create_status": 0,
+        "errors": 0,
+        "expected_samples": 6,
+        "luma_psnr_db": 36.01559477838369,
+        "minimum_frame_luma_psnr_db": 33.933959436303475,
+        "sample_frame_luma_psnr_db": [
+          33.933959436303475,
+          36.583378976716475,
+          36.5861125852475,
+          36.5861125852475,
+          36.5861125852475,
+          36.5861125852475
+        ],
+        "samples": 6,
+        "scope": "Sampled luma PSNR and top strip only; not full color, text readability or subjective quality acceptance.",
+        "top_256_rows_luma_psnr_db": 35.09536398049094,
+        "valid": true
+      }
+    },
+    {
+      "fixed_qp": 24,
+      "frames": 180,
+      "errors": 0,
+      "dropped": 0,
+      "encoded_bytes": 1258598,
+      "quality": {
+        "create_status": 0,
+        "errors": 0,
+        "expected_samples": 6,
+        "luma_psnr_db": 39.633975348965784,
+        "minimum_frame_luma_psnr_db": 36.922706953157714,
+        "sample_frame_luma_psnr_db": [
+          36.922706953157714,
+          40.46042065529521,
+          40.461072829452775,
+          40.461072829452775,
+          40.461072829452775,
+          40.461072829452775
+        ],
+        "samples": 6,
+        "scope": "Sampled luma PSNR and top strip only; not full color, text readability or subjective quality acceptance.",
+        "top_256_rows_luma_psnr_db": 38.803253610391295,
+        "valid": true
+      }
+    }
+  ],
+  "limitations": [
+    "Luma PSNR and top256 rows only; no chroma, real-device text readability or glass-to-glass acceptance.",
+    "Encoded bytes include initial fixed-QP keyframe, not a production steady-state bitrate comparison.",
+    "Higher PSNR does not recover details absent from1920x1440 system capture."
+  ]
+}
