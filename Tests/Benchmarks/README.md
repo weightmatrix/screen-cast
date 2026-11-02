@@ -162,3 +162,7 @@ swiftc -O Shared/StreamFormat.swift Tests/Benchmarks/encoder_burst_probe.swift -
 
 
 27版补充验证：3840×2160功能回归使用30fps合成注入、配置60fps上限，不等于4K60性能验收。单独追加ExpectedFrameRate提示曾造成帧率回退，已撤销，最终编码器源码指纹与已验证的原压力场景版本完全一致。13英寸完整设备自测遇VTInvalidSession(-12903)及系统暂停，未计为通过；已退出测试恢复普通界面，真实广播等待用户确认。
+
+## 黑底粗质量恢复探针（45）
+
+`encoder_burst_probe.swift` 的 `manual --quality --dark --recovery --recovery-stress` 仅在独立硬件编码探针中将运动后的量化器推到QP51，再按20fps静止恢复，逐5帧采样亮度PSNR并记录QP。它不注入任何正常广播、端口或匹配码，不代表真实网络拥塞或平板观感；不通过降低全局QP或新增关键帧来冒充无卡顿验收。前后整理值见 `reference-build45.json`。

@@ -417,7 +417,10 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         get { renderLock.lock(); defer { renderLock.unlock() }; return imageHandler }
         set { renderLock.lock(); imageHandler = newValue; renderLock.unlock() }
     }
-    private let id = String(UUID().uuidString.prefix(8))
+    let diagnosticID = UUID().uuidString
+    private var id: String { String(diagnosticID.prefix(8)) }
+    private var remoteDevice = "接收设备"
+    var onDiagnostic: ((PeerDiagnostic) -> Void)?
     private let sending: Bool
     private let internet: Bool
     private var budget = NativeVideoBudget()
@@ -613,7 +616,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             if !self.sending {
                 for stat in report.statistics.values where stat.type == "inbound-rtp" && (stat.values["kind"] as? String == "video" || stat.values["mediaType"] as? String == "video") {
                     let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]
-                    var values: [String: Any] = ["v":1]
+                    var values: [String: Any] = ["v":1, "device": HostIdentity.description]
                     for key in allowed { if let value = stat.values[key] { values[key] = value } }
                     if let data = NativeVideo.packet(values), data.count <= 2048 {
                         DispatchQueue.main.async { [weak self] in
@@ -638,6 +641,23 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 DispatchQueue.main.async { [weak self] in
                     guard let self, !self.closed else { return }
                     self.onReceiveTiming?(self.receiveTimingSampler.sample(rtt: rtt, jitter: jitter, emitted: emitted, decode: decode, decoded: decoded))
+                }
+            }
+            if self.sending, let pair {
+                func endpoint(_ key: String) -> String {
+                    guard let cid = pair.values[key] as? String, let candidate = report.statistics[cid] else { return "—" }
+                    let address = (candidate.values["address"] as? String) ?? (candidate.values["ip"] as? String) ?? "隐藏地址"
+                    let port = (candidate.values["port"] as? NSNumber)?.stringValue ?? "—"
+                    let proto = (candidate.values["protocol"] as? String) ?? "UDP"
+                    return "\(address.contains(":") ? "[" + address + "]" : address):\(port) \(proto)"
+                }
+                let rtt = (pair.values["currentRoundTripTime"] as? NSNumber)?.doubleValue
+                let local = endpoint("localCandidateId"), remote = endpoint("remoteCandidateId")
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, !self.closed else { return }
+                    self.onDiagnostic?(PeerDiagnostic(id: self.diagnosticID, device: self.remoteDevice,
+                        route: self.internet ? "广域网" : "局域网", localEndpoint: local, remoteEndpoint: remote,
+                        rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }))
                 }
             }
             let available = (pair?.values["availableOutgoingBitrate"] as? NSNumber)?.doubleValue ?? 0
@@ -738,6 +758,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                   ProcessInfo.processInfo.systemUptime - self.lastRemoteStat >= 1,
                   let object = try? JSONSerialization.jsonObject(with: buffer.data) as? [String: Any], object["v"] as? Int == 1 else { return }
             self.lastRemoteStat = ProcessInfo.processInfo.systemUptime
+            if let name = object["device"] as? String { self.remoteDevice = String(name.filter { !$0.isNewline }.prefix(80)) }
             self.remoteLost = (object["packetsLost"] as? NSNumber)?.doubleValue ?? self.remoteLost
             let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]
             let line = allowed.compactMap { key in (object[key] as? NSNumber).map { "\(key)=\($0)" } }.joined(separator: " ")

@@ -253,7 +253,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         case failed(String)
     }
 
-    private let server: CastingServer
+    let server: CastingServer
     private var stream: SCStream?
     private var compressionSession: VTCompressionSession?
     private let workQueue = DispatchQueue(label: "stream.\(UUID().uuidString.prefix(8))", qos: .userInitiated)

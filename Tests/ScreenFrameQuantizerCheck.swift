@@ -13,6 +13,11 @@ import Foundation
   precondition(q.qp == 34,"Late feedback must not repeatedly amplify a stale QP")
   for _ in 0..<50 { q.observe(bytes:80000,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 51)
+  var recoveryFrames = 0
+  while q.qp > 28 && recoveryFrames < 30 {
+   q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false); recoveryFrames += 1
+  }
+  precondition(recoveryFrames <= 10, "Bound coarse static recovery to ten small frames, formerly23")
   for _ in 0..<200 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 28, "After congestion, stationary text must refine to28 even after startup expires")
   for _ in 0..<100 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }

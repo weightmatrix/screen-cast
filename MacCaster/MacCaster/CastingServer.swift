@@ -17,6 +17,36 @@ final class CastingServer: ObservableObject {
     let port: UInt16
     @Published private(set) var isRunning = false
     @Published private(set) var lastError: String?
+    @Published private(set) var diagnostics: [PeerDiagnostic] = []
+    @Published private(set) var internetListeningPort: UInt16?
+    var listeningPort: UInt16? { isRunning ? listener?.port?.rawValue : nil }
+    private var diagnosticValues: [String: PeerDiagnostic] = [:]
+    private func watch(_ video: NativeVideoPeer, route: String) {
+        diagnosticValues[video.diagnosticID] = PeerDiagnostic(id: video.diagnosticID, device: "接收设备", route: route, localEndpoint: "—", remoteEndpoint: "—", rttMS: nil)
+        video.onDiagnostic = { [weak self, weak video] value in
+            guard let self, let video,
+                self.nativePeers.values.contains(where: { $0 === video }) ||
+                self.connectedInternetRooms.values.contains(where: { $0.video === video }) else { return }
+            var snapshot = value
+            snapshot.route = route
+            self.diagnosticValues[value.id] = snapshot
+            self.publishDiagnostics()
+        }
+    }
+    private func publishDiagnostics() {
+        let active = Set(nativePeers.values.map(\.diagnosticID) + connectedInternetRooms.values.map { $0.video.diagnosticID })
+        diagnosticValues = diagnosticValues.filter { active.contains($0.key) }
+        diagnostics = diagnosticValues.values.sorted { $0.id < $1.id }
+    }
+    func disconnectPeer(_ id: String) {
+        if let connection = connections.first(where: { nativePeers[ObjectIdentifier($0)]?.diagnosticID == id }) {
+            drop(connection)
+        } else if let item = connectedInternetRooms.first(where: { $0.value.video.diagnosticID == id }) {
+            connectedInternetRooms.removeValue(forKey: item.key)?.stop()
+            notifyClientCountChanged()
+            startInternet()
+        }
+    }
     var onNativeFPS: ((Double) -> Void)?
     var onClientCountChanged: ((Int) -> Void)?
     var onRemoteResolutionChanged: (() -> Void)?
@@ -75,7 +105,7 @@ final class CastingServer: ObservableObject {
     }
     private func stopInternet() {
         stopNativeMatching(); notifyClientCountChanged()
-        internetListener?.cancel(); internetListener = nil
+        internetListener?.cancel(); internetListener = nil; internetListeningPort = nil
     }
 
     private func startInternet() {
@@ -87,19 +117,26 @@ final class CastingServer: ObservableObject {
                 listener.newConnectionHandler = { [weak self] conn in
                     self?.internetConnections.insert(ObjectIdentifier(conn)); self?.accept(conn)
                 }
-                listener.stateUpdateHandler = { [weak self] state in
-                    if case .failed = state { self?.onInternetStatus?("公网 IP 监听失败；可尝试广域网匹配码") }
+                listener.stateUpdateHandler = { [weak self, weak listener] state in
+                    guard let self, let listener, self.internetListener === listener else { return }
+                    switch state {
+                    case .ready: self.internetListeningPort = listener.port?.rawValue
+                    case .failed, .cancelled: self.internetListeningPort = nil
+                    default: break
+                    }
+                    if case .failed = state { self.onInternetStatus?("公网 IP 监听失败；可尝试广域网匹配码") }
                 }
                 listener.start(queue: .main)
             } catch { onInternetStatus?("公网 IP 监听失败；可尝试广域网匹配码") }
         }
         guard internetMatchingEnabled else {
-            onInternetStatus?("公网 IP 端口 \(internetPort ?? 0) · 不使用配对服务器")
+            onInternetStatus?("广域网 IP 直连 · 不使用配对服务器")
             return
         }
         guard nativeRoom == nil, connectedInternetRooms.count < maxInternetRooms else { return }
         let room = NativeVideoRoom(code: accessCode, source: nativeSource, bitrate: nativeBitrate, fps: nativeFPS)
         nativeRoom = room
+        watch(room.video, route: "广域网匹配码")
         room.video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
         room.onRegistered = { [weak self] in
             guard let self else { return }
@@ -282,6 +319,7 @@ final class CastingServer: ObservableObject {
         listener?.cancel()
         listener = nil
         isRunning = false
+        publishDiagnostics()
         DispatchQueue.main.async { [weak self] in self?.onClientCountChanged?(0) }
     }
 
@@ -381,6 +419,7 @@ final class CastingServer: ObservableObject {
                     guard nativePeers[key] == nil else { conn.cancel(); return }
                     let video = NativeVideoPeer(source: nativeSource, internet: internetConnections.contains(key), bitrate: nativeBitrate, fps: nativeFPS)
                     nativePeers[key] = video
+                    watch(video, route: internetConnections.contains(key) ? "广域网 IP" : "局域网")
                     video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
                     video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
                     video.onError = { [weak self, weak conn] _ in if let conn { self?.drop(conn) } }
@@ -429,6 +468,7 @@ final class CastingServer: ObservableObject {
     }
 
     private func notifyClientCountChanged() {
+        publishDiagnostics()
         onClientCountChanged?(authenticatedConnections.count + connectedInternetRooms.count)
     }
 

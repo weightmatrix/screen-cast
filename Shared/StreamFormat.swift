@@ -269,9 +269,10 @@ struct ReceiveTimingSampler {
 /// Hardware per-frame feedback without banking unused static-frame bitrate.
 struct ScreenFrameQuantizer {
     // Start conservatively until real frame sizes establish the screen complexity.
-    // Subsequent feedback still recovers quality one QP at a time.
+    // Subsequent feedback recovers quality in bounded steps.
     private(set) var qp = 42
     private var startupRemaining = 90
+    private var quietFrames = 0
     mutating func observe(bytes: Int, budget: Int, usedQP: Int, key: Bool) {
         guard !key, budget > 0 else { return }
         let ratio = Double(bytes) / Double(budget)
@@ -279,10 +280,14 @@ struct ScreenFrameQuantizer {
         // Expiring it after startup can leave a stationary screen stuck at QP51.
         let settling = startupRemaining <= 60
         startupRemaining = max(0, startupRemaining - 1)
+        if usedQP == qp { quietFrames = ratio < 0.15 ? min(3, quietFrames + 1) : 0 }
         if settling && ratio < 0.15 && qp > 28 && usedQP == qp {
-            // Refine an initially static screen instead of keeping startup QP forever.
-            qp -= 1
+            // Three genuinely small outputs establish headroom. Recover a coarse
+            // reference faster, without lowering the static QP floor or forcing
+            // another large keyframe. Stale callbacks cannot spend this headroom.
+            qp = max(28, qp - (quietFrames >= 3 ? 3 : 1))
         } else if ratio > 1.1 {
+            quietFrames = 0
             let step = min(6, max(1, Int(ceil(6 * log2(ratio)))))
             qp = min(51, max(qp, usedQP + step))
         } else if ratio >= 0.15 && ratio < 0.8 && usedQP == qp {
@@ -391,5 +396,24 @@ struct ScreenAudioEdge {
         }
         last = result[count - 1]
         return result
+    }
+}
+
+/// Bounded local diagnostics. Ports here are selected ICE media endpoints, not signaling listeners.
+struct PeerDiagnostic: Codable, Identifiable {
+    let id: String
+    var device: String
+    var route: String
+    var localEndpoint: String
+    var remoteEndpoint: String
+    var rttMS: Double?
+}
+
+enum HostIdentity {
+    static var description: String {
+        var info = utsname()
+        uname(&info)
+        let model = withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        return model + " · " + ProcessInfo.processInfo.operatingSystemVersionString
     }
 }

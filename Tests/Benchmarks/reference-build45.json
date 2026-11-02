@@ -1,0 +1,291 @@
+{
+  "build": "1.4 (45)",
+  "scope": "Standalone required-hardware H264 encoder probe; synthetic dark document; motion → forced coarse QP51 → static20fps → motion. Not a real WAN or iPad display acceptance. Sample luma PSNR does not establish subjective text quality.",
+  "settings": {
+    "size": [
+      1920,
+      1440
+    ],
+    "target_bitrate": 15000000,
+    "static_fps": 20,
+    "motion_fps": 60,
+    "qp_floor_unchanged": 28,
+    "forced_keyframes_added": false
+  },
+  "before": {
+    "errors": 0,
+    "dropped": 0,
+    "frames": 500,
+    "max_inflight": 1,
+    "encoded_bytes": 17459085,
+    "resume_max_frame_bytes": 246093,
+    "resume_max_100ms_arrival_bytes": 382080,
+    "idle_qp_every_5_frames": [
+      [
+        0,
+        51
+      ],
+      [
+        5,
+        46
+      ],
+      [
+        10,
+        41
+      ],
+      [
+        15,
+        36
+      ],
+      [
+        20,
+        31
+      ],
+      [
+        25,
+        26
+      ],
+      [
+        30,
+        23
+      ],
+      [
+        35,
+        20
+      ],
+      [
+        40,
+        17
+      ],
+      [
+        45,
+        14
+      ],
+      [
+        50,
+        12
+      ],
+      [
+        55,
+        13
+      ],
+      [
+        60,
+        13
+      ],
+      [
+        65,
+        13
+      ],
+      [
+        70,
+        13
+      ],
+      [
+        75,
+        13
+      ]
+    ],
+    "idle_sample_luma_psnr_db": [
+      35.67598735291551,
+      35.67598735291551,
+      35.67598735291551,
+      35.67866104544709,
+      35.8862121733796,
+      38.124149620886975,
+      40.933411276202676,
+      43.52442837815996,
+      46.33425794269375,
+      48.793987621683584,
+      50.64048009219881,
+      51.32851176336195,
+      51.32851176336195,
+      51.32851176336195,
+      51.32851176336195,
+      51.32851176336195
+    ],
+    "quality_valid": true
+  },
+  "after": {
+    "errors": 0,
+    "dropped": 0,
+    "frames": 500,
+    "max_inflight": 1,
+    "encoded_bytes": 17534694,
+    "resume_max_frame_bytes": 245815,
+    "resume_max_100ms_arrival_bytes": 381965,
+    "idle_qp_every_5_frames": [
+      [
+        0,
+        51
+      ],
+      [
+        5,
+        40
+      ],
+      [
+        10,
+        27
+      ],
+      [
+        15,
+        23
+      ],
+      [
+        20,
+        20
+      ],
+      [
+        25,
+        17
+      ],
+      [
+        30,
+        15
+      ],
+      [
+        35,
+        13
+      ],
+      [
+        40,
+        13
+      ],
+      [
+        45,
+        13
+      ],
+      [
+        50,
+        13
+      ],
+      [
+        55,
+        13
+      ],
+      [
+        60,
+        13
+      ],
+      [
+        65,
+        13
+      ],
+      [
+        70,
+        13
+      ],
+      [
+        75,
+        13
+      ]
+    ],
+    "idle_sample_luma_psnr_db": [
+      35.67598735291551,
+      35.67598735291551,
+      37.47504292893423,
+      40.59750421176829,
+      43.25707247661757,
+      45.987626659242935,
+      48.288140576150894,
+      50.01457700348813,
+      51.33147801602165,
+      51.332170652113305,
+      51.332170652113305,
+      51.332170652113305,
+      51.332170652113305,
+      51.332170652113305,
+      51.332170652113305,
+      51.332170652113305
+    ],
+    "quality_valid": true
+  },
+  "selective_disconnect_integration": {
+    "passed": true,
+    "receiver_frames": [
+      145,
+      111
+    ],
+    "connected": 2,
+    "after_single_kick": 1,
+    "after_stop": 0,
+    "rtt_and_endpoints_present": true,
+    "other_receiver_continued": true
+  },
+  "pending": [
+    "True iPad black-background visual acceptance",
+    "iPad diagnostics kick real-device acceptance",
+    "Long-running cross-network acceptance"
+  ],
+  "network_regression": {
+    "functional_pass": true,
+    "comparison_valid": true,
+    "diagnostic_valid": false,
+    "performance_pass": false,
+    "bandwidth_drop_exercised": true,
+    "impairment_path_verified": true,
+    "phases": [
+      {
+        "name": "warmup",
+        "fps": 51.990299476648616,
+        "generator_fps": 59.988807088440716,
+        "capture_to_decode_p95_ms": 950.665750016924,
+        "freeze_seconds": null,
+        "max_gap_ms": 74.21808331855573,
+        "performance_pass": null
+      },
+      {
+        "name": "steady",
+        "fps": 59.9946171496245,
+        "generator_fps": 59.9946171496245,
+        "capture_to_decode_p95_ms": 37.25437499815598,
+        "freeze_seconds": 0,
+        "max_gap_ms": 36.236416664905846,
+        "performance_pass": true
+      },
+      {
+        "name": "bandwidth_drop",
+        "fps": 60.081974813175165,
+        "generator_fps": 59.99864336405842,
+        "capture_to_decode_p95_ms": 907.1729166607838,
+        "freeze_seconds": 0.774,
+        "max_gap_ms": 773.5090833157301,
+        "performance_pass": false
+      },
+      {
+        "name": "recovery",
+        "fps": 59.9958505995676,
+        "generator_fps": 59.9958505995676,
+        "capture_to_decode_p95_ms": 28.808000002754852,
+        "freeze_seconds": 0,
+        "max_gap_ms": 32.68058333196677,
+        "performance_pass": true
+      },
+      {
+        "name": "idle",
+        "fps": 20.120144024162368,
+        "generator_fps": 19.995174185502975,
+        "capture_to_decode_p95_ms": null,
+        "freeze_seconds": 0.671,
+        "max_gap_ms": 225.55216666660272,
+        "performance_pass": null
+      },
+      {
+        "name": "resume_motion",
+        "fps": 59.74600510827319,
+        "generator_fps": 59.99598839324504,
+        "capture_to_decode_p95_ms": 31.058958353241906,
+        "freeze_seconds": 0,
+        "max_gap_ms": 126.02837500162423,
+        "performance_pass": true
+      }
+    ],
+    "diagnostic_limitation": "Packet classifier saw 3329 unknown packets; packet-level diagnosis invalid. Do not infer packet-level root cause from this run."
+  },
+  "installed": {
+    "macOS": "/Applications/Touping.app",
+    "iPad13": true,
+    "iPad11": true,
+    "native_mac_screen_capture": "Blocked pending new-identity TCC grant; not accepted as working yet"
+  }
+}

@@ -7,6 +7,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var heartbeat: Timer?
     private var observation: AnyCancellable?
     private var running = false
+    private var lastDiagnosticSnapshot = ""
+    private var lastDiagnosticNetwork = ""
     private let lifecycleLock = NSLock()
     private var lifecycle: UUID?
 
@@ -34,10 +36,13 @@ final class SampleHandler: RPBroadcastSampleHandler {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrent(token) else { return }
             self.running = true
+            self.lastDiagnosticSnapshot = ""; self.lastDiagnosticNetwork = ""
             let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
             server.configureNative(bitrate: bitrate, fps: fps, dimension: requestedResolution)
             server.nativeSource.onResolution = { summary in defaults.set(summary, forKey: "broadcastResolutionStatus") }
             self.server = server
+            defaults.set("", forKey: "broadcastKick")
+            defaults.set("[]", forKey: "broadcastPeers")
             self.observation = server.$lastError.compactMap { $0 }.sink { [weak self] text in self?.fail("网络监听失败：\(text)") }
             PerformanceDisk.shared.relay = { [weak server] line in
                 DispatchQueue.main.async { server?.sendDiagnostics(line) }
@@ -57,6 +62,27 @@ final class SampleHandler: RPBroadcastSampleHandler {
             self.heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.nativeCapture.audio.configure(page: defaults.bool(forKey: "broadcastPageAudio"), microphone: defaults.bool(forKey: "broadcastMicAudio"))
                 defaults.set(Date().timeIntervalSince1970, forKey: "broadcastHeartbeat")
+                if let server = self?.server {
+                    let snapshot = try? JSONEncoder().encode(server.diagnostics)
+                    let json = snapshot.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+                    if json != self?.lastDiagnosticSnapshot {
+                        defaults.set(json, forKey: "broadcastPeers")
+                        self?.lastDiagnosticSnapshot = json
+                    }
+                    let ips = CastingServer.localIPs.joined(separator: "、")
+                    let network = "\(ips)/\(server.listeningPort ?? 0)/\(server.internetListeningPort ?? 0)"
+                    if network != self?.lastDiagnosticNetwork {
+                        defaults.set(ips, forKey: "broadcastLocalIPs")
+                        defaults.set(Int(server.listeningPort ?? 0), forKey: "broadcastSignalPort")
+                        defaults.set(Int(server.internetListeningPort ?? 0), forKey: "broadcastInternetPort")
+                        self?.lastDiagnosticNetwork = network
+                    }
+                    if let command = defaults.string(forKey: "broadcastKick"), !command.isEmpty {
+                        // Consume once; peer UUIDs cannot target a later connection.
+                        defaults.set("", forKey: "broadcastKick")
+                        server.disconnectPeer(command)
+                    }
+                }
             }
         }
     }
@@ -91,6 +117,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         heartbeat?.invalidate(); heartbeat = nil
         observation = nil
         server?.stop(); server = nil
+        BroadcastSettings.store.set("[]", forKey: "broadcastPeers")
+        BroadcastSettings.store.set("", forKey: "broadcastKick")
         DiscoveryBroadcaster.shared.stop()
         BroadcastSettings.store.set(false, forKey: "broadcastActive")
         if ["正在投屏", "投屏已暂停"].contains(BroadcastSettings.store.string(forKey: "broadcastStatus") ?? "") {

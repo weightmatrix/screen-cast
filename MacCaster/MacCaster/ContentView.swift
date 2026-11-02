@@ -4,6 +4,7 @@ import ScreenCaptureKit
 struct ContentView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
     @State private var showAddSheet = false
+    @State private var showDiagnostics = false
     @AppStorage("appMode") private var appMode = "cast"
 
     var body: some View {
@@ -20,7 +21,7 @@ struct ContentView: View {
         }
         .padding(28)
         .frame(minWidth: 860, minHeight: 640)
-        .background(CastStyle.canvas)
+        .background(CastStyle.canvas.onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) })
         .sheet(isPresented: $showAddSheet) {
             AddStreamSheet(streamer: streamer, isPresented: $showAddSheet)
         }
@@ -37,23 +38,28 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
                 Text("投屏工作台").font(.system(size: 30, weight: .semibold))
-                Text("李知本 · 让画面自由连接").font(.system(size: 15)).foregroundStyle(.secondary)
             }
             Spacer()
-            Button { streamer.loadShareableContent() } label: {
-                Image(systemName: "arrow.clockwise").frame(width: 20, height: 20)
-            }.help("刷新应用列表")
             Button { appMode = "receive" } label: { Label(AppPresentation.receiveWorkbench, systemImage: "arrow.down.left") }
         }
     }
 
     private var defaultSettingsPanel: some View {
-        HStack {
-            Label(CastingServer.localIPs.first ?? "等待网络", systemImage: "network")
-                .font(.system(size: 14, design: .monospaced)).foregroundStyle(.secondary)
-                .help(CastingServer.localIPs.joined(separator: "、"))
-            Spacer()
-            Text("画质可在每个投屏卡片内单独调整").font(.system(size: 14)).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 14) {
+            if showDiagnostics {
+                Text("本机局域网地址：" + CastingServer.localIPs.joined(separator: "、"))
+                    .font(.system(size: 14, design: .monospaced)).textSelection(.enabled)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        ForEach(streamer.sessions) { session in SessionDiagnosticsView(session: session, server: session.server) }
+                    }
+                }.frame(maxHeight: 210)
+            }
+            HStack {
+                Button { showDiagnostics.toggle() } label: { Label("诊断", systemImage: "waveform.path.ecg") }
+                Spacer()
+                Text("画质可在每个投屏卡片内单独调整").font(.system(size: 14)).foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -122,6 +128,11 @@ private struct StreamListView: View {
     }
 }
 
+private struct CodeEditorFrameKey: PreferenceKey {
+    static var defaultValue = CGRect.zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
+}
+
 private struct SessionRow: View {
     @ObservedObject var session: StreamSession
     @ObservedObject var streamer: ScreenStreamer
@@ -130,6 +141,8 @@ private struct SessionRow: View {
     @State private var editingCode = false
     @State private var codeDraft = ""
     @State private var codeError = false
+    @FocusState private var codeFocused: Bool
+    @State private var codeEditorFrame = CGRect.zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -155,12 +168,12 @@ private struct SessionRow: View {
                 }.padding(.horizontal, 14).padding(.vertical, 9)
                     .background(.white.opacity(0.04), in: Capsule())
             }
-            Toggle("允许广域网直连", isOn: $session.internetEnabled).toggleStyle(.switch)
+            HStack(spacing: 24) {
+                Toggle("允许广域网直连", isOn: $session.internetEnabled).toggleStyle(.switch)
+                Toggle("允许广域网匹配码", isOn: $session.internetMatchingEnabled).toggleStyle(.switch).disabled(!session.internetEnabled)
+            }
             if session.internetEnabled {
-                Toggle("允许广域网匹配码", isOn: $session.internetMatchingEnabled).toggleStyle(.switch)
                 Text(session.internetStatus).font(.system(size: 14)).foregroundStyle(.secondary)
-                Text("公网 IP 使用端口 \(session.port + 1000)；需可达公网地址。匹配码通过轻量服务配对，视频仅在设备间直传。")
-                    .font(.system(size: 14)).foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -171,9 +184,13 @@ private struct SessionRow: View {
                                 .font(.system(size: 24, design: .monospaced)).frame(width: 230)
                                 .onChange(of: codeDraft) { _, newValue in
                                     codeError = !streamer.canChangeCode(session, to: codeDraft) && codeDraft != session.code
-                                }.onSubmit { commitCode() }
-                            Button("保存") { commitCode() }
-                            Button("取消") { editingCode = false; codeError = false }
+                                }.focused($codeFocused)
+                                .background(GeometryReader { proxy in
+                                    Color.clear.preference(key: CodeEditorFrameKey.self, value: proxy.frame(in: .named("code-card")))
+                                })
+                                .onAppear { codeFocused = true }
+                                .onSubmit { commitCode() }
+                                .onExitCommand { editingCode = false; codeError = false }
                         }
                     } else {
                         Button { codeDraft = session.code; editingCode = true } label: {
@@ -203,20 +220,25 @@ private struct SessionRow: View {
                 }.labelsHidden().pickerStyle(.segmented).frame(width: 180)
             }
             HStack(spacing: 12) {
-                Text("端口 \(session.port)").font(.system(size: 14, design: .monospaced)).foregroundStyle(.secondary)
                 Spacer()
                 Button { session.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                 Button(action: onEdit) { Label("换源", systemImage: "rectangle.2.swap") }
                 Button(action: onStop) { Label("停止", systemImage: "stop.fill").foregroundStyle(.red.opacity(0.85)) }
             }
         }
+        .onChange(of: codeFocused) { _, focused in if !focused && editingCode { commitCode() } }
+        .onPreferenceChange(CodeEditorFrameKey.self) { codeEditorFrame = $0 }
+        .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("code-card")).onEnded { event in
+            if codeFocused && !codeEditorFrame.contains(event.location) { codeFocused = false }
+        })
+        .coordinateSpace(name: "code-card")
         .padding(24)
         .background(CastStyle.panel, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.07)))
     }
 
     private func commitCode() {
-        guard MatchingCode.isValid(codeDraft) else { return }
+        guard MatchingCode.isValid(codeDraft) else { codeError = true; editingCode = false; return }
         if streamer.canChangeCode(session, to: codeDraft) {
             session.code = codeDraft
             codeError = false
@@ -224,6 +246,7 @@ private struct SessionRow: View {
             streamer.refreshBroadcast()
         } else {
             codeError = true
+            editingCode = false
         }
     }
 
@@ -643,5 +666,19 @@ private struct pickerRow: View {
         }
         .buttonStyle(CastButtonStyle()).controlSize(.large)
         .tint(selectedFilter === filter ? .blue : nil)
+    }
+}
+
+
+private struct SessionDiagnosticsView: View {
+    @ObservedObject var session: StreamSession
+    @ObservedObject var server: CastingServer
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(session.contentName).font(.headline)
+            Text("局域网信令端口 \(server.listeningPort.map(String.init) ?? "未监听") · 广域网 IP 信令端口 \(server.internetListeningPort.map(String.init) ?? "未监听")")
+                .font(.system(size: 14, design: .monospaced))
+            PeerDiagnosticsView(peers: server.diagnostics, disconnect: server.disconnectPeer)
+        }
     }
 }

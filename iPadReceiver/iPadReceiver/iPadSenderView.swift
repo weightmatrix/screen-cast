@@ -5,6 +5,11 @@ import ReplayKit
 struct iPadSenderView: View {
     @AppStorage("appMode") private var appMode = "cast"
     @State private var code = ""
+    @State private var showDiagnostics = false
+    @State private var peers: [PeerDiagnostic] = []
+    @State private var localIPs = ""
+    @State private var signalPort = 0
+    @State private var internetPort = 0
     @State private var pageAudio = false
     @State private var micAudio = false
     @State private var bitrate = 8_000_000
@@ -101,6 +106,16 @@ struct iPadSenderView: View {
                     Text(status).foregroundStyle(active ? .green : .secondary)
                 }.padding(28).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
+                VStack(alignment: .leading, spacing: 16) {
+                    Button { showDiagnostics.toggle() } label: { Label("诊断", systemImage: "waveform.path.ecg") }
+                    if showDiagnostics {
+                        Text("本机地址：\(localIPs.isEmpty ? "—" : localIPs)")
+                        Text("局域网信令端口 \(active && signalPort > 0 ? String(signalPort) : "未监听") · 广域网 IP 信令端口 \(active && internetPort > 0 ? String(internetPort) : "未监听")")
+                            .font(.system(size: 14, design: .monospaced))
+                        PeerDiagnosticsView(peers: peers) { id in BroadcastSettings.store.set(id, forKey: "broadcastKick") }
+                            .disabled(!active)
+                    }
+                }
                 Text("在系统弹窗中确认开始后，可以切换到其他应用继续投屏。系统不允许静默启动录屏；受保护的视频可能不会显示。声音可分别选择页面与话筒。")
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.font(.system(size: 18)).padding(32).frame(maxWidth: 900)
@@ -172,6 +187,12 @@ struct iPadSenderView: View {
     private func refreshStatus() {
         guard configurationReady else { return }
         active = BroadcastSettings.isActive
+        let store = BroadcastSettings.store
+        peers = active ? (store.string(forKey: "broadcastPeers").flatMap { $0.data(using: .utf8) }
+            .flatMap { try? JSONDecoder().decode([PeerDiagnostic].self, from: $0) } ?? []) : []
+        localIPs = store.string(forKey: "broadcastLocalIPs") ?? ""
+        signalPort = store.integer(forKey: "broadcastSignalPort")
+        internetPort = store.integer(forKey: "broadcastInternetPort")
         internetStatus = BroadcastSettings.store.string(forKey: "broadcastInternetStatus") ?? "等待广域网匹配"
         resolutionStatus = BroadcastSettings.store.string(forKey: "broadcastResolutionStatus") ?? ""
         status = BroadcastSettings.store.string(forKey: "broadcastStatus") ?? "等待开始"

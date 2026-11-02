@@ -84,13 +84,21 @@ let hardware = (hw?.takeRetainedValue() as? NSNumber)?.boolValue ?? false
 let prepare = VTCompressionSessionPrepareToEncodeFrames(session)
 var pool: CVPixelBufferPool?
 precondition(CVPixelBufferPoolCreate(nil,nil,attributes as CFDictionary,&pool) == 0)
-let image = CIImage(contentsOf:URL(fileURLWithPath:args[3]))!
+let original = CIImage(contentsOf:URL(fileURLWithPath:args[3]))!
+let image = args.contains("--dark") ? original.applyingFilter("CIColorInvert") : original
 let context = CIContext(options:[.cacheIntermediates:false])
 let start = ProcessInfo.processInfo.systemUptime
 var held: CVPixelBuffer?, movement = 0
 var phases: [[String:Any]] = []
+var qpTrace: [[String: Any]] = []
 let scenarios = args.contains("--static-only") ? [("static",180,20,false)] : [("motion",180,60,true),("idle",80,20,false),("resume",240,60,true)]
 for (name,count,fps,motion) in scenarios {
+ if args.contains("--recovery-stress") && name == "idle" {
+  // Reproduce a prior bandwidth collapse without injecting frames into an app.
+  trace.lock.lock()
+  for _ in 0..<10 { trace.quantizer.observe(bytes: 80000, budget: 10000, usedQP: trace.quantizer.qp, key: false) }
+  trace.lock.unlock()
+ }
  let begin = ProcessInfo.processInfo.systemUptime
  statuses["ExpectedFrameRate-"+name] = VTSessionSetProperty(session,key:kVTCompressionPropertyKey_ExpectedFrameRate,value:fps as CFNumber)
  for n in 0..<count {
@@ -104,10 +112,11 @@ for (name,count,fps,motion) in scenarios {
   }
   let now=ProcessInfo.processInfo.systemUptime
   let pts = CMTime(seconds:now,preferredTimescale:1_000_000_000)
-  if quality && n % 30 == 0 { trace.references[pts.value] = held! }
+  if quality && (n % 30 == 0 || (args.contains("--recovery") && !motion && n % 5 == 0)) { trace.references[pts.value] = held! }
   trace.submitted()
   trace.lock.lock(); let qp = fixedQP ?? trace.quantizer.qp; trace.lock.unlock()
-  let ticket = manual ? Unmanaged.passRetained(QPTicket(qp,max(256,15_000_000/8/60))).toOpaque() : nil
+  qpTrace.append(["phase": name, "frame": n, "qp": qp])
+  let ticket = manual ? Unmanaged.passRetained(QPTicket(qp,max(256,15_000_000/8/fps))).toOpaque() : nil
   let status=VTCompressionSessionEncodeFrame(session,imageBuffer:held!,presentationTimeStamp:pts,duration:durationValid ? CMTime(value:1,timescale:Int32(fps)) : .invalid,frameProperties:manual ? [kVTEncodeFrameOptionKey_BaseFrameQP:qp] as CFDictionary : nil,sourceFrameRefcon:ticket,infoFlagsOut:nil)
   if status != 0 { if let ticket { Unmanaged<QPTicket>.fromOpaque(ticket).release() }; trace.lock.lock(); trace.errors += 1; trace.pending = max(0,trace.pending-1); trace.lock.unlock() }
   let wait=begin+Double(n+1)/Double(fps)-ProcessInfo.processInfo.systemUptime
@@ -129,6 +138,7 @@ func window(_ samples:[[String:Double]], _ key:String) -> Double {
 let resume=phases.last!["start"] as! Double
 let selected=trace.samples.filter{$0["pts"]!>=resume && $0["pts"]!<resume+1}
 var output:[String:Any] = ["mode":manual ? "manual" : speed ? "vbr-speed" : vbr ? "vbr" : "average", "limit_seconds":seconds,"valid_duration":durationValid,"set_status":statuses,"vbv_readback":vbvReadback,"readback_status":copyStatus,"readback":readback,"hardware":hwStatus == 0 ? (hardware as Any) : NSNull(),"hardware_required":true,"hardware_status":hwStatus,"prepare":prepare,"errors":trace.errors,"max_inflight":trace.maxPending,"tail_output_ms":max(0,(trace.samples.map{$0["arrival"]!}.max() ?? start)-(phases.last!["end"] as! Double))*1000,"dropped":trace.dropped,"frames":trace.samples.count,"resume_first_second_frames":selected.count,"resume_max_frame_bytes":selected.map{$0["bytes"]!}.max() ?? 0,"resume_max_100ms_pts_bytes":window(selected,"pts"),"resume_max_100ms_arrival_bytes":window(selected,"arrival"),"requested_100ms_bytes":281250,"phases":phases.map{p -> [String:Any] in var v=p;v["start"]=(p["start"] as! Double)-start;v["end"]=(p["end"] as! Double)-start;return v}]
+if args.contains("--recovery") { output["qp_trace"] = qpTrace }
 output["fixed_qp"] = fixedQP.map { $0 as Any } ?? NSNull()
 if quality {
  let measurement = LumaQuality(trace.references)

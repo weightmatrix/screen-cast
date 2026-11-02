@@ -1,6 +1,6 @@
 // One App Store identity shared by the native macOS and iOS targets.
-// Retain the existing iOS identifier so installed iPhone/iPad apps keep their identity.
-APP_BUNDLE_IDENTIFIER = com.witten.touping.ipadreceiver.f4l9p953mq
+// Native macOS and iOS share the same product identity; ReplayKit uses .broadcast.
+APP_BUNDLE_IDENTIFIER = Han.touping
 PRODUCT_BUNDLE_IDENTIFIER = $(APP_BUNDLE_IDENTIFIER)
 MARKETING_VERSION = 1.4
-CURRENT_PROJECT_VERSION = 44
+CURRENT_PROJECT_VERSION = 45

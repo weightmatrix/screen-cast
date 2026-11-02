@@ -56,11 +56,26 @@ private final class Counts: @unchecked Sendable {
         let final = counts.snapshot()
         passed = passed && final.0[0] > before + 30 && viewers == 2 && final.1.isEmpty
         let connectedCount = viewers
+        // Diagnose both native peers, then kick only the first room. Its sibling
+        // must keep rendering and the disconnected UUID must disappear.
+        if passed { passed = await pump({ server.diagnostics.count == 2 && server.diagnostics.allSatisfy { $0.rttMS != nil && $0.localEndpoint != "—" && $0.remoteEndpoint != "—" } }) }
+        let victim = server.diagnostics.first?.id
+        let survivorBefore = counts.snapshot().0
+        if let victim {
+            server.disconnectPeer(victim)
+            for _ in 0..<60 {
+                server.nativeSource.append(pixel)
+                try? await Task.sleep(nanoseconds: 33_333_333)
+            }
+            let survivorAfter = counts.snapshot().0
+            passed = passed && viewers == 1 && !server.diagnostics.contains { $0.id == victim }
+                && zip(survivorAfter, survivorBefore).contains { $0.0 > $0.1 + 20 }
+        } else { passed = false }
         server.setInternetMatchingEnabled(false)
         passed = passed && viewers == 0
         let timings = counts.timingSnapshot()
         print("Timing RTT=\(timings.map { ReceiveTiming.text($0.networkRTTMS) }) processing=\(timings.map { ReceiveTiming.text($0.processingMS) })")
-        print("NativeMultiReceiver \(passed ? "PASS" : "FAIL") frames=\(final.0) viewers=\(connectedCount) afterStop=\(viewers) timings=\(counts.timingsReady()) registrations=\(registrations) errors=\(final.1)")
+        print("NativeMultiReceiver \(passed ? "PASS" : "FAIL") frames=\(final.0) viewers=\(connectedCount) afterStop=\(viewers) selectiveKick=\(victim != nil) timings=\(counts.timingsReady()) registrations=\(registrations) errors=\(final.1)")
         first.stop(); second.stop(); server.stop()
         exit(passed ? 0 : 1)
     }
