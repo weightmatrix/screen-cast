@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 36,
+  "scenario": "User reports phone-hotspot receiver, native internetCode, static then fast dragging and resume; uncontrolled network.",
+  "observed_seconds": 164.451,
+  "last": {
+    "framesDecoded": 6382.0,
+    "framesPerSecond": 20.0,
+    "packetsLost": 493.0,
+    "freezeCount": 9.0,
+    "totalFreezesDuration": 3.116,
+    "nackCount": 43.0,
+    "pliCount": 0.0
+  },
+  "freeze_progression": [
+    {
+      "seconds_after_connection": 31.161,
+      "freeze_count": 3,
+      "total_freezes_seconds": 1.19,
+      "packets_lost": 6
+    },
+    {
+      "seconds_after_connection": 33.261,
+      "freeze_count": 6,
+      "total_freezes_seconds": 2.225,
+      "packets_lost": 6
+    },
+    {
+      "seconds_after_connection": 35.39,
+      "freeze_count": 9,
+      "total_freezes_seconds": 3.116,
+      "packets_lost": 417
+    }
+  ],
+  "seconds_without_new_freeze_after_last_increment": 129.061,
+  "largest_logged_average_packet_wait_ms": 1270,
+  "largest_encoder_budget": 43535334,
+  "local_drops": {
+    "dropPaced": 0,
+    "dropBusy": 0,
+    "dropVT": 0,
+    "converted": 0
+  },
+  "assessment": "WAN freeze acceptance still failed. Later session has no new freeze. Unused budget growth is gated, but sudden network loss/backlog remains; source/encoder drops are zero.",
+  "limitations": [
+    "Different duration and uncontrolled network from35; do not infer improvement percentage.",
+    "No glass-to-glass latency measurement or objective image-quality acceptance.",
+    "Freeze begins while source windows still20fps; do not assume motion burst is the sole cause.",
+    "Packet wait is a window average, not instantaneous queue depth."
+  ],
+  "followup": {
+    "seconds_after_connection": 355.003,
+    "frames_decoded": 10200,
+    "packets_lost": 631,
+    "freeze_count": 9,
+    "total_freezes_seconds": 3.116,
+    "seconds_without_new_freeze_since_last_increment": 319.613,
+    "nack_count": 67,
+    "note": "Includes idle capture at20fps; not five minutes of continuous fast motion."
+  }
+}
