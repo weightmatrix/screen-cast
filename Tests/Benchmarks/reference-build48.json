@@ -31,5 +31,12 @@
   },
   "builds": {"macos_release": "passed", "ios_release": "passed"},
   "installed": ["macOS", "iPad Pro 10.5", "iPad mini 5", "iPad Air 11 M2", "iPad Air 13 M2"],
-  "pending": ["User restarts Mac capture with new code", "Real device portrait/landscape confirmation after new ReplayKit broadcast", "Old weak-network acceptance"]
+  "user_device_orientation_confirmation": {
+    "landscape": "normal",
+    "portrait": "normal",
+    "evidence": "User selected option 1: both orientations normal, in the build 48 device confirmation question",
+    "direction_regression_closed": true,
+    "individual_device_route_matrix_specified": false
+  },
+  "pending": ["Full device/route matrix not specified by user", "Old weak-network acceptance"]
 }
