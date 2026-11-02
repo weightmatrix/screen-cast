@@ -789,15 +789,26 @@ final class MacReceiverClient: ObservableObject {
         MacDiscoveryListener.shared.start()
         client.discoveryLookup = { MacDiscoveryListener.shared.find(code: $0) }
         defer { client.disconnect(); window.orderOut(nil) }
+        let args = ProcessInfo.processInfo.arguments
+        let duration: Int? = args.firstIndex(of: "--verify-receive-seconds").flatMap { index in
+            guard index + 1 < args.count, let value = Int(args[index + 1]), (5...1800).contains(value) else { return nil }
+            return value
+        }
         var connected = false
-        for _ in 0..<600 {
+        var lastFrames = 0, maxGap = 0.0
+        var lastProgress: Double?
+        for _ in 0..<((duration ?? 60) * 10) {
             if !connected, MacDiscoveryListener.shared.find(code: "68342719") != nil {
                 client.connectWithCode("68342719"); connected = true
             }
-            if client.frameCount >= 180 { break }
+            let now = ProcessInfo.processInfo.systemUptime
+            if let lastProgress { maxGap = max(maxGap, now - lastProgress) }
+            if client.frameCount != lastFrames { lastFrames = client.frameCount; lastProgress = now }
+            if duration == nil && client.frameCount >= 180 { break }
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
-        NSLog("NativeDeviceReceive %@ frames=%ld size=%@ status=%@", client.frameCount >= 30 ? "PASS" : "FAIL", client.frameCount, String(describing: client.decoder.frameForDisplay(after: nil)?.image?.extent.size), String(describing: client.status))
+        let fresh = lastProgress.map { ProcessInfo.processInfo.systemUptime - $0 < 2 } ?? false
+        NSLog("NativeDeviceReceive %@ frames=%ld seconds=%ld maxObservedGap=%.3f size=%@ status=%@", client.frameCount >= 30 && fresh && maxGap < 2 ? "PASS" : "FAIL", client.frameCount, duration ?? 0, maxGap, String(describing: client.decoder.frameForDisplay(after: nil)?.image?.extent.size), String(describing: client.status))
     }
     static func run() async {
         let fourK = ProcessInfo.processInfo.arguments.contains("--verify-native-4k")

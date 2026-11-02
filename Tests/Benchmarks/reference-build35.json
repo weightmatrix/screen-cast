@@ -164,5 +164,81 @@
     "All original-protocol runs still fail sudden-drop latency criteria.",
     "500ms feedback candidate reverted: no measured improvement.",
     "Build21 exact source/binary unavailable."
-  ]
+  ],
+  "verification": {
+    "mac_debug_release_build": true,
+    "ios_debug_build": true,
+    "routes_loopback": {
+      "modes": [
+        "localIP",
+        "localCode",
+        "internetIP",
+        "internetCode"
+      ],
+      "frames_each": 210,
+      "rotation_pass": true
+    },
+    "audio_six_opus_cases_pass": true,
+    "audio_page_max_step": 0.0103,
+    "targeted_checks": [
+      "EncoderPacerCheck",
+      "NativeVideoBudgetCheck",
+      "ScreenAudioPCMCheck",
+      "ScreenAudioEdgeCheck",
+      "13 link/report tests"
+    ],
+    "device_short_receive": {
+      "source": "13-inch iPad build35",
+      "receiver": "Mac build35",
+      "frames": 180,
+      "width": 1920,
+      "height": 1440,
+      "pass": true
+    },
+    "ipad_receiver": {
+      "receiver": "11-inch iPad build35",
+      "entry": "internetCode",
+      "same_wifi": true,
+      "frames_decoded_at_snapshot": 11512,
+      "video_packets_lost": 51,
+      "freeze_count": 0,
+      "note": "Idle source approximately20fps; not sustained-motion or cross-network acceptance.",
+      "total_freezes_duration": 0,
+      "peak_reported_fps": 61,
+      "nack_count": 10
+    },
+    "device_five_minute_receive": {
+      "source": "13-inch iPad build35",
+      "receiver": "Mac Debug build35",
+      "configured_seconds": 300,
+      "frames": 10800,
+      "width": 1920,
+      "height": 1440,
+      "max_poll_observed_gap_seconds": 1.636,
+      "check_pass": true,
+      "limitation": "100ms polling includes main-thread scheduling. This is not a precise frame-gap or glass-to-glass metric and does not override original stress acceptance."
+    },
+    "physical_motion_90seconds": {
+      "source_capture_fps_range": [
+        20,
+        60
+      ],
+      "dropPaced": 0,
+      "dropBusy": 0,
+      "dropVT": 0,
+      "converted": 0,
+      "receiver_freeze_counts": [
+        0,
+        0
+      ],
+      "simultaneous_receivers": 2,
+      "same_wifi": true
+    }
+  },
+  "drop_investigation": {
+    "media_received": 33750,
+    "media_link_reordered": 14982,
+    "rtx_received": 20775,
+    "note": "Independent jitter creates substantial reordering and retransmission. This is a test characteristic, not evidence of production network loss. Do not change acceptance thresholds or claim the sudden-drop problem solved."
+  }
 }
