@@ -398,6 +398,7 @@ final class MacReceiverClient: ObservableObject {
     @Published var receivesPageAudio = true { didSet { updateAudio() } }
     @Published var receivesMicrophone = true { didSet { updateAudio() } }
     private func updateAudio() { nativePeer?.receiveAudio(page: receivesPageAudio, microphone: receivesMicrophone) }
+    @Published private(set) var receiveTiming = ReceiveTiming()
     private var nativePeer: NativeVideoPeer?
     private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
@@ -420,6 +421,10 @@ final class MacReceiverClient: ObservableObject {
     private func configureNativePeer(_ video: NativeVideoPeer) {
         nativePeer = video
         updateAudio()
+        video.onReceiveTiming = { [weak self, weak video] timing in
+            guard let self, self.nativePeer === video else { return }
+            self.receiveTiming = timing
+        }
         var count = 0
         video.onImage = { [weak self, weak video] image in
             guard let self, video != nil else { return }
@@ -427,9 +432,11 @@ final class MacReceiverClient: ObservableObject {
             count += 1
             let number = count
             if number == 1 || number % 30 == 0 {
+                let description = "原生视频 \(Int(image.extent.width))×\(Int(image.extent.height))"
                 DispatchQueue.main.async { [weak self, weak video] in
                     guard let self, self.nativePeer === video else { return }
                     self.receivedFrames = number; self.frameCount = number
+                    self.decoder.diagText = description
                     self.lastDataAt = Date()
                     self.connectionTimeout?.cancel(); self.setStatus(.connected)
                 }
@@ -565,6 +572,7 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func disconnect() {
+        receiveTiming = ReceiveTiming()
         nativeRoom?.stop(); nativeRoom = nil
         nativePeer?.stop(); nativePeer = nil
         internetDirect = false

@@ -427,6 +427,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var firstFrameWork: DispatchWorkItem?
     var onConnected: (() -> Void)?
     var onSendingFPS: ((Double) -> Void)?
+    var onReceiveTiming: ((ReceiveTiming) -> Void)?
+    private var receiveTimingSampler = ReceiveTimingSampler()
     var onError: ((String) -> Void)?
     private var peer: RTCPeerConnection?
     private weak var captureSource: NativeScreenSource?
@@ -624,6 +626,20 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             let transport = report.statistics.values.first { $0.type == "transport" && $0.values["selectedCandidatePairId"] != nil }
             let pathID = transport?.values["selectedCandidatePairId"] as? String
             let pair = pathID.flatMap { report.statistics[$0] }
+            if !self.sending {
+                let inbound = report.statistics.values.first {
+                    $0.type == "inbound-rtp" && ($0.values["kind"] as? String == "video" || $0.values["mediaType"] as? String == "video")
+                }
+                let rtt = (pair?.values["currentRoundTripTime"] as? NSNumber)?.doubleValue
+                let jitter = (inbound?.values["jitterBufferDelay"] as? NSNumber)?.doubleValue
+                let emitted = (inbound?.values["jitterBufferEmittedCount"] as? NSNumber)?.doubleValue
+                let decode = (inbound?.values["totalDecodeTime"] as? NSNumber)?.doubleValue
+                let decoded = (inbound?.values["framesDecoded"] as? NSNumber)?.doubleValue
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, !self.closed else { return }
+                    self.onReceiveTiming?(self.receiveTimingSampler.sample(rtt: rtt, jitter: jitter, emitted: emitted, decode: decode, decoded: decoded))
+                }
+            }
             let available = (pair?.values["availableOutgoingBitrate"] as? NSNumber)?.doubleValue ?? 0
             if let pathID, let pair {
                 let local = (pair.values["localCandidateId"] as? String).flatMap { report.statistics[$0] }

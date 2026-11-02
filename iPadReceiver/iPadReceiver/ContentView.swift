@@ -209,6 +209,7 @@ struct ContentView: View {
                 DisclosureGroup("连接诊断") {
                     VStack(alignment: .leading, spacing: 16) {
                         if isConnected {
+                            ReceiveTimingView(timing: client.receiveTiming).foregroundStyle(.secondary)
                             Text(client.decoder.diagText).foregroundStyle(.secondary)
                             Text("已接收 \(client.frameCount) 帧").foregroundStyle(.secondary)
                         }

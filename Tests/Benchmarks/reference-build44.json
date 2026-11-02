@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 44,
+  "items": {
+    "microphone": "User rechecked page and microphone audio and confirmed both normal. Current sender microphone switched off at user request; capture/conversion/mixing implementation unchanged. No unproven leakage root-cause claim.",
+    "mac_wan": "During43 runtime verification, two matching-room receivers reported3840x2160 video; no specific reproducible Mac-only signaling bug at current configuration. Physical receiver confirmation pending. No server/media protocol change.",
+    "workbench_name": "Corrected shared string to接收工作台",
+    "timing": "RTT from selected ICE candidate pair; recent per-frame jitter-buffer plus decode deltas. Not glass-to-glass; missing/idle/reset values show—."
+  },
+  "tests": {
+    "receive_timing_unit": true,
+    "isolated_native_multi_receiver": true,
+    "multi_frames": [
+      136,
+      100
+    ],
+    "active_viewers": 2,
+    "after_stop_viewers": 0,
+    "receiver_processing_observed_both": true,
+    "errors": [],
+    "loopback_rtt_ms": [
+      6,
+      1
+    ],
+    "loopback_processing_ms": [
+      2,
+      2
+    ],
+    "mac_release_build": true,
+    "ios_debug_build": true
+  },
+  "limitations": [
+    "No actual end-to-end total latency measurement.",
+    "Functional WAN video receipt does not imply weak-network smoothness; existing losses/freezes remain.",
+    "Mic behavior confirmed by user, not a newly reproduced and repaired capture defect."
+  ],
+  "installed": {
+    "mac": "44 verified; original display/code/WAN restored, page audio on and mic off",
+    "ipad11": "44 install rejected CoreDevice4016; existing version retained",
+    "ipad13": "44 install rejected CoreDevice4016; existing version retained"
+  }
+}

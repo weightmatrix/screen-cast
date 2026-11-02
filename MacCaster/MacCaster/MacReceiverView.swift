@@ -154,6 +154,7 @@ struct MacReceiverView: View {
                     Text(statusText).font(.subheadline)
                 }
                 if isConnected {
+                    ReceiveTimingView(timing: client.receiveTiming).foregroundStyle(.secondary)
                     Label(client.decoder.diagText, systemImage: "info.circle").font(.system(size: 16)).foregroundStyle(.green)
                     Label("已接收 \(client.frameCount) 帧", systemImage: "arrow.down.circle").font(.system(size: 16)).foregroundStyle(.secondary)
                 }

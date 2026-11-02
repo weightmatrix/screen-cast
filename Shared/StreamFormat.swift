@@ -239,6 +239,33 @@ struct EncoderFramePacer {
     }
 }
 
+/// Local receiver telemetry; neither value is glass-to-glass latency.
+struct ReceiveTiming {
+    var networkRTTMS: Double? = nil
+    var processingMS: Double? = nil
+    static func text(_ value: Double?) -> String {
+        guard let value, value.isFinite, value >= 0 else { return "—" }
+        return String(format: "%.0f ms", value)
+    }
+}
+struct ReceiveTimingSampler {
+    private var previous: (jitter: Double, emitted: Double, decode: Double, decoded: Double)?
+    mutating func sample(rtt: Double?, jitter: Double?, emitted: Double?, decode: Double?, decoded: Double?) -> ReceiveTiming {
+        var result = ReceiveTiming(networkRTTMS: rtt.flatMap { $0.isFinite && $0 > 0 ? $0 * 1000 : nil })
+        guard let jitter, let emitted, let decode, let decoded,
+              [jitter, emitted, decode, decoded].allSatisfy({ $0.isFinite && $0 >= 0 }) else {
+            previous = nil; return result
+        }
+        defer { previous = (jitter, emitted, decode, decoded) }
+        guard let old = previous, jitter >= old.jitter, decode >= old.decode,
+              emitted > old.emitted, decoded > old.decoded else { return result }
+        let ms = ((jitter - old.jitter) / (emitted - old.emitted) +
+                  (decode - old.decode) / (decoded - old.decoded)) * 1000
+        if ms.isFinite && ms >= 0 { result.processingMS = ms }
+        return result
+    }
+}
+
 /// Hardware per-frame feedback without banking unused static-frame bitrate.
 struct ScreenFrameQuantizer {
     // Start conservatively until real frame sizes establish the screen complexity.

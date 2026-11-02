@@ -6,6 +6,15 @@ private final class Counts: @unchecked Sendable {
     private let lock = NSLock()
     private var frames = [0, 0]
     private var errors: [String] = []
+    private var processingSeen = [false, false]
+    private var lastTimings = [ReceiveTiming(), ReceiveTiming()]
+    func timingSnapshot() -> [ReceiveTiming] { lock.lock(); defer { lock.unlock() }; return lastTimings }
+    func timing(_ index: Int, _ timing: ReceiveTiming) {
+        lock.lock(); defer { lock.unlock() }
+        lastTimings[index] = timing
+        if let ms = timing.processingMS, ms.isFinite, ms >= 0 { processingSeen[index] = true }
+    }
+    func timingsReady() -> Bool { lock.lock(); defer { lock.unlock() }; return processingSeen.allSatisfy { $0 } }
     func frame(_ index: Int) { lock.lock(); frames[index] += 1; lock.unlock() }
     func failed(_ text: String) { lock.lock(); errors.append(text); lock.unlock() }
     func snapshot() -> ([Int], [String]) { lock.lock(); defer { lock.unlock() }; return (frames, errors) }
@@ -22,6 +31,7 @@ private final class Counts: @unchecked Sendable {
         server.start(); server.setInternetEnabled(true)
         let first = NativeVideoRoom(code: code), second = NativeVideoRoom(code: code)
         first.video.onImage = { _ in counts.frame(0) }; second.video.onImage = { _ in counts.frame(1) }
+        first.video.onReceiveTiming = { counts.timing(0, $0) }; second.video.onReceiveTiming = { counts.timing(1, $0) }
         first.onError = { counts.failed("first: " + $0) }; second.onError = { counts.failed("second: " + $0) }
         var pixel: CVPixelBuffer?
         let status = CVPixelBufferCreate(nil, 640, 480, kCVPixelFormatType_32BGRA,
@@ -42,12 +52,15 @@ private final class Counts: @unchecked Sendable {
         let before = counts.snapshot().0[0]
         if passed { passed = await pump({ registrations >= 2 }) }
         if passed { second.start(); passed = await pump({ counts.snapshot().0[1] >= 60 }) }
+        if passed { passed = await pump({ counts.timingsReady() }) }
         let final = counts.snapshot()
         passed = passed && final.0[0] > before + 30 && viewers == 2 && final.1.isEmpty
         let connectedCount = viewers
         server.setInternetMatchingEnabled(false)
         passed = passed && viewers == 0
-        print("NativeMultiReceiver \(passed ? "PASS" : "FAIL") frames=\(final.0) viewers=\(connectedCount) afterStop=\(viewers) registrations=\(registrations) errors=\(final.1)")
+        let timings = counts.timingSnapshot()
+        print("Timing RTT=\(timings.map { ReceiveTiming.text($0.networkRTTMS) }) processing=\(timings.map { ReceiveTiming.text($0.processingMS) })")
+        print("NativeMultiReceiver \(passed ? "PASS" : "FAIL") frames=\(final.0) viewers=\(connectedCount) afterStop=\(viewers) timings=\(counts.timingsReady()) registrations=\(registrations) errors=\(final.1)")
         first.stop(); second.stop(); server.stop()
         exit(passed ? 0 : 1)
     }
