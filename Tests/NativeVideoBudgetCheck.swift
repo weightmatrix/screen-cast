@@ -26,6 +26,11 @@ import Foundation
   precondition(idle.limit == 12_000_000, "Motion demand must unlock growth against independent BWE")
   _ = idle.sample(upper:100_000_000, available:500_000, sendWait:1, loss:0.1, utilization:0)
   precondition(idle.limit == 425_000, "Idle growth gate must never prevent backoff")
+  var queued = NativeVideoBudget()
+  precondition(queued.sample(upper:100_000_000, available:15_000_000, sendWait:1.2, loss:0, utilization:1) == 8_000_000,
+               "Modest BWE rebound must not grow demand while packets are still queued")
+  precondition(queued.sample(upper:100_000_000, available:15_000_000, sendWait:0.01, loss:0, utilization:1) == 12_000_000,
+               "A drained queue must release the growth hold")
   var stalled = NativeVideoBudget()
   precondition(stalled.sample(upper:100_000_000,available:0,sendWait:1.9,loss:0) == 4_000_000)
   for _ in 0..<8 { _ = stalled.sample(upper:100_000_000,available:0,sendWait:1,loss:0) }

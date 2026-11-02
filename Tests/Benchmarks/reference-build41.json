@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "candidate_build": 41,
+  "tested_binary": "Debug40 with queue-growth guard patch; only version metadata changed afterwards for41",
+  "change": "Hold budget growth when mean packet wait>80ms unless safe independent BWE>=3x current encoder budget; preserve demand gate and starvation escape. No reduction from queue wait alone.",
+  "targeted_check": "Modest BWE rebound with1.2s wait holds8Mbps; drained queue allows12Mbps; existing independent-capacity recovery checks pass.",
+  "functional_pass": true,
+  "comparison_valid": true,
+  "performance_pass": false,
+  "phases": [
+    {
+      "name": "warmup",
+      "fps": 49.496434881931116,
+      "capture_to_decode_p95_ms": 478.66862500086427,
+      "freeze_seconds": null
+    },
+    {
+      "name": "steady",
+      "fps": 59.91116108051842,
+      "capture_to_decode_p95_ms": 49.13612498785369,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "bandwidth_drop",
+      "fps": 59.83278943662719,
+      "capture_to_decode_p95_ms": 647.9066666506696,
+      "freeze_seconds": 0.641
+    },
+    {
+      "name": "recovery",
+      "fps": 59.93343123798747,
+      "capture_to_decode_p95_ms": 32.4503333249595,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "idle",
+      "fps": 20.12154904958926,
+      "capture_to_decode_p95_ms": null,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "resume_motion",
+      "fps": 59.831040225521924,
+      "capture_to_decode_p95_ms": 36.510291654849425,
+      "freeze_seconds": 0
+    }
+  ],
+  "limitations": [
+    "Single controlled run is not proof of real-network improvement.",
+    "Sudden-drop original acceptance still fails.",
+    "The tested standard run did not exercise backlog plus modest growth simultaneously; policy behavior covered by focused test and prior recorded physical conditions.",
+    "No claim of overall latency improvement compared with prior uncontrolled runs.",
+    "41 physical verification pending."
+  ],
+  "verification": {
+    "budget_unit": true,
+    "mac_release_build": true,
+    "ios_debug_build": true,
+    "installed": [
+      "Mac Release41 signature verified",
+      "13-inch iPad Debug41"
+    ],
+    "automatic_fixture_publisher": "Compiled and launched; first attempt correctly failed noReceiver. Current five-minute wait pending explicit receiver connection. Not a performance pass."
+  }
+}
