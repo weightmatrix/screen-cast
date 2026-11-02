@@ -428,6 +428,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var remoteLost = 0.0
     private var selectedPath = ""
     private var firstFrameWork: DispatchWorkItem?
+    private var disconnectedWork: DispatchWorkItem?
     var onConnected: (() -> Void)?
     var onSendingFPS: ((Double) -> Void)?
     var onReceiveTiming: ((ReceiveTiming) -> Void)?
@@ -445,6 +446,11 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     }
     #endif
     func receiveAudio(page: Bool, microphone: Bool) { audioDevice?.receive(page: page, microphone: microphone) }
+    #if os(macOS)
+    func recordPlayback(_ handler: ((UnsafeBufferPointer<Float>, Double) -> Void)?) {
+        audioDevice?.recordPlayback(handler)
+    }
+    #endif
     private var diagnostics: RTCDataChannel?
     private var lastRemoteStat = 0.0
     private var remoteTrack: RTCVideoTrack?
@@ -584,7 +590,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     }
     func stop() {
         guard !closed else { return }; closed = true
-        timeout?.cancel(); statsWork?.cancel(); firstFrameWork?.cancel()
+        timeout?.cancel(); statsWork?.cancel(); firstFrameWork?.cancel(); disconnectedWork?.cancel()
         renderLock.lock(); renderClosed = true; imageHandler = nil; renderLock.unlock()
         remoteTrack?.remove(self); remoteTrack = nil
         diagnostics?.delegate = nil; diagnostics?.close(); diagnostics = nil
@@ -727,6 +733,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             guard let self, !self.closed else { return }
             PerformanceDisk.shared.write("native.ice id=\(self.id) state=\(newState.rawValue)")
             if newState == .connected || newState == .completed {
+                self.disconnectedWork?.cancel(); self.disconnectedWork = nil
                 guard !self.connected else { return }; self.connected = true
                 self.timeout?.cancel(); self.captureSource?.requestKeyFrame(); self.applyQuality(); self.stats(); self.onConnected?()
                 self.renderLock.lock(); let hasFrames = self.frames > 0; self.renderLock.unlock()
@@ -738,6 +745,11 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 PerformanceDisk.shared.write("native.connected media=SRTP codec=H264 videoDataChannel=false diagnosticsChannel=true")
             }
             if newState == .failed { self.fail("视频直连失败，当前网络可能无法穿透；未使用视频中继") }
+            if newState == .disconnected, self.disconnectedWork == nil {
+                let work = DispatchWorkItem { [weak self] in self?.fail("网络连接中断") }
+                self.disconnectedWork = work
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+            }
         }
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}

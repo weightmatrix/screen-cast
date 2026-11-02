@@ -386,12 +386,33 @@ final class MacReceiverDecoder: ObservableObject {
 }
 
 final class MacReceiverClient: ObservableObject {
+    let recorder: LocalLessonRecorder
+    init(recorder: LocalLessonRecorder = LocalLessonRecorder()) { self.recorder = recorder }
     enum Status: Equatable {
         case idle, connecting, connected, failed(String)
     }
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var frameCount: Int = 0
+    @Published private(set) var recoveryMessage = ""
+    private lazy var recovery: ConnectionRecovery = {
+        let value = ConnectionRecovery()
+        value.state = { [weak self] in
+            switch self?.status {
+            case .connected: return .connected
+            case .connecting: return .connecting
+            case .failed: return .failed
+            default: return .idle
+            }
+        }
+        value.cancelTransport = { [weak self] in self?.disconnect(userInitiated: false) }
+        value.onMessage = { [weak self] text in
+            if self?.recoveryMessage != text { self?.recoveryMessage = text }
+        }
+        value.onExhausted = { [weak self] in self?.setStatus(.failed("重连失败，已断开；请点击连接重试")) }
+        return value
+    }()
+    private var autoConnectStarted = false
     private var receivedFrames = 0
     let decoder = MacReceiverDecoder()
 
@@ -421,6 +442,7 @@ final class MacReceiverClient: ObservableObject {
     private func configureNativePeer(_ video: NativeVideoPeer) {
         nativePeer = video
         updateAudio()
+        video.recordPlayback { [weak recorder] samples, time in recorder?.appendAudio(samples, time: time) }
         video.onReceiveTiming = { [weak self, weak video] timing in
             guard let self, self.nativePeer === video else { return }
             self.receiveTiming = timing
@@ -429,6 +451,7 @@ final class MacReceiverClient: ObservableObject {
         video.onImage = { [weak self, weak video] image in
             guard let self, video != nil else { return }
             self.decoder.publishFrame(image)
+            self.recorder.appendVideo(image)
             count += 1
             let number = count
             if number == 1 || number % 30 == 0 {
@@ -443,11 +466,18 @@ final class MacReceiverClient: ObservableObject {
             }
         }
         video.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
-        video.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        video.onError = { [weak self, weak video] text in
+            guard let self, self.nativePeer === video else { return }
+            self.disconnect(userInitiated: false); self.setStatus(.failed(text))
+        }
     }
 
     func connectInternetCode(_ code: String) {
-        disconnect()
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connectInternetCode(code) }; return
+        }
+        disconnect(userInitiated: false)
         guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
         isDisconnecting = false
         setStatus(.connecting)
@@ -455,12 +485,19 @@ final class MacReceiverClient: ObservableObject {
         nativeRoom = room
         configureNativePeer(room.video)
         room.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
-        room.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        room.onError = { [weak self, weak room] text in
+            guard let self, self.nativeRoom === room else { return }
+            self.disconnect(userInitiated: false); self.setStatus(.failed(text))
+        }
         room.start()
     }
 
     func connectInternetIP(host: String, port: UInt16, code: String) {
-        disconnect()
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connectInternetIP(host: host, port: port, code: code) }; return
+        }
+        disconnect(userInitiated: false)
         internetDirect = true
         isDisconnecting = false
         lastHost = host; lastPort = port; authenticationCode = code
@@ -468,7 +505,11 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func connect(host: String, port: UInt16, code: String) {
-        disconnect()
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connect(host: host, port: port, code: code) }; return
+        }
+        disconnect(userInitiated: false)
         isDisconnecting = false
         lastHost = host
         lastPort = port
@@ -477,7 +518,11 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func connectWithCode(_ code: String) {
-        disconnect()
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connectWithCode(code) }; return
+        }
+        disconnect(userInitiated: false)
         isDisconnecting = false
         lastMatchCode = code
         authenticationCode = code
@@ -546,32 +591,15 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func autoSearch(mode: String, host: String, port: UInt16, code: String) {
-        guard mode == "ip" || mode == "code" else { return } // WAN attempts are explicit, never background server polling.
-        guard !isDisconnecting, connection == nil else { return }
-        switch status {
-        case .connected, .connecting:
-            return
-        default:
-            break
-        }
-        if mode == "code" {
-            guard MatchingCode.isValid(code), let lookup = discoveryLookup else { return }
-            guard let found = lookup(code) else { return }
-            lastMatchCode = code
-            authenticationCode = code
-            lastHost = found.0
-            lastPort = found.1
-            startConnection()
-        } else {
-            guard !host.isEmpty, MatchingCode.isValid(code) else { return }
-            authenticationCode = code
-            lastHost = host
-            lastPort = port
-            startConnection()
-        }
+        guard !autoConnectStarted, !recovery.isActive,
+              MatchingCode.isValid(code), mode == "code" || (mode == "ip" && !host.isEmpty) else { return }
+        autoConnectStarted = true
+        if mode == "code" { connectWithCode(code) } else { connect(host: host, port: port, code: code) }
     }
 
-    func disconnect() {
+    func disconnect(userInitiated: Bool = true) {
+        if userInitiated { autoConnectStarted = true; recovery.stop() }
+        recorder.endSegment()
         receiveTiming = ReceiveTiming()
         nativeRoom?.stop(); nativeRoom = nil
         nativePeer?.stop(); nativePeer = nil

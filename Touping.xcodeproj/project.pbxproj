@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        CD4600000000000000000005 = {isa = PBXBuildFile; fileRef = CD4600000000000000000004; };
+        CD4600000000000000000002 = {isa = PBXBuildFile; fileRef = CD4600000000000000000001; };
+        CD4600000000000000000003 = {isa = PBXBuildFile; fileRef = CD4600000000000000000001; };
 		AC4000000000000000000002 = {isa = PBXBuildFile; fileRef = AC4000000000000000000001; };
 		AC4000000000000000000003 = {isa = PBXBuildFile; fileRef = AC4000000000000000000001; };
         FA0000000000000000000002 = {isa = PBXBuildFile; fileRef = FA0000000000000000000001; };
@@ -81,6 +84,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        CD4600000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalLessonRecorder.swift; sourceTree = "<group>"; };
+        CD4600000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionRecovery.swift; sourceTree = "<group>"; };
 		AC4000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPresentation.swift; sourceTree = "<group>"; };
         FA0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio.swift; sourceTree = "<group>"; };
 		BF0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBenchmark.swift; sourceTree = "<group>"; };
@@ -181,6 +186,7 @@
 		9545EFB652514483A91D4D8E /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+                CD4600000000000000000001,
 				2F95EB83546C4838AC1093FE,
                 EE0000000000000000000001,
                 FA0000000000000000000001,
@@ -216,6 +222,7 @@
 		AB0000000000000000000301 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
+                CD4600000000000000000004,
 				AB0000000000000000000101 /* MacCasterApp.swift */,
 				AB0000000000000000000102 /* ContentView.swift */,
 				AB0000000000000000000103 /* ScreenStreamer.swift */,
@@ -382,6 +389,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                CD4600000000000000000002,
 				32A3955008814AE88B7B47CC,
 				0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */,
 				AC4000000000000000000002,
@@ -421,6 +429,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                CD4600000000000000000005,
+                CD4600000000000000000003,
 				91A8F80BD0F349F2B2FBA901,
 				AB0000000000000000000201 /* MacCasterApp.swift in Sources */,
 				AC4000000000000000000003,

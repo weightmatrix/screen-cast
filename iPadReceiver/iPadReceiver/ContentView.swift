@@ -22,8 +22,11 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                StreamingView(decoder: client.decoder)
-                    .frame(width: geo.size.width, height: geo.size.height)
+                Color.black
+                if client.frameCount > 0 {
+                    StreamingView(decoder: client.decoder)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
 
                 if client.status == .connecting {
                     ProgressView("等待首帧画面…").padding(24)
@@ -111,6 +114,7 @@ struct ContentView: View {
                 client.prepareForSuspension()
                 DiscoveryListener.shared.stop()
             case .active:
+                client.resumeAfterSuspension()
                 // Recreate discovery after the Wi-Fi route has returned. The
                 // regular auto-search tick will reconnect using current input.
                 DiscoveryListener.shared.start()
@@ -118,6 +122,7 @@ struct ContentView: View {
                 break
             }
         }
+        .onDisappear { client.disconnect(); DiscoveryListener.shared.stop() }
     }
 
     private func openDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = true } }
@@ -192,7 +197,7 @@ struct ContentView: View {
                     Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
                 }.toggleStyle(.switch)
                 Button(action: toggleConnection) {
-                    Label(isConnected || client.status == .connecting ? "断开连接" : "连接画面", systemImage: isConnected ? "stop.fill" : "arrow.up.right")
+                    Label(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开连接" : "连接画面", systemImage: isConnected ? "stop.fill" : "arrow.up.right")
                         .font(.system(size: 19, weight: .semibold))
                         .frame(maxWidth: .infinity, minHeight: 58)
                         .foregroundStyle(isConnected ? Color.white : Color.black)
@@ -231,12 +236,15 @@ struct ContentView: View {
 
     private var statusText: String {
         switch client.status {
-        case .idle: "未连接"; case .connecting: "连接中..."; case .connected: "已连接"; case .failed(let m): m
+        case .idle: client.recoveryMessage.isEmpty ? "未连接" : client.recoveryMessage
+        case .connecting: client.recoveryMessage.isEmpty ? "连接中..." : client.recoveryMessage
+        case .connected: "已连接"
+        case .failed(let m): client.recoveryMessage.isEmpty ? m : client.recoveryMessage
         }
     }
 
     private func toggleConnection() {
-        if isConnected || client.status == .connecting {
+        if isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty {
             client.disconnect()
         } else if connectMode == "wanCode" {
             client.connectInternetCode(matchCode)
@@ -248,7 +256,7 @@ struct ContentView: View {
             client.connectInternetIP(host: internetHost.trimmingCharacters(in: .whitespacesAndNewlines), port: port, code: matchCode)
         } else if connectMode == "code" {
             guard MatchingCode.isValid(matchCode) else { client.setStatus("请输入发送端的 6–36 位数字匹配码"); return }
-            tryMatchCode(attempt: 0)
+            client.connectWithCode(matchCode)
         } else {
             guard MatchingCode.isValid(matchCode) else { client.setStatus("请输入发送端的 6–36 位数字匹配码"); return }
             client.connect(
@@ -259,18 +267,6 @@ struct ContentView: View {
         }
     }
 
-    private func tryMatchCode(attempt: Int) {
-        guard MatchingCode.isValid(matchCode) else { return }
-        if DiscoveryListener.shared.find(code: matchCode) != nil {
-            client.connectWithCode(matchCode)
-        } else if attempt < 2 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                self.tryMatchCode(attempt: attempt + 1)
-            }
-        } else {
-            client.setStatus("未找到匹配码对应的投屏流")
-        }
-    }
 }
 
 private struct StreamingView: UIViewRepresentable {

@@ -13,6 +13,25 @@ final class StreamClient: ObservableObject {
 
     @Published private(set) var status: Status = .idle
     @Published private(set) var frameCount: Int = 0
+    @Published private(set) var recoveryMessage = ""
+    private lazy var recovery: ConnectionRecovery = {
+        let value = ConnectionRecovery()
+        value.state = { [weak self] in
+            switch self?.status {
+            case .connected: return .connected
+            case .connecting: return .connecting
+            case .failed: return .failed
+            default: return .idle
+            }
+        }
+        value.cancelTransport = { [weak self] in self?.disconnect(userInitiated: false) }
+        value.onMessage = { [weak self] text in
+            if self?.recoveryMessage != text { self?.recoveryMessage = text }
+        }
+        value.onExhausted = { [weak self] in self?.setStatus(.failed("重连失败，已断开；请点击连接重试")) }
+        return value
+    }()
+    private var autoConnectStarted = false
     let decoder = ImageDecoder()
 
     @Published var receivesPageAudio = true { didSet { updateAudio() } }
@@ -78,11 +97,18 @@ final class StreamClient: ObservableObject {
             }
         }
         video.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
-        video.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        video.onError = { [weak self, weak video] text in
+            guard let self, self.nativePeer === video else { return }
+            self.disconnect(userInitiated: false); self.setStatus(.failed(text))
+        }
     }
 
     func connectInternetCode(_ code: String) {
-        disconnect()
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connectInternetCode(code) }; return
+        }
+        disconnect(userInitiated: false)
         guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
         isDisconnecting = false
         setStatus(.connecting)
@@ -90,12 +116,19 @@ final class StreamClient: ObservableObject {
         nativeRoom = room
         configureNativePeer(room.video)
         room.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
-        room.onError = { [weak self] text in self?.disconnect(); self?.setStatus(.failed(text)) }
+        room.onError = { [weak self, weak room] text in
+            guard let self, self.nativeRoom === room else { return }
+            self.disconnect(userInitiated: false); self.setStatus(.failed(text))
+        }
         room.start()
     }
 
     func connectInternetIP(host: String, port: UInt16, code: String) {
-        disconnect()
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connectInternetIP(host: host, port: port, code: code) }; return
+        }
+        disconnect(userInitiated: false)
         internetDirect = true
         isDisconnecting = false
         lastHost = host; lastPort = port; authenticationCode = code
@@ -103,8 +136,12 @@ final class StreamClient: ObservableObject {
     }
 
     func connect(host: String, port: UInt16, code: String) {
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connect(host: host, port: port, code: code) }; return
+        }
         ConnectionDiag.shared.log("connect host=\(host) port=\(port)")
-        disconnect()
+        disconnect(userInitiated: false)
         isDisconnecting = false
         lastHost = host
         lastPort = port
@@ -113,8 +150,12 @@ final class StreamClient: ObservableObject {
     }
 
     func connectWithCode(_ code: String) {
+        if !recovery.isAttempting {
+            autoConnectStarted = true
+            recovery.begin { [weak self] in self?.connectWithCode(code) }; return
+        }
         ConnectionDiag.shared.log("connectWithCode code=\(code)")
-        disconnect()
+        disconnect(userInitiated: false)
         isDisconnecting = false
         lastMatchCode = code
         authenticationCode = code
@@ -204,37 +245,14 @@ final class StreamClient: ObservableObject {
     }
 
     func autoSearch(mode: String, host: String, port: UInt16, code: String) {
-        guard mode == "ip" || mode == "code" else { return } // WAN attempts are explicit, never background server polling.
-        guard !isDisconnecting, connection == nil else { return }
-        ConnectionDiag.shared.log("autoSearch mode=\(mode) host=\(host) port=\(port) code=\(code)")
-        switch status {
-        case .connected, .connecting:
-            return
-        default:
-            break
-        }
-        if mode == "code" {
-            guard MatchingCode.isValid(code), let lookup = discoveryLookup else { return }
-            guard let found = lookup(code) else {
-                ConnectionDiag.shared.log("autoSearch lookup miss code=\(code)")
-                return
-            }
-            ConnectionDiag.shared.log("autoSearch found \(found.0):\(found.1)")
-            lastMatchCode = code
-            authenticationCode = code
-            lastHost = found.0
-            lastPort = found.1
-            startConnection()
-        } else {
-            guard !host.isEmpty, MatchingCode.isValid(code) else { return }
-            authenticationCode = code
-            lastHost = host
-            lastPort = port
-            startConnection()
-        }
+        guard !autoConnectStarted, !recovery.isActive,
+              MatchingCode.isValid(code), mode == "code" || (mode == "ip" && !host.isEmpty) else { return }
+        autoConnectStarted = true
+        if mode == "code" { connectWithCode(code) } else { connect(host: host, port: port, code: code) }
     }
 
-    func disconnect() {
+    func disconnect(userInitiated: Bool = true) {
+        if userInitiated { autoConnectStarted = true; recovery.stop() }
         receiveTiming = ReceiveTiming()
         nativeRoom?.stop(); nativeRoom = nil
         nativePeer?.stop(); nativePeer = nil
@@ -267,6 +285,7 @@ final class StreamClient: ObservableObject {
     /// peer disappeared. Drop that transport explicitly so a wake-up never
     /// reuses a connection whose state predates suspension.
     func prepareForSuspension() {
+        recovery.suspend()
         connectionTimeout?.cancel()
         ConnectionDiag.shared.log("app suspended; discard transport")
         isDisconnecting = true
@@ -282,6 +301,8 @@ final class StreamClient: ObservableObject {
         decoder.reset()
         isDisconnecting = false
     }
+
+    func resumeAfterSuspension() { recovery.resume() }
 
     private func sendScreenSize() {
         guard let conn = connection else { return }

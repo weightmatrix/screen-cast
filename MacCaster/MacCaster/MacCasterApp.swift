@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct MacCasterApp: App {
+    @NSApplicationDelegateAdaptor(RecordingAppDelegate.self) private var appDelegate
     @StateObject private var streamer = ScreenStreamer()
 
     init() {

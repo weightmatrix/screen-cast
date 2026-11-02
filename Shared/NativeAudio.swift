@@ -116,6 +116,12 @@ final class NativeAudioDevice: NSObject, RTCAudioDevice {
     private var engine: AVAudioEngine?
     private var sourceNode: AVAudioSourceNode?
     private let state = NSLock()
+    #if os(macOS)
+    private var recordingHandler: ((UnsafeBufferPointer<Float>, Double) -> Void)?
+    func recordPlayback(_ handler: ((UnsafeBufferPointer<Float>, Double) -> Void)?) {
+        state.lock(); recordingHandler = handler; state.unlock()
+    }
+    #endif
     private var page = true, mic = true
     private(set) var isInitialized = false
     private(set) var isPlayoutInitialized = false
@@ -181,6 +187,15 @@ final class NativeAudioDevice: NSObject, RTCAudioDevice {
                     }
                 }
                 silence.pointee = ObjCBool(!page && !mic)
+                #if os(macOS)
+                self.state.lock(); let record = self.recordingHandler; self.state.unlock()
+                if status == noErr, let record, let buffer = UnsafeMutableAudioBufferListPointer(output).first,
+                   let floats = buffer.mData?.assumingMemoryBound(to: Float.self) {
+                    let time = timestamp.pointee.mFlags.contains(.hostTimeValid)
+                        ? AVAudioTime.seconds(forHostTime: timestamp.pointee.mHostTime) : CACurrentMediaTime()
+                    record(UnsafeBufferPointer(start: floats, count: Int(frames)), time)
+                }
+                #endif
                 #if DEBUG
                 if let verify = self.onVerificationPCM, let buffer = UnsafeMutableAudioBufferListPointer(output).first,
                    let floats = buffer.mData?.assumingMemoryBound(to: Float.self) {

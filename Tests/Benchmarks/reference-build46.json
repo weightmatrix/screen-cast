@@ -1,0 +1,44 @@
+{
+  "build": 46,
+  "date": "2026-11-02",
+  "scope": "bounded receiver recovery, iPad startup work, macOS local receiver recording",
+  "recovery_policy": {
+    "passed": true,
+    "maximum_attempts_including_initial": 8,
+    "total_deadline_seconds": 120,
+    "attempt_deadline_seconds": 20,
+    "retry_delays_seconds": [1, 2, 4, 8, 15, 30, 30],
+    "checks": ["offline deadline", "success resets budget", "manual stop stays stopped", "suspend and resume", "hung negotiation", "path changes"]
+  },
+  "recording_file_check": {
+    "passed": true,
+    "decoded_video_frames": 50,
+    "decoded_audio_samples": 132000,
+    "codecs": ["H264", "AAC"],
+    "checks": ["red pixels", "timed segmentation", "rotation segmentation", "disconnect boundary", "stop and drain", "empty session"]
+  },
+  "native_integration": {
+    "passed": true,
+    "port": 19346,
+    "matching_code": "random per run",
+    "initial_received_frames": 60,
+    "recovered_received_frames": 60,
+    "checks": ["native video receive", "sender stop and restart", "manual stop", "WebRTC playback to AAC", "product MacReceiverClient recorder", "separate recording files after reconnect"],
+    "network": "same-machine only; not cross-NAT or actual Wi-Fi switching",
+    "initial_short_wait_run": "failed at fixed 5 second wait; not counted as pass"
+  },
+  "startup": {
+    "metric": "native App entry to RootView onAppear; excludes pre-main, OS launch and pixel presentation",
+    "ipad_pro_10_5": {"os": "17.7.11", "milliseconds": 594.4, "release_build_installed": true},
+    "ipad_mini_5": {"os": "26.7.2", "milliseconds": 1050.4, "release_build_installed": true},
+    "previous_build_baseline_available": false
+  },
+  "limitations": [
+    "Recording re-encodes decoded received pictures; not compressed-stream passthrough",
+    "Recording limited to macOS receiver, longest edge 1920, at most 30 fps",
+    "Full lesson duration, power overhead, cross-NAT switching and current-segment force-kill recovery not verified",
+    "Baidu upload not implemented while API approval is pending",
+    "Existing weak-network performance acceptance remains incomplete",
+    "macOS recording controls not visually verified because computer-use access was not granted"
+  ]
+}

@@ -23,6 +23,10 @@ struct iPadSenderView: View {
     @State private var configurationReady = false
     @State private var active = false
     @State private var status = "等待开始"
+    @State private var saveGeneration = UUID()
+    @State private var queuedConfiguration = ""
+    @State private var refreshing = false
+    private static let settingsQueue = DispatchQueue(label: "casting.sender.settings", qos: .userInitiated)
     private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -124,25 +128,27 @@ struct iPadSenderView: View {
         .background(Color(red: 0.035, green: 0.05, blue: 0.075).ignoresSafeArea())
         .tint(Color(red: 0.34, green: 0.70, blue: 1))
         .onReceive(timer) { _ in refreshStatus() }
-        .onAppear {
+        .task {
             loadedConfiguration = false
-            pageAudio = BroadcastSettings.store.bool(forKey: "broadcastPageAudio")
-            micAudio = BroadcastSettings.store.bool(forKey: "broadcastMicAudio")
-            let storedResolution = BroadcastSettings.store.string(forKey: "broadcastResolution")
+            let initial = await Self.readSettings()
+            guard !Task.isCancelled else { return }
+            pageAudio = initial.pageAudio
+            micAudio = initial.micAudio
+            let storedResolution = initial.resolution
             PerformanceDisk.shared.write("resolution.loaded stored=\(storedResolution ?? "missing") screen=\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")
-            let savedCode = BroadcastSettings.store.string(forKey: "broadcastCode")
+            let savedCode = initial.code
             code = MatchingCode.isValid(savedCode) ? savedCode! : MatchingCode.generate()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
             if let index = args.firstIndex(of: "--verify-sender-code"), index + 1 < args.count,
                MatchingCode.isValid(args[index + 1]) { code = args[index + 1] }
             #endif
-            let storedBitrate = BroadcastSettings.store.integer(forKey: "broadcastBitrate")
+            let storedBitrate = initial.bitrate
             bitrate = BroadcastSettings.clampedBitrate(storedBitrate)
-            fps = BroadcastSettings.store.integer(forKey: "broadcastFPS") == 60 ? 60 : 30
-            resolution = BroadcastSettings.resolutionLimit(Int(BroadcastSettings.store.string(forKey: "broadcastResolution") ?? "1600") ?? 1600)
-            internetEnabled = BroadcastSettings.store.bool(forKey: "broadcastInternetEnabled")
-            internetMatchingEnabled = BroadcastSettings.store.string(forKey: "broadcastInternetMode") != "ipOnly"
+            fps = initial.fps == 60 ? 60 : 30
+            resolution = BroadcastSettings.resolutionLimit(Int(storedResolution ?? "1600") ?? 1600)
+            internetEnabled = initial.internetEnabled
+            internetMatchingEnabled = initial.internetMode != "ipOnly"
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--verify-internet-sender") {
                 internetEnabled = true; internetMatchingEnabled = true
@@ -162,41 +168,85 @@ struct iPadSenderView: View {
 
     private func saveConfiguration() {
         guard loadedConfiguration else { return }
-        let store = BroadcastSettings.store
-        store.set(pageAudio, forKey: "broadcastPageAudio")
-        store.set(micAudio, forKey: "broadcastMicAudio")
         guard MatchingCode.isValid(code) else {
+            saveGeneration = UUID(); queuedConfiguration = ""
             configurationReady = false
             status = "请输入 6–36 位数字匹配码"
             return
         }
-        guard store.set(internetMatchingEnabled ? "both" : "ipOnly", forKey: "broadcastInternetMode"),
-              store.set(internetEnabled, forKey: "broadcastInternetEnabled"),
-              store.set(code, forKey: "broadcastCode"),
-              store.set(bitrate, forKey: "broadcastBitrate"), store.set(fps, forKey: "broadcastFPS"),
-              store.set(String(resolution), forKey: "broadcastResolution"),
-              store.set("\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))", forKey: "broadcastScreenPixels"),
-              store.string(forKey: "broadcastResolution") == String(resolution) else {
-            configurationReady = false
-            status = "投屏配置无法共享，请检查应用签名"
-            return
+        let values: [(String, Any)] = [("broadcastPageAudio", pageAudio), ("broadcastMicAudio", micAudio),
+            ("broadcastInternetMode", internetMatchingEnabled ? "both" : "ipOnly"),
+            ("broadcastInternetEnabled", internetEnabled), ("broadcastCode", code),
+            ("broadcastBitrate", bitrate), ("broadcastFPS", fps), ("broadcastResolution", String(resolution)),
+            ("broadcastScreenPixels", "\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")]
+        let fingerprint = values.map { "\($0.0)=\($0.1)" }.joined(separator: ";")
+        guard fingerprint != queuedConfiguration else { return }
+        queuedConfiguration = fingerprint
+        let generation = UUID(); saveGeneration = generation
+        configurationReady = false
+        Self.settingsQueue.async {
+            let store = BroadcastSettings.store
+            let saved = values.map { store.set($0.1, forKey: $0.0) }.allSatisfy { $0 }
+            DispatchQueue.main.async {
+                guard saveGeneration == generation else { return }
+                configurationReady = saved
+                if !saved { queuedConfiguration = ""; status = "投屏配置无法共享，请检查应用签名" }
+                else { refreshStatus() }
+            }
         }
-        configurationReady = true
     }
 
     private func refreshStatus() {
-        guard configurationReady else { return }
-        active = BroadcastSettings.isActive
-        let store = BroadcastSettings.store
-        peers = active ? (store.string(forKey: "broadcastPeers").flatMap { $0.data(using: .utf8) }
-            .flatMap { try? JSONDecoder().decode([PeerDiagnostic].self, from: $0) } ?? []) : []
-        localIPs = store.string(forKey: "broadcastLocalIPs") ?? ""
-        signalPort = store.integer(forKey: "broadcastSignalPort")
-        internetPort = store.integer(forKey: "broadcastInternetPort")
-        internetStatus = BroadcastSettings.store.string(forKey: "broadcastInternetStatus") ?? "等待广域网匹配"
-        resolutionStatus = BroadcastSettings.store.string(forKey: "broadcastResolutionStatus") ?? ""
-        status = BroadcastSettings.store.string(forKey: "broadcastStatus") ?? "等待开始"
-        if !active, status == "正在投屏" { status = "投屏已结束" }
+        guard configurationReady, !refreshing else { return }
+        refreshing = true
+        Self.settingsQueue.async {
+            let snapshot = SenderLiveStatus()
+            DispatchQueue.main.async {
+                refreshing = false
+                active = snapshot.active; peers = snapshot.peers; localIPs = snapshot.localIPs
+                signalPort = snapshot.signalPort; internetPort = snapshot.internetPort
+                internetStatus = snapshot.internetStatus; resolutionStatus = snapshot.resolutionStatus
+                status = !snapshot.active && snapshot.status == "正在投屏" ? "投屏已结束" : snapshot.status
+            }
+        }
+    }
+
+    private struct SenderInitialSettings {
+        let pageAudio = BroadcastSettings.store.bool(forKey: "broadcastPageAudio")
+        let micAudio = BroadcastSettings.store.bool(forKey: "broadcastMicAudio")
+        let code = BroadcastSettings.store.string(forKey: "broadcastCode")
+        let bitrate = BroadcastSettings.store.integer(forKey: "broadcastBitrate")
+        let fps = BroadcastSettings.store.integer(forKey: "broadcastFPS")
+        let resolution = BroadcastSettings.store.string(forKey: "broadcastResolution")
+        let internetEnabled = BroadcastSettings.store.bool(forKey: "broadcastInternetEnabled")
+        let internetMode = BroadcastSettings.store.string(forKey: "broadcastInternetMode")
+    }
+    private static func readSettings() async -> SenderInitialSettings {
+        await withCheckedContinuation { continuation in
+            settingsQueue.async { continuation.resume(returning: SenderInitialSettings()) }
+        }
+    }
+    private struct SenderLiveStatus {
+        let active: Bool
+        let peers: [PeerDiagnostic]
+        let localIPs: String
+        let signalPort: Int
+        let internetPort: Int
+        let internetStatus: String
+        let resolutionStatus: String
+        let status: String
+        init() {
+            active = BroadcastSettings.isActive
+            let store = BroadcastSettings.store
+            peers = active ? (store.string(forKey: "broadcastPeers").flatMap { $0.data(using: .utf8) }
+                .flatMap { try? JSONDecoder().decode([PeerDiagnostic].self, from: $0) } ?? []) : []
+            localIPs = store.string(forKey: "broadcastLocalIPs") ?? ""
+            signalPort = store.integer(forKey: "broadcastSignalPort")
+            internetPort = store.integer(forKey: "broadcastInternetPort")
+            internetStatus = store.string(forKey: "broadcastInternetStatus") ?? "等待广域网匹配"
+            resolutionStatus = store.string(forKey: "broadcastResolutionStatus") ?? ""
+            status = store.string(forKey: "broadcastStatus") ?? "等待开始"
+        }
     }
 }
 

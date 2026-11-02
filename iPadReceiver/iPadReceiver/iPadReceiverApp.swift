@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct iPadReceiverApp: App {
+    init() { StartupTiming.entered = ProcessInfo.processInfo.systemUptime }
     var body: some Scene {
         WindowGroup {
             RootView()
@@ -26,6 +27,7 @@ struct RootView: View {
             content
             #endif
         }.preferredColorScheme(.dark)
+        .onAppear { StartupTiming.rootVisible() }
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--verify-native-audio") { await NativeAudioVerification.run() }
@@ -43,6 +45,16 @@ struct RootView: View {
             case "receive": ContentView()
             default: ModePicker(select: { appMode = $0 })
             }
+    }
+}
+
+private enum StartupTiming {
+    static var entered = ProcessInfo.processInfo.systemUptime
+    private static var reported = false
+    static func rootVisible() {
+        guard !reported else { return }; reported = true
+        let milliseconds = (ProcessInfo.processInfo.systemUptime - entered) * 1000
+        NSLog("[Startup] nativeEntryToRootMS=%.1f system=%@", milliseconds, UIDevice.current.systemVersion)
     }
 }
 

@@ -67,6 +67,7 @@ struct MacReceiverView: View {
             let p = UInt16(portText) ?? 8318
             client.autoSearch(mode: connectMode, host: host, port: p, code: matchCode)
         }
+        .onDisappear { client.disconnect(); client.recorder.stop() }
     }
 
     private func openDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = true } }
@@ -141,10 +142,14 @@ struct MacReceiverView: View {
                     Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
                 }.toggleStyle(.switch)
                 Button(action: toggleConnection) {
-                Text(isConnected || client.status == .connecting ? "断开" : "连接").frame(maxWidth: .infinity)
+                Text(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开" : "连接").frame(maxWidth: .infinity)
             }
             .buttonStyle(CastButtonStyle(primary: true))
             .tint(isConnected ? .red : .blue)
+
+            Divider()
+
+            LocalRecordingControls(recorder: client.recorder)
 
             Divider()
 
@@ -173,12 +178,15 @@ struct MacReceiverView: View {
 
     private var statusText: String {
         switch client.status {
-        case .idle: "未连接"; case .connecting: "连接中..."; case .connected: "已连接"; case .failed(let m): m
+        case .idle: client.recoveryMessage.isEmpty ? "未连接" : client.recoveryMessage
+        case .connecting: client.recoveryMessage.isEmpty ? "连接中..." : client.recoveryMessage
+        case .connected: "已连接"
+        case .failed(let m): client.recoveryMessage.isEmpty ? m : client.recoveryMessage
         }
     }
 
     private func toggleConnection() {
-        if isConnected || client.status == .connecting {
+        if isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty {
             client.disconnect()
         } else if connectMode == "wanCode" {
             client.connectInternetCode(matchCode)
@@ -190,7 +198,7 @@ struct MacReceiverView: View {
             client.connectInternetIP(host: internetHost.trimmingCharacters(in: .whitespacesAndNewlines), port: port, code: matchCode)
         } else if connectMode == "code" {
             guard MatchingCode.isValid(matchCode) else { return }
-            tryMatchCode(attempt: 0)
+            client.connectWithCode(matchCode)
         } else {
             guard MatchingCode.isValid(matchCode) else { return }
             client.connect(
@@ -201,18 +209,6 @@ struct MacReceiverView: View {
         }
     }
 
-    private func tryMatchCode(attempt: Int) {
-        guard MatchingCode.isValid(matchCode) else { return }
-        if MacDiscoveryListener.shared.find(code: matchCode) != nil {
-            client.connectWithCode(matchCode)
-        } else if attempt < 2 {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-                self.tryMatchCode(attempt: attempt + 1)
-            }
-        } else {
-            client.setStatus("未找到匹配码对应的投屏流")
-        }
-    }
 }
 
 private final class MacFitView: NSView {
