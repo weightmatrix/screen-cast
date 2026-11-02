@@ -19,7 +19,7 @@ struct MacCasterApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(AppPresentation.title) {
             RootView()
                 .environmentObject(streamer)
                 .task {

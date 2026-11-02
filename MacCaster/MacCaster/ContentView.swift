@@ -35,6 +35,7 @@ struct ContentView: View {
                 .frame(width: 60, height: 60)
                 .background(CastStyle.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 18))
             VStack(alignment: .leading, spacing: 6) {
+                Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
                 Text("投屏工作台").font(.system(size: 30, weight: .semibold))
                 Text("李知本 · 让画面自由连接").font(.system(size: 15)).foregroundStyle(.secondary)
             }
@@ -42,7 +43,7 @@ struct ContentView: View {
             Button { streamer.loadShareableContent() } label: {
                 Image(systemName: "arrow.clockwise").frame(width: 20, height: 20)
             }.help("刷新应用列表")
-            Button { appMode = "receive" } label: { Label("接收画面", systemImage: "arrow.down.left") }
+            Button { appMode = "receive" } label: { Label(AppPresentation.receiveWorkbench, systemImage: "arrow.down.left") }
         }
     }
 

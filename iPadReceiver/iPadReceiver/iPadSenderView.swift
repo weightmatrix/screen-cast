@@ -25,12 +25,13 @@ struct iPadSenderView: View {
             VStack(alignment: .leading, spacing: 28) {
                 HStack {
                     VStack(alignment: .leading, spacing: 8) {
+                        Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
                         Text("投屏工作台").font(.system(size: 32, weight: .semibold))
                         Text("将这台 iPad 的画面分享给 Mac 或另一台 iPad")
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button { appMode = "receive" } label: { Label("接收画面", systemImage: "arrow.down.left") }
+                    Button { appMode = "receive" } label: { Label(AppPresentation.receiveWorkbench, systemImage: "arrow.down.left") }
                         .buttonStyle(.bordered).controlSize(.large)
                 }
                 VStack(alignment: .leading, spacing: 24) {

@@ -56,7 +56,7 @@ struct ModePicker: View {
                 Image(systemName: "display.2")
                     .font(.system(size: 64))
                     .foregroundStyle(.blue)
-                Text("李知本·投屏管理").font(.largeTitle.bold())
+                Text(AppPresentation.title).font(.largeTitle.bold())
 
                 VStack(spacing: 16) {
                     Button {

@@ -131,9 +131,10 @@ struct ContentView: View {
     private var settingsPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
+                Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("接收画面").font(.system(size: 30, weight: .semibold))
+                        Text(AppPresentation.receiveWorkbench).font(.system(size: 30, weight: .semibold))
                         Text("连接你的投屏工作台").font(.system(size: 16)).foregroundStyle(.secondary)
                     }
                     Spacer()

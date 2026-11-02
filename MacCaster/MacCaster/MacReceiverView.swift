@@ -80,8 +80,9 @@ struct MacReceiverView: View {
     private var settingsPanel: some View {
         ScrollView {
         VStack(alignment: .leading, spacing: 24) {
+            Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
             HStack {
-                Text("接收设置").font(.system(size: 26, weight: .semibold))
+                Text(AppPresentation.receiveWorkbench).font(.system(size: 26, weight: .semibold))
                 Spacer()
                 Button {
                     client.disconnect()

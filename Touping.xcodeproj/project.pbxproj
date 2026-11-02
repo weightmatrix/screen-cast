@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AC4000000000000000000002 = {isa = PBXBuildFile; fileRef = AC4000000000000000000001; };
+		AC4000000000000000000003 = {isa = PBXBuildFile; fileRef = AC4000000000000000000001; };
         FA0000000000000000000002 = {isa = PBXBuildFile; fileRef = FA0000000000000000000001; };
         FA0000000000000000000003 = {isa = PBXBuildFile; fileRef = FA0000000000000000000001; };
         FA0000000000000000000004 = {isa = PBXBuildFile; fileRef = FA0000000000000000000001; };
@@ -79,6 +81,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		AC4000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppPresentation.swift; sourceTree = "<group>"; };
         FA0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeAudio.swift; sourceTree = "<group>"; };
 		BF0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeBenchmark.swift; sourceTree = "<group>"; };
 		EE0000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeVideo.swift; sourceTree = "<group>"; };
@@ -182,6 +185,7 @@
                 EE0000000000000000000001,
                 FA0000000000000000000001,
 				68AA5B2BA8654707A8998047 /* StreamFormat.swift */,
+				AC4000000000000000000001,
 				6E8EDFCBCC1340C4A716C8EC /* AppIdentity.xcconfig */,
 				BA23BCF5612541508AE0676B /* BroadcastSettings.swift */,
 			);
@@ -380,6 +384,7 @@
 			files = (
 				32A3955008814AE88B7B47CC,
 				0B0000000000000000000201 /* iPadReceiverApp.swift in Sources */,
+				AC4000000000000000000002,
 				0B0000000000000000000202 /* ContentView.swift in Sources */,
 				0B0000000000000000000203 /* StreamClient.swift in Sources */,
 				0B0000000000000000000205 /* ConnectionDiag.swift in Sources */,
@@ -418,6 +423,7 @@
 			files = (
 				91A8F80BD0F349F2B2FBA901,
 				AB0000000000000000000201 /* MacCasterApp.swift in Sources */,
+				AC4000000000000000000003,
 				AB0000000000000000000202 /* ContentView.swift in Sources */,
 				AB0000000000000000000203 /* ScreenStreamer.swift in Sources */,
 				ABF064F06D8C90495DA9A3E5 /* AnnotationEngine.swift in Sources */,
