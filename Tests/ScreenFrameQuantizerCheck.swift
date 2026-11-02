@@ -6,17 +6,17 @@ import Foundation
   for _ in 0..<30 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 42, "Do not refine static content while initial packets are draining")
   for _ in 0..<170 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
-  precondition(q.qp == 24,"Static startup must refine to static QP24, then stop banking quality credit")
-  q.observe(bytes:80000,budget:10000,usedQP:24,key:false)
-  precondition(q.qp == 30)
-  q.observe(bytes:80000,budget:10000,usedQP:24,key:false)
-  precondition(q.qp == 30,"Late feedback must not repeatedly amplify a stale QP")
+  precondition(q.qp == 28,"Static startup must refine to static QP28, then stop banking quality credit")
+  q.observe(bytes:80000,budget:10000,usedQP:28,key:false)
+  precondition(q.qp == 34)
+  q.observe(bytes:80000,budget:10000,usedQP:28,key:false)
+  precondition(q.qp == 34,"Late feedback must not repeatedly amplify a stale QP")
   for _ in 0..<50 { q.observe(bytes:80000,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 51)
   for _ in 0..<200 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
-  precondition(q.qp == 24, "After congestion, stationary text must refine to24 even after startup expires")
+  precondition(q.qp == 28, "After congestion, stationary text must refine to28 even after startup expires")
   for _ in 0..<100 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
-  precondition(q.qp == 24, "Static recovery must stop at static QP24, without unbounded quality credit")
+  precondition(q.qp == 28, "Static recovery must stop at static QP28, without unbounded quality credit")
   for _ in 0..<100 { q.observe(bytes:5000,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 10)
   q.observe(bytes:1000000,budget:10000,usedQP:10,key:true)

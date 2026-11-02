@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 38,
+  "user_feedback": "Text slightly clearer but viewing stutter/severe interruptions much worse; reject38 despite synthetic static PSNR improvement.",
+  "observed_seconds": 64.019,
+  "last": {
+    "framesDecoded": 1966.0,
+    "framesPerSecond": 20.0,
+    "packetsLost": 50.0,
+    "freezeCount": 0.0,
+    "totalFreezesDuration": 0.0,
+    "nackCount": 18.0,
+    "pliCount": 0.0
+  },
+  "max_reported_receiver_fps": 94,
+  "max_window_average_send_wait_ms": 419,
+  "local_drops": {
+    "dropPaced": 0,
+    "dropBusy": 0,
+    "dropVT": 0,
+    "converted": 0
+  },
+  "action": "Build39 reverts static floor24 to28, matching37 production media logic, preserves ongoing static recovery after startup. Keep standalone comparison tooling.",
+  "limitations": [
+    "WebRTC freezeCount0 does not override user-observed severe stutter.",
+    "Uncontrolled network: direct causal attribution to QP24 is not proven; rollback is conservative recovery.",
+    "Receiver94fps is a catch-up snapshot, not a higher capture frame rate.",
+    "Build39 real-device restoration pending."
+  ],
+  "rollback_verification": {
+    "version": 39,
+    "mac_release_build": true,
+    "ios_debug_build": true,
+    "quantizer_check": true,
+    "media_files_byte_equal_to_commit": "96bea4f",
+    "files": [
+      "Shared/NativeVideo.swift",
+      "Shared/StreamFormat.swift"
+    ],
+    "installed": [
+      "Mac Release39 signature verified",
+      "13-inch iPad Debug39"
+    ],
+    "physical_result": "pending"
+  }
+}
