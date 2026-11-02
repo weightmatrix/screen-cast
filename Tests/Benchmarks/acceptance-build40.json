@@ -1,0 +1,75 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 40,
+  "source_commit": "cae01ed5c9dbd526ab4013ce6e35251cfb376f09",
+  "overall_acceptance": "incomplete",
+  "installed": {
+    "mac": "build40 verified locally",
+    "ipad13": "build40 installation verified",
+    "ipad11": "build40 confirmed by user; returned to hotspot"
+  },
+  "media_equivalence": "Shared NativeVideo, StreamFormat, NativeAudio byte-equal to37 commit96bea4f",
+  "steps": [
+    {
+      "step": 1,
+      "status": "partial",
+      "evidence": "Exact18 and24 frozen;40 source and local Mac/iOS packages frozen",
+      "remaining": "Exact21 source/binary unavailable;18 legacy protocol not directly comparable to native driver"
+    },
+    {
+      "step": 2,
+      "status": "implemented",
+      "evidence": "Original controlled motion/drop/recovery/idle/resume automation established",
+      "remaining": "Existing performance failures remain failures; automation availability is not acceptance"
+    },
+    {
+      "step": 3,
+      "status": "partial",
+      "evidence": "Independent BWE, low-budget escape and demand-gated growth implemented",
+      "remaining": "Sudden-drop latency/freezes and physical hotspot send backlog"
+    },
+    {
+      "step": 4,
+      "status": "partial",
+      "evidence": "Hardware H264 manual QP, conservative start, persistent static refinement to28;38 floor24 reverted after user stutter",
+      "remaining": "Residual slight blur; complete real-device quality and keyframe acceptance"
+    },
+    {
+      "step": 5,
+      "status": "partial",
+      "evidence": "Local repeated pacing issue repaired; repeat recovery around60fps; no local drop in recorded physical tests",
+      "remaining": "Repeated weak-network frame timing and perceived stutter under loss"
+    },
+    {
+      "step": 6,
+      "status": "audited_no_rewrite",
+      "evidence": "Native matching buffers bypass full-frame conversion; optional copy microbenchmark recorded",
+      "remaining": "No measured production before/after power or copy reduction; do not claim one"
+    },
+    {
+      "step": 7,
+      "status": "partial",
+      "evidence": "Four entry loopbacks, rotation, physical iPad-to-Mac/iPad sessions, user audio clean confirmation",
+      "remaining": "Complete current-build physical device-direction matrix, controlled cross-network comparison and strict long-duration acceptance"
+    }
+  ],
+  "known_failed_controlled_reference": {
+    "file": "reference-build37.json",
+    "sudden_drop_p95_ms": 731.0,
+    "sudden_drop_freeze_seconds": 0.744,
+    "required_p95_ms": 300,
+    "required_freeze_seconds": 0.2
+  },
+  "next_work_order": [
+    "Isolate and bound stale send backlog under loss without reintroducing bitrate starvation",
+    "Re-run original weak-network profile repeatedly",
+    "Complete physical direction and long-duration matrix, preserving audio and text quality"
+  ],
+  "restrictions": [
+    "NoTURN or server media relay",
+    "NoDataChannel video tunnel",
+    "Native Mac only; touch suspended",
+    "Do not label build40 stable or all seven accepted"
+  ]
+}
