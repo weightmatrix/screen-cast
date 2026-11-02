@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "affected_build": 41,
+  "recovery_build": 42,
+  "confirmed_failure": "Generated WAN publisher used production8318 listener and matching code68342719. ReplayKit extension logged two broadcast.lifecycle failed events: Network.NWError48 Address already in use.",
+  "user_symptoms": [
+    "Unable to start real screen broadcast",
+    "Receiver shows generated white document instead of real screen"
+  ],
+  "recovery": [
+    "Terminated13-inch app test process and relaunched without test arguments",
+    "Restarted11-inch receiver normally to clear generated frame",
+    "Removed --verify-native-wan-publish hook and publishWAN implementation",
+    "Reverted41 budget experiment; main media and iOS app entry source byte-equal to baseline/build40",
+    "Installed42 on Mac and both iPads; both iPad normal launches succeeded"
+  ],
+  "checks": {
+    "mac_release_build": true,
+    "ios_debug_build": true,
+    "budget_targeted_check": true,
+    "media_and_entry_equal40": true,
+    "mac_signature": true
+  },
+  "acceptance": "Normal real ReplayKit broadcast restart still needs user system confirmation; not yet claimed passed.",
+  "prevention": "Future generated sender must use isolated test target/bundle, port and matching code with clear test identity; never occupy ordinary broadcast resources."
+}

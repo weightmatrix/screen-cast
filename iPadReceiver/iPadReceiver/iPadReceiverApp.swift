@@ -30,7 +30,6 @@ struct RootView: View {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--verify-native-audio") { await NativeAudioVerification.run() }
             if ProcessInfo.processInfo.arguments.contains("--verify-native-routes") { await NativeRoutesVerification.run() }
-            if ProcessInfo.processInfo.arguments.contains("--verify-native-wan-publish") { await NativeRoutesVerification.publishWAN() }
             if ProcessInfo.processInfo.arguments.contains("--verify-broadcast-encoder") {
                 await BroadcastVerification.run()
             }
