@@ -1,0 +1,291 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 36,
+  "protocol": "Original screen-motion-v1 unchanged",
+  "retained_changes": [
+    "Encoder budget growth requires >=35% original-video payload utilization. BWE remains independent; no reduction or capacity estimate from output rate.",
+    "Initial hardware QP42 instead of28; first30 non-key feedback samples hold static refinement, next60 can refine toward28. Normal motion feedback, floor10, backoff unchanged."
+  ],
+  "runs": [
+    {
+      "candidate": "Demand gate only; startup QP28",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 27.994941664026722,
+          "generator_fps": 59.989160708628695,
+          "capture_to_decode_p95_ms": 2839.671041670954,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 65.99382636914197,
+          "generator_fps": 59.99438760831089,
+          "capture_to_decode_p95_ms": 359.6196666767355,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.99474816799645,
+          "generator_fps": 59.99474816799645,
+          "capture_to_decode_p95_ms": 381.99433335103095,
+          "freeze_seconds": 0.417
+        },
+        {
+          "name": "recovery",
+          "fps": 59.9333987762014,
+          "generator_fps": 59.995894499638524,
+          "capture_to_decode_p95_ms": 30.18920833710581,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.245018987207295,
+          "generator_fps": 19.995080481192392,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 56.48996949972599,
+          "generator_fps": 59.98934814130193,
+          "capture_to_decode_p95_ms": 43.90020834398456,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "candidate": "Demand gate + QP42, no static refinement",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 52.98977886031439,
+          "generator_fps": 59.988428898469124,
+          "capture_to_decode_p95_ms": 600.9300416626502,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 60.07959984517817,
+          "generator_fps": 59.9962716900531,
+          "capture_to_decode_p95_ms": 38.681874983012676,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.995834872545664,
+          "generator_fps": 59.995834872545664,
+          "capture_to_decode_p95_ms": 719.0666250244249,
+          "freeze_seconds": 0.665
+        },
+        {
+          "name": "recovery",
+          "fps": 59.996090567305465,
+          "generator_fps": 59.996090567305465,
+          "capture_to_decode_p95_ms": 26.385166682302952,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.120417051017082,
+          "generator_fps": 19.995445516538716,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 59.82775564157475,
+          "generator_fps": 59.99440677149557,
+          "capture_to_decode_p95_ms": 34.93212501052767,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "candidate": "QP42 no-refinement repeat",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 52.16278126387953,
+          "generator_fps": 59.99553116612343,
+          "capture_to_decode_p95_ms": 605.9240833274089,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 59.91104438964844,
+          "generator_fps": 59.99436990340317,
+          "capture_to_decode_p95_ms": 38.6434999818448,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.99436907017139,
+          "generator_fps": 59.99436907017139,
+          "capture_to_decode_p95_ms": 852.6529166556429,
+          "freeze_seconds": 1.146
+        },
+        {
+          "name": "recovery",
+          "fps": 59.99583872619471,
+          "generator_fps": 59.99583872619471,
+          "capture_to_decode_p95_ms": 26.973375002853572,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.120235172014993,
+          "generator_fps": 19.99526476721987,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 52.37347182762565,
+          "generator_fps": 59.86729132601406,
+          "capture_to_decode_p95_ms": 36.21712501626462,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "candidate": "Immediate static refinement (rejected)",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 43.49207930717857,
+          "generator_fps": 59.9890749064532,
+          "capture_to_decode_p95_ms": 2042.927750007948,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 59.91461271890333,
+          "generator_fps": 59.997943195563835,
+          "capture_to_decode_p95_ms": 36.898583348374814,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.9941443216206,
+          "generator_fps": 59.9941443216206,
+          "capture_to_decode_p95_ms": 999.5575833308976,
+          "freeze_seconds": 0.903
+        },
+        {
+          "name": "recovery",
+          "fps": 59.998122871268514,
+          "generator_fps": 59.998122871268514,
+          "capture_to_decode_p95_ms": 31.21770831057802,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.24258868226877,
+          "generator_fps": 19.99268018001854,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 59.829560331686366,
+          "generator_fps": 59.99621648859914,
+          "capture_to_decode_p95_ms": 48.85341666522436,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "candidate": "Final36 delayed static refinement",
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 49.65762035857257,
+          "generator_fps": 59.98907157411451,
+          "capture_to_decode_p95_ms": 625.8847499848343,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 59.82785139871208,
+          "generator_fps": 59.994502795365875,
+          "capture_to_decode_p95_ms": 42.04674999346025,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.91116336869604,
+          "generator_fps": 59.99448904792927,
+          "capture_to_decode_p95_ms": 699.7095416591037,
+          "freeze_seconds": 0.892
+        },
+        {
+          "name": "recovery",
+          "fps": 59.99580279357281,
+          "generator_fps": 59.99580279357281,
+          "capture_to_decode_p95_ms": 27.043958340073004,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.12421945283617,
+          "generator_fps": 19.9992243009552,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 59.829889375366456,
+          "generator_fps": 59.996546448835446,
+          "capture_to_decode_p95_ms": 36.39345834380947,
+          "freeze_seconds": 0
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Every run still fails the overall sudden-drop acceptance criteria.",
+    "Synthetic Mac loopback; physical36 WAN retest and actual text quality pending.",
+    "Initial QP can soften startup text temporarily; no PSNR/SSIM acceptance performed.",
+    "Raw logs and device identifiers excluded."
+  ],
+  "verification": {
+    "mac_debug_build": true,
+    "mac_release_build": true,
+    "ios_debug_build": true,
+    "budget_targeted_check": true,
+    "quantizer_targeted_check": true,
+    "routes_loopback": {
+      "modes": [
+        "localIP",
+        "localCode",
+        "internetIP",
+        "internetCode"
+      ],
+      "frames_each": 210,
+      "rotation_pass": true
+    },
+    "installed": [
+      "Mac Release36",
+      "13-inch iPad Debug36"
+    ],
+    "receiver_compatibility": "11-inch iPad35, physical36 WAN retest pending",
+    "ipad_launch": "System denied automatic launch because device locked; user must unlock and start broadcast."
+  }
+}

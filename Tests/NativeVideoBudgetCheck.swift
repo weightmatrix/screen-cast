@@ -19,6 +19,13 @@ import Foundation
   precondition(budget.limit == 200_000)
   _ = budget.sample(upper:100_000_000,available:0,sendWait:0,loss:0)
   precondition(budget.limit == 200_000, "Missing stats are not capacity")
+  var idle = NativeVideoBudget()
+  for _ in 0..<100 { _ = idle.sample(upper:100_000_000, available:95_000_000, sendWait:0, loss:0, utilization:0.01) }
+  precondition(idle.limit == 8_000_000, "Idle probing must not bank unused encoding capacity")
+  _ = idle.sample(upper:100_000_000, available:95_000_000, sendWait:0, loss:0, utilization:0.6)
+  precondition(idle.limit == 12_000_000, "Motion demand must unlock growth against independent BWE")
+  _ = idle.sample(upper:100_000_000, available:500_000, sendWait:1, loss:0.1, utilization:0)
+  precondition(idle.limit == 425_000, "Idle growth gate must never prevent backoff")
   var stalled = NativeVideoBudget()
   precondition(stalled.sample(upper:100_000_000,available:0,sendWait:1.9,loss:0) == 4_000_000)
   for _ in 0..<8 { _ = stalled.sample(upper:100_000_000,available:0,sendWait:1,loss:0) }

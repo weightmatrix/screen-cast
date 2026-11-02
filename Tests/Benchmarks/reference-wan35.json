@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 35,
+  "scenario": "User reports 11-inch iPad on phone hotspot; 13-inch iPad sends via internetCode. Approximately111 seconds, user fast-motion then idle and resume.",
+  "media": "native H264/SRTP; no video DataChannel or TURN",
+  "observations": {
+    "initial_encoder_budget": 8000000,
+    "highest_encoder_budget_before_first_freeze": 78569466,
+    "highest_bwe_before_first_freeze": 92434666,
+    "last_frames_decoded": 4525,
+    "last_video_packets_lost": 745,
+    "last_freeze_count": 10,
+    "last_total_freezes_seconds": 5.479,
+    "last_nack_count": 54,
+    "last_pli_count": 2,
+    "largest_logged_average_packet_wait_ms": 1275,
+    "local_dropPaced": 0,
+    "local_dropBusy": 0,
+    "local_dropVT": 0,
+    "local_converted": 0
+  },
+  "assessment": "WAN acceptance failed. Most central motion snapshots around59-62fps; initial and later congestion freeze bursts remain. Idle probing raised encoder demand budget before activity. Correlation motivates a demand gate; not a proved sole cause or proof of capacity.",
+  "limitations": [
+    "Remote cumulative WebRTC statistics, not glass-to-glass latency.",
+    "Receiver >60fps snapshots can represent catch-up; source ceiling remains60.",
+    "Not a controlled bandwidth profile."
+  ]
+}

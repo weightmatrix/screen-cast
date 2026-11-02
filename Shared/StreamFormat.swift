@@ -241,11 +241,19 @@ struct EncoderFramePacer {
 
 /// Hardware per-frame feedback without banking unused static-frame bitrate.
 struct ScreenFrameQuantizer {
-    private(set) var qp = 28
+    // Start conservatively until real frame sizes establish the screen complexity.
+    // Subsequent feedback still recovers quality one QP at a time.
+    private(set) var qp = 42
+    private var startupRemaining = 90
     mutating func observe(bytes: Int, budget: Int, usedQP: Int, key: Bool) {
         guard !key, budget > 0 else { return }
         let ratio = Double(bytes) / Double(budget)
-        if ratio > 1.1 {
+        let settling = startupRemaining > 0 && startupRemaining <= 60
+        startupRemaining = max(0, startupRemaining - 1)
+        if settling && ratio < 0.15 && qp > 28 && usedQP == qp {
+            // Refine an initially static screen instead of keeping startup QP forever.
+            qp -= 1
+        } else if ratio > 1.1 {
             let step = min(6, max(1, Int(ceil(6 * log2(ratio)))))
             qp = min(51, max(qp, usedQP + step))
         } else if ratio >= 0.15 && ratio < 0.8 && usedQP == qp {
@@ -258,9 +266,9 @@ struct ScreenFrameQuantizer {
 struct NativeVideoBudget {
     private(set) var limit = 8_000_000
     mutating func clamp(upper: Int) { limit = min(limit, max(1, upper)) }
-    mutating func sample(upper: Int, available: Double, sendWait: Double, loss: Double) -> Int {
+    mutating func sample(upper: Int, available: Double, sendWait: Double, loss: Double, utilization: Double = 1) -> Int {
         clamp(upper: upper)
-        guard available.isFinite, available >= 0, sendWait.isFinite, loss.isFinite else { return limit }
+        guard available.isFinite, available >= 0, sendWait.isFinite, loss.isFinite, utilization.isFinite else { return limit }
         // Zero alone can mean missing feedback. With measured backlog it must
         // not bypass congestion handling and leave a high encoder cap in place.
         if available == 0 {
@@ -270,8 +278,9 @@ struct NativeVideoBudget {
         let safe = min(Double(upper), available * 0.85)
         if loss > 0.02 || available < Double(limit) * 0.8 {
             limit = max(min(200_000, upper), Int(min(Double(limit) * 0.8, safe)))
-        } else if loss < 0.005 && safe > Double(limit) * 1.1 {
-            // A starved encoder cannot drain the pacer before recovering. Follow
+        } else if utilization >= 0.35 && loss < 0.005 && safe > Double(limit) * 1.1 {
+            // Idle content must not bank an unused encoder budget. Utilization gates
+            // growth only; independent BWE remains the capacity estimate. Follow
             // independent capacity, with a bounded step rather than waiting for zero queue.
             let step = max(Double(limit) * 1.5, Double(limit) + 2_000_000)
             limit = min(upper, Int(min(safe, step)))

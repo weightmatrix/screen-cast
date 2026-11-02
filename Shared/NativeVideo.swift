@@ -416,7 +416,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private let sending: Bool
     private let internet: Bool
     private var budget = NativeVideoBudget()
-    private var previousPackets: (count: Double, delay: Double, lost: Double)?
+    private var previousPackets: (count: Double, delay: Double, lost: Double, bytes: Double, time: Double)?
     private var remoteLost = 0.0
     private var selectedPath = ""
     private var firstFrameWork: DispatchWorkItem?
@@ -633,15 +633,19 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             for stat in report.statistics.values where stat.type == "outbound-rtp" && (stat.values["kind"] as? String == "video" || stat.values["mediaType"] as? String == "video") {
                 if let count = stat.values["packetsSent"] as? NSNumber, let delay = stat.values["totalPacketSendDelay"] as? NSNumber {
                     let packets = count.doubleValue, totalDelay = delay.doubleValue
+                    let mediaBytes = max(0, ((stat.values["bytesSent"] as? NSNumber)?.doubleValue ?? 0) -
+                                         ((stat.values["retransmittedBytesSent"] as? NSNumber)?.doubleValue ?? 0))
                     DispatchQueue.main.async { [weak self] in
                         guard let self, !self.closed, self.internet else { return }
-                        defer { self.previousPackets = (packets, totalDelay, self.remoteLost) }
-                        guard let previous = self.previousPackets, packets > previous.count, totalDelay >= previous.delay else { return }
+                        let now = ProcessInfo.processInfo.systemUptime
+                        defer { self.previousPackets = (packets, totalDelay, self.remoteLost, mediaBytes, now) }
+                        guard let previous = self.previousPackets, packets > previous.count, totalDelay >= previous.delay, mediaBytes >= previous.bytes, now > previous.time else { return }
                         let wait = (totalDelay - previous.delay) / (packets - previous.count)
                         let loss = max(0, self.remoteLost - previous.lost) / (packets - previous.count)
                         let old = self.budget.limit
-                        let next = self.budget.sample(upper: self.bitrate, available: available, sendWait: wait, loss: loss)
-                        PerformanceDisk.shared.write("native.budget id=\(self.id) encoderLimit=\(next) bweAvailable=\(Int(available)) bweMax=\(self.bitrate) waitMS=\(Int(wait * 1000)) loss=\(loss)")
+                        let utilization = (mediaBytes - previous.bytes) * 8 / (now - previous.time) / Double(max(1, old))
+                        let next = self.budget.sample(upper: self.bitrate, available: available, sendWait: wait, loss: loss, utilization: utilization)
+                        PerformanceDisk.shared.write("native.budget id=\(self.id) encoderLimit=\(next) bweAvailable=\(Int(available)) bweMax=\(self.bitrate) waitMS=\(Int(wait * 1000)) loss=\(loss) utilization=\(utilization)")
                         if old != next { self.applyQuality() }
                     }
                 }
