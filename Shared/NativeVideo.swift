@@ -286,7 +286,12 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         }
         #endif
         if let qp = ticket.qp {
-            lock.lock(); quantizer.observe(bytes: data.count, budget: ticket.budget, usedQP: qp, key: key); lock.unlock()
+            lock.lock(); let previousQP = quantizer.qp
+            quantizer.observe(bytes: data.count, budget: ticket.budget, usedQP: qp, key: key)
+            let nextQP = quantizer.qp; lock.unlock()
+            if previousQP > 28 && nextQP <= 28 {
+                PerformanceDisk.shared.write("native.encoder qualityRefined qp=\(nextQP) bytes=\(data.count) budget=\(ticket.budget)")
+            }
         }
         let encoded = RTCEncodedImage()
         encoded.buffer = data; encoded.encodedWidth = Int32(width); encoded.encodedHeight = Int32(height)

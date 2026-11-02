@@ -13,6 +13,10 @@ import Foundation
   precondition(q.qp == 34,"Late feedback must not repeatedly amplify a stale QP")
   for _ in 0..<50 { q.observe(bytes:80000,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 51)
+  for _ in 0..<200 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
+  precondition(q.qp == 28, "After congestion, stationary text must refine even after startup expires")
+  for _ in 0..<100 { q.observe(bytes:100,budget:10000,usedQP:q.qp,key:false) }
+  precondition(q.qp == 28, "Static recovery must stop at normal QP, without unbounded quality credit")
   for _ in 0..<100 { q.observe(bytes:5000,budget:10000,usedQP:q.qp,key:false) }
   precondition(q.qp == 10)
   q.observe(bytes:1000000,budget:10000,usedQP:10,key:true)

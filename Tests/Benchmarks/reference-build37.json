@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 37,
+  "regression": "User reports36 remains blurred after becoming static. Static QP recovery expired after startup. Keep refinement available after later congestion while preserving initial hold and static floor28.",
+  "targeted_check": "Startup complete -> congestion QP51 -> tiny static frames -> QP28, then static hold28: PASS",
+  "builds": {
+    "mac_debug": true,
+    "mac_release": true,
+    "ios_debug": true
+  },
+  "functional_pass": true,
+  "comparison_valid": true,
+  "performance_pass": false,
+  "phases": [
+    {
+      "name": "warmup",
+      "fps": 53.826274241515115,
+      "capture_to_decode_p95_ms": 379.842666676268,
+      "freeze_seconds": null
+    },
+    {
+      "name": "steady",
+      "fps": 59.99439510696589,
+      "capture_to_decode_p95_ms": 42.21479166881181,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "bandwidth_drop",
+      "fps": 59.827908105383884,
+      "capture_to_decode_p95_ms": 730.9747916588094,
+      "freeze_seconds": 0.744
+    },
+    {
+      "name": "recovery",
+      "fps": 59.93341313433877,
+      "capture_to_decode_p95_ms": 34.46983333560638,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "idle",
+      "fps": 20.248561192126214,
+      "capture_to_decode_p95_ms": null,
+      "freeze_seconds": 0
+    },
+    {
+      "name": "resume_motion",
+      "fps": 59.82789398057501,
+      "capture_to_decode_p95_ms": 133.002166665392,
+      "freeze_seconds": 0
+    }
+  ],
+  "quality_refined_events_count": 109,
+  "first_refined_events": [
+    {
+      "t": 6.511,
+      "message": "qualityRefined qp=28 bytes=13700 budget=23116"
+    },
+    {
+      "t": 6.677,
+      "message": "qualityRefined qp=28 bytes=11490 budget=23116"
+    },
+    {
+      "t": 6.912,
+      "message": "qualityRefined qp=28 bytes=17995 budget=23129"
+    },
+    {
+      "t": 7.545,
+      "message": "qualityRefined qp=28 bytes=17184 budget=22027"
+    },
+    {
+      "t": 7.68,
+      "message": "qualityRefined qp=28 bytes=15999 budget=22027"
+    }
+  ],
+  "limitations": [
+    "QP events reflect controller targets; not an objective decoded-image-quality score.",
+    "37 physical text clarity pending user confirmation.",
+    "Original sudden-drop performance criteria still fail.",
+    "No audio, protocol or server change."
+  ],
+  "installed": [
+    "Mac Release37 (signature verified)",
+    "13-inch iPad Debug37"
+  ]
+}

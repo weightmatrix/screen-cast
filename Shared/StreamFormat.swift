@@ -248,7 +248,9 @@ struct ScreenFrameQuantizer {
     mutating func observe(bytes: Int, budget: Int, usedQP: Int, key: Bool) {
         guard !key, budget > 0 else { return }
         let ratio = Double(bytes) / Double(budget)
-        let settling = startupRemaining > 0 && startupRemaining <= 60
+        // Keep static refinement available after later congestion too.
+        // Expiring it after startup can leave a stationary screen stuck at QP51.
+        let settling = startupRemaining <= 60
         startupRemaining = max(0, startupRemaining - 1)
         if settling && ratio < 0.15 && qp > 28 && usedQP == qp {
             // Refine an initially static screen instead of keeping startup QP forever.
