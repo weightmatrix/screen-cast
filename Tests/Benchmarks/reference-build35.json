@@ -1,0 +1,168 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 35,
+  "protocol": "screen-motion-v1 unchanged; 1920x1440, 60fps ceiling, 20/4/20Mbps, independent packet jitter",
+  "change": "Encoder cadence tolerance 0.5ms -> half target-frame interval. Keep deadline accumulation and two-frame in-flight limit. Audio unchanged.",
+  "runs": [
+    {
+      "experiment": "Half-frame cadence tolerance",
+      "retained": true,
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 35.16357324885625,
+          "generator_fps": 59.99472213075,
+          "capture_to_decode_p95_ms": 1719.0488333289977,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 61.577659208566104,
+          "generator_fps": 59.99447175936075,
+          "capture_to_decode_p95_ms": 50.263333338079974,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 60.079971775468465,
+          "generator_fps": 59.99664310449001,
+          "capture_to_decode_p95_ms": 872.1077916561626,
+          "freeze_seconds": 0.892
+        },
+        {
+          "name": "recovery",
+          "fps": 59.93308087177712,
+          "generator_fps": 59.9955762637185,
+          "capture_to_decode_p95_ms": 31.115249992581084,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.241581189008816,
+          "generator_fps": 19.99168512494698,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 59.827913298251055,
+          "generator_fps": 59.994564867326964,
+          "capture_to_decode_p95_ms": 47.78812499716878,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "experiment": "500ms feedback with growth held to two seconds",
+      "retained": false,
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 54.98995516798961,
+          "generator_fps": 59.98904200144322,
+          "capture_to_decode_p95_ms": 1390.1787916547619,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 59.994626314669176,
+          "generator_fps": 59.994626314669176,
+          "capture_to_decode_p95_ms": 35.69670833530836,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.99706014407628,
+          "generator_fps": 59.99706014407628,
+          "capture_to_decode_p95_ms": 884.9463749793358,
+          "freeze_seconds": 0.699
+        },
+        {
+          "name": "recovery",
+          "fps": 60.05954425707834,
+          "generator_fps": 59.99704733277337,
+          "capture_to_decode_p95_ms": 26.94729168433696,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.11695499916195,
+          "generator_fps": 19.992004968111257,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 59.82984949093737,
+          "generator_fps": 59.99650645330767,
+          "capture_to_decode_p95_ms": 38.38637500302866,
+          "freeze_seconds": 0
+        }
+      ]
+    },
+    {
+      "experiment": "Build35 final cadence repeat",
+      "retained": true,
+      "functional_pass": true,
+      "comparison_valid": true,
+      "performance_pass": false,
+      "phases": [
+        {
+          "name": "warmup",
+          "fps": 49.990867640420745,
+          "generator_fps": 59.98904116850489,
+          "capture_to_decode_p95_ms": 1406.5824583522044,
+          "freeze_seconds": null
+        },
+        {
+          "name": "steady",
+          "fps": 60.078000576363316,
+          "generator_fps": 59.9946746393642,
+          "capture_to_decode_p95_ms": 43.95429167198017,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "bandwidth_drop",
+          "fps": 59.911239290845316,
+          "generator_fps": 59.99456507567264,
+          "capture_to_decode_p95_ms": 672.1901666896883,
+          "freeze_seconds": 0.588
+        },
+        {
+          "name": "recovery",
+          "fps": 60.058375209504135,
+          "generator_fps": 59.99587950168988,
+          "capture_to_decode_p95_ms": 27.713874995242804,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "idle",
+          "fps": 20.123619540667853,
+          "generator_fps": 19.99862811494942,
+          "capture_to_decode_p95_ms": null,
+          "freeze_seconds": 0
+        },
+        {
+          "name": "resume_motion",
+          "fps": 59.82785181410001,
+          "generator_fps": 59.994503211910875,
+          "capture_to_decode_p95_ms": 40.48470835550688,
+          "freeze_seconds": 0
+        }
+      ]
+    }
+  ],
+  "limitations": [
+    "Synthetic Mac loopback, not glass-to-glass or physical WAN acceptance.",
+    "All original-protocol runs still fail sudden-drop latency criteria.",
+    "500ms feedback candidate reverted: no measured improvement.",
+    "Build21 exact source/binary unavailable."
+  ]
+}

@@ -185,7 +185,9 @@ private final class AppleScreenEncoder: NSObject, RTCVideoEncoder {
         lock.lock()
         let interval = Int64(1_000_000_000 / max(1, pacingFPS))
         if scheduledFPS != pacingFPS { nextEncodedNS = nil; scheduledFPS = pacingFPS }
-        if let next = nextEncodedNS, frame.timeStampNs < next - 500_000 {
+        // WebRTC already adapts input cadence. Allow half a frame of timestamp
+        // jitter so this ceiling does not discard its irregular recovery frames.
+        if let next = nextEncodedNS, frame.timeStampNs < next - interval / 2 {
             lock.unlock(); perf.record("dropPaced"); return 0
         }
         guard pending < 2 else {
