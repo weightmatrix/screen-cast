@@ -35,8 +35,7 @@ final class CastingServer: ObservableObject {
         internetMatchingEnabled = enabled
         if !enabled {
             internetRetry?.cancel(); internetRetry = nil
-            nativeRoom?.stop(); nativeRoom = nil
-            internetVideoConnected = false; notifyClientCountChanged()
+            stopNativeMatching(); notifyClientCountChanged()
         }
         startInternet()
     }
@@ -47,12 +46,14 @@ final class CastingServer: ObservableObject {
     private var nativeBitrate = 100_000_000
     private var nativeFPS = 60
     private var nativeRoom: NativeVideoRoom?
-    private var internetVideoConnected = false
+    private var connectedInternetRooms: [ObjectIdentifier: NativeVideoRoom] = [:]
+    private let maxInternetRooms = 4
     func configureNative(bitrate: Int, fps: Int, dimension: Int = 0) {
         nativeBitrate = bitrate; nativeFPS = fps
         nativeSource.configure(fps: fps, dimension: dimension)
         nativePeers.values.forEach { $0.quality(bitrate: bitrate, fps: fps) }
         nativeRoom?.video.quality(bitrate: bitrate, fps: fps)
+        connectedInternetRooms.values.forEach { $0.video.quality(bitrate: bitrate, fps: fps) }
     }
     private var internetRetry: DispatchWorkItem?
     private var internetFailures = 0
@@ -65,10 +66,15 @@ final class CastingServer: ObservableObject {
         if enabled { startInternet() } else { stopInternet(); onInternetStatus?("广域网已关闭") }
     }
 
-    private func stopInternet() {
-        internetVideoConnected = false; notifyClientCountChanged()
+    private func stopNativeMatching() {
         internetRetry?.cancel(); internetRetry = nil
         nativeRoom?.stop(); nativeRoom = nil
+        let rooms = Array(connectedInternetRooms.values)
+        connectedInternetRooms.removeAll()
+        rooms.forEach { $0.stop() }
+    }
+    private func stopInternet() {
+        stopNativeMatching(); notifyClientCountChanged()
         internetListener?.cancel(); internetListener = nil
     }
 
@@ -91,20 +97,33 @@ final class CastingServer: ObservableObject {
             onInternetStatus?("公网 IP 端口 \(internetPort ?? 0) · 不使用配对服务器")
             return
         }
-        guard nativeRoom == nil else { return }
+        guard nativeRoom == nil, connectedInternetRooms.count < maxInternetRooms else { return }
         let room = NativeVideoRoom(code: accessCode, source: nativeSource, bitrate: nativeBitrate, fps: nativeFPS)
         nativeRoom = room
         room.video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
-        room.onRegistered = { [weak self] in self?.onInternetStatus?("广域网匹配就绪 · 原生视频") }
-        room.onConnected = { [weak self] in
+        room.onRegistered = { [weak self] in
             guard let self else { return }
-            self.internetFailures = 0; self.internetVideoConnected = true; self.notifyClientCountChanged()
-            self.onInternetStatus?("P2P 已直连 · 原生视频")
+            self.onInternetStatus?("广域网匹配就绪 · 已连接\(self.connectedInternetRooms.count)台 · 原生视频")
         }
-        room.onError = { [weak self] text in
-            guard let self else { return }
-            self.onInternetStatus?(text); self.nativeRoom = nil
-            self.internetVideoConnected = false; self.notifyClientCountChanged()
+        room.onConnected = { [weak self, weak room] in
+            guard let self, let room, self.nativeRoom === room else { return }
+            self.nativeRoom = nil
+            self.connectedInternetRooms[ObjectIdentifier(room)] = room
+            self.internetFailures = 0; self.notifyClientCountChanged()
+            self.onInternetStatus?("P2P 已直连 · 已连接\(self.connectedInternetRooms.count)台 · 原生视频")
+            // Existing media is independent of signaling. Let the completed room
+            // close, then register one new slot without touching active peers.
+            let work = DispatchWorkItem { [weak self] in self?.startInternet() }
+            self.internetRetry = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
+        }
+        room.onError = { [weak self, weak room] text in
+            guard let self, let room else { return }
+            let pending = self.nativeRoom === room
+            let active = self.connectedInternetRooms.removeValue(forKey: ObjectIdentifier(room)) != nil
+            guard pending || active else { return }
+            if pending { self.nativeRoom = nil }
+            self.onInternetStatus?(text); self.notifyClientCountChanged()
             guard self.internetEnabled, self.internetMatchingEnabled, self.isRunning else { return }
             self.internetFailures = min(self.internetFailures + 1, 5)
             let work = DispatchWorkItem { [weak self] in self?.startInternet() }; self.internetRetry = work
@@ -410,7 +429,7 @@ final class CastingServer: ObservableObject {
     }
 
     private func notifyClientCountChanged() {
-        onClientCountChanged?(authenticatedConnections.count + (internetVideoConnected ? 1 : 0))
+        onClientCountChanged?(authenticatedConnections.count + connectedInternetRooms.count)
     }
 
     func sendConfig(_ serializedFD: Data) {

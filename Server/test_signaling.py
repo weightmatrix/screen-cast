@@ -46,6 +46,14 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await a.receive())[1]['type'],'answer')
         await b.send({'type':'done'})
         self.assertEqual((await a.receive())[0],8); self.assertEqual((await b.receive())[0],8)
+    async def test_room_reusable_after_successful_pair(self):
+        a,b=await self.pair()
+        await a.send({'type':'done'}); await b.send({'type':'done'})
+        self.assertEqual((await a.receive())[0],8); self.assertEqual((await b.receive())[0],8)
+        await asyncio.sleep(.02)
+        c,d=await self.pair()
+        offer={'type':'offer','sdp':'v=0\r\nsecond pair'}
+        await c.send(offer); self.assertEqual((await d.receive())[1],offer)
     async def test_no_media_messages(self):
         a,b=await self.pair(); await a.send({'type':'video','data':'forbidden'})
         self.assertEqual((await a.receive())[0],8)

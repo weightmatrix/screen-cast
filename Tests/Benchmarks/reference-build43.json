@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "build": 43,
+  "root_cause": "WAN code sender retained one NativeVideoRoom after successful pairing; signaling server closed/deleted that room, so additional receivers got not-found although first media continued.",
+  "change": "Retain connected rooms separately; register one new pending room after successful connection; max4 connected matching peers. Count/quality/stop/error cleanup updated. Server protocol and deployment unchanged.",
+  "tests": {
+    "signaling_targeted_tests": 2,
+    "signaling_pass": true,
+    "isolated_native_cli_pass": true,
+    "first_receiver_frames": 95,
+    "second_receiver_frames": 60,
+    "sender_viewers": 2,
+    "signaling_registrations": 3,
+    "receiver_errors": [],
+    "mac_release_build": true,
+    "ios_debug_build": true,
+    "after_matching_disabled_viewers": 0
+  },
+  "isolation": "Separate command-line process, port19328 and random generated code. No user casting ports/code or app test launch mode. Video loopback; actual existing pairing service used for lightweight signaling only.",
+  "limitations": [
+    "Both ordinary receivers observed receiving video; exact stable two-Wi-Fi topology/duration not independently proven from sender log. Network switching/reconnections occurred during user testing.",
+    "Max4 is a connection resource bound, not proof of four simultaneous high-resolution60fps streams.",
+    "Receivers join sequentially; new pairing slot normally appears about1second after previous success.",
+    "Independent P2P video streams increase source encoding/network load; no media relay orTURN added."
+  ],
+  "physical_verification": {
+    "source_install": "43 user confirmed",
+    "mac_install": "43 locally verified",
+    "mac_real_image": "Observed real iPad Settings image through ordinary WAN-code connection, not generated fixture",
+    "mac_live_frames_seen_in_ui": 2970,
+    "concurrent_receiver_snapshots": {
+      "mac": {
+        "frames_decoded": 4350,
+        "width": 1920,
+        "height": 1440,
+        "freeze_count": 16,
+        "total_freezes_seconds": 4.003
+      },
+      "ipad11": {
+        "frames_decoded": 4247,
+        "width": 1920,
+        "height": 1440,
+        "freeze_count": 13,
+        "total_freezes_seconds": 3.967
+      }
+    },
+    "scope": "Receiver snapshots taken during user testing/reconnection/network switching; not a controlled timing or uninterrupted-session comparison.",
+    "source_log_read": "Failed twice due debug transport7000/4016; no further retries or forced network changes."
+  }
+}
