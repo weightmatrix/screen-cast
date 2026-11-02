@@ -379,7 +379,8 @@ final class NativeScreenSource: @unchecked Sendable {
         guard let pixel = CMSampleBufferGetImageBuffer(sample) else { return }
         let pts = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
         let orientation = (CMGetAttachment(sample, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber)?.intValue ?? 1
-        append(pixel, time: pts.isFinite ? pts : ProcessInfo.processInfo.systemUptime, orientation: orientation)
+        append(pixel, time: pts.isFinite ? pts : ProcessInfo.processInfo.systemUptime,
+               orientation: ReplaySampleOrientation.correction(orientation))
     }
     func append(_ pixel: CVPixelBuffer, time: Double = ProcessInfo.processInfo.systemUptime, orientation: Int = 1) {
         let arrived = ProcessInfo.processInfo.systemUptime

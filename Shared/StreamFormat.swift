@@ -1,6 +1,18 @@
 import Foundation
 import CoreMedia
 
+/// Capture-side compensation for the inverse quarter-turns reported on iPad.
+/// Keep this separate from presentation and the generic pixel rotation API.
+enum ReplaySampleOrientation {
+    static func correction(_ captured: Int) -> Int {
+        switch captured {
+        case 6: return 8
+        case 8: return 6
+        default: return captured
+        }
+    }
+}
+
 // Shared by native macOS and iOS targets; contains no UI-framework dependencies.
 enum StreamFormat {
     static func deserialize(_ data: Data) -> CMVideoFormatDescription? {

@@ -173,7 +173,16 @@ private struct SessionRow: View {
                 Toggle("允许广域网匹配码", isOn: $session.internetMatchingEnabled).toggleStyle(.switch).disabled(!session.internetEnabled)
             }
             if session.internetEnabled {
-                Text(session.internetStatus).font(.system(size: 14)).foregroundStyle(.secondary)
+                Text(session.internetStatus).font(.system(size: 14))
+                    .foregroundStyle(session.internetCodeConflict ? Color.red : Color.secondary)
+                if session.internetCodeConflict {
+                    Text("另一台发送设备正在使用这个匹配码。请停止那台设备的广播，或为本机换码后让接收端输入新码。")
+                        .font(.system(size: 14)).foregroundStyle(.red)
+                    Button("换码并重试") {
+                        codeDraft = MatchingCode.generate()
+                        commitCode()
+                    }
+                }
             }
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -241,6 +250,7 @@ private struct SessionRow: View {
         guard MatchingCode.isValid(codeDraft) else { codeError = true; editingCode = false; return }
         if streamer.canChangeCode(session, to: codeDraft) {
             session.code = codeDraft
+            streamer.lastCode = codeDraft
             codeError = false
             editingCode = false
             streamer.refreshBroadcast()

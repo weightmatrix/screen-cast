@@ -1,6 +1,8 @@
 {
   "build": 47,
   "date": "2026-11-02",
+  "orientation_interpretation_withdrawn_in_build": 48,
+  "withdrawal_reason": "Raw texture row readback did not prove MTKView presentation orientation; global Y reflection caused device-visible mirrors. Preserve prior observations, withdraw claimed root cause/acceptance.",
   "server_audit": {
     "scope": "server-observed WAN code pairing only, explicitly selected by user",
     "unit_checks_passed": 12,

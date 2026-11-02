@@ -231,6 +231,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var internetMatchingEnabled = true { didSet { server.setInternetMatchingEnabled(internetMatchingEnabled) } }
     @Published var internetEnabled = false { didSet { server.setInternetEnabled(internetEnabled) } }
     @Published var internetStatus = "广域网已关闭"
+    var internetCodeConflict: Bool { internetStatus.contains("匹配码已使用") }
     @Published var sendsPageAudio = false { didSet { updateAudio() } }
     @Published var sendsMicrophone = false { didSet { updateAudio() } }
     private var captureConfiguration: SCStreamConfiguration?
@@ -295,7 +296,11 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         self.code = code
         self.server = CastingServer(port: port, accessCode: code)
         super.init()
-        server.onInternetStatus = { [weak self] text in self?.internetStatus = text }
+        server.onInternetStatus = { [weak self] text in
+            guard let self else { return }
+            self.internetStatus = text
+            DiagLog.log("Internet", "port=\(self.port) \(text)")
+        }
     }
 
     func start() {

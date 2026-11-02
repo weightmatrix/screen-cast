@@ -1,0 +1,35 @@
+{
+  "build": 48,
+  "date": "2026-11-02",
+  "correction": {
+    "build47_global_display_y_reflection_removed": true,
+    "build47_offscreen_acceptance_interpretation_withdrawn": true,
+    "replaykit_sample_quarter_turns_swapped": [6, 8],
+    "generic_pixelbuffer_rotation_api_changed": false,
+    "screen_presentation_verified_by_texture_readback": false
+  },
+  "native_h264_simulated_capture": {
+    "passed": true,
+    "input": "independent upright quadrant chart, rotated into simulated captured buffer",
+    "captured_orientations": [1, 6, 3, 8, 1],
+    "received_frames_per_case": 30,
+    "criterion": "recover upright chart corner identities and size",
+    "real_replaykit_capture": false
+  },
+  "display_storage_no_extra_mirror": {"passed": true, "orientations": [1, 6, 3, 8]},
+  "connection_investigation": {
+    "mac_listeners": [8318, 9318],
+    "capture_running": true,
+    "old_code_local_receive": {"frames": 60, "size": [3840, 2160]},
+    "old_code_wan_receive": {"frames": 60, "size": [1920, 1440]},
+    "same_source_acceptance": false,
+    "sender_code_rejections_observed": 7,
+    "user_confirmed_connection_normal_after_busy_or_code_collision": true,
+    "user_selected_new_mac_code": true,
+    "new_code_stored_in_public_repo": false,
+    "network_or_signaling_protocol_changed": false
+  },
+  "builds": {"macos_release": "passed", "ios_release": "passed"},
+  "installed": ["macOS", "iPad Pro 10.5", "iPad mini 5", "iPad Air 11 M2", "iPad Air 13 M2"],
+  "pending": ["User restarts Mac capture with new code", "Real device portrait/landscape confirmation after new ReplayKit broadcast", "Old weak-network acceptance"]
+}

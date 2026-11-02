@@ -16,13 +16,6 @@ import ReplayKit
                      CGRect(x: 0, y: 0, width: 320, height: 240), CGRect(x: 320, y: 0, width: 320, height: 240)]
         var image = CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
         for (color, rect) in zip(colors, rects) { image = CIImage(color: color).cropped(to: rect).composited(over: image) }
-        var pixel: CVPixelBuffer?
-        CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA, [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel)
-        guard let pixel else { fatalError("pixel allocation") }
-        context.render(image, to: pixel)
-        var format: CMVideoFormatDescription?
-        CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pixel, formatDescriptionOut: &format)
-        guard let format else { fatalError("sample format") }
         var latest: CIImage?, frames = 0
         receiver.onImage = { value in DispatchQueue.main.async { latest = value; frames += 1 } }
         var errors: [String] = []
@@ -47,6 +40,20 @@ import ReplayKit
             return -1
         }
         for orientation in [1, 6, 3, 8, 1] {
+            // Regression fixture for the reported inverse quarter-turn issue:
+            // start from an independently upright chart, simulate a rotated
+            // capture buffer, then require recovery. Not a ReplayKit recording.
+            let portrait = orientation == 6 || orientation == 8
+            let upright = portrait ? image.transformed(by: CGAffineTransform(scaleX: 0.75, y: 4.0 / 3)) : image
+            let captured = upright.oriented(forExifOrientation: Int32(orientation))
+            var pixel: CVPixelBuffer?
+            CVPixelBufferCreate(nil, Int(captured.extent.width), Int(captured.extent.height), kCVPixelFormatType_32BGRA,
+                [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel)
+            guard let pixel else { fatalError("pixel allocation") }
+            context.render(captured, to: pixel)
+            var format: CMVideoFormatDescription?
+            CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: pixel, formatDescriptionOut: &format)
+            guard let format else { fatalError("sample format") }
             let before = frames
             for _ in 0..<600 {
                 sequence += 1
@@ -60,7 +67,7 @@ import ReplayKit
                 try await Task.sleep(nanoseconds: 33_333_333)
                 if frames >= before + 30 || !errors.isEmpty { break }
             }
-            let expected = image.oriented(forExifOrientation: Int32(orientation))
+            let expected = upright
             let wanted = corners(expected), actual = latest.map(corners) ?? []
             // Codec YUV/RGB colorimetry may shift channel values; require the
             // four distinct corner identities in the exact expected positions.
