@@ -7,6 +7,10 @@ services:
     container_name: touping-signaling
     restart: unless-stopped
     read_only: true
+    volumes:
+      - ./audit:/var/log/touping
+    environment:
+      AUDIT_RETENTION_DAYS: ${TOUPING_AUDIT_RETENTION_DAYS:-90}
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 96m

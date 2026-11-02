@@ -35,6 +35,8 @@ __pycache__/
 /diag-output/
 *.log
 .deploy/
+/Server/audit/
+/audit/
 .env
 .env.*
 !.env.example

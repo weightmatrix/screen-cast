@@ -1,0 +1,35 @@
+{
+  "build": 47,
+  "date": "2026-11-02",
+  "server_audit": {
+    "scope": "server-observed WAN code pairing only, explicitly selected by user",
+    "unit_checks_passed": 12,
+    "live_tls_pairing_passed": true,
+    "persistent_event_correlation_passed": true,
+    "container_recreate_preserves_records": true,
+    "deployed": true,
+    "file_mode": "0600",
+    "directory_mode": "0700",
+    "container_uid": 65534,
+    "capacity_mib_approx": 200,
+    "default_expiry_threshold_days": 90,
+    "payloads_logged": false,
+    "media_end_observed": false,
+    "identity_verified": false,
+    "content_moderation": false
+  },
+  "orientation": {
+    "root_cause": "Core Image bottom-left coordinates rendered directly to top-left drawable texture rows",
+    "before_fix_gpu_top_row_wrong": [1, 6, 3, 8],
+    "after_fix_gpu_four_corners_passed": [1, 6, 3, 8],
+    "native_h264_corner_identities_passed": [1, 6, 3, 8, 1],
+    "received_frames_per_native_case": 30,
+    "recording_pixels_changed": false,
+    "live_replaykit_portrait_recheck": "pending user system broadcast confirmation"
+  },
+  "builds": {"macos_release": "passed", "ios_release": "passed"},
+  "installed": ["macOS", "iPad Pro 10.5", "iPad mini 5", "iPad Air 11 M2", "iPad Air 13 M2"],
+  "launch": {"macos_pro_mini_air13": "opened", "air11": "system denied launch because locked; user unlock required"},
+  "ui": {"mac_floating_connection_settings_removed": true, "edge_drag_preserved": true},
+  "limitations": ["Server audit does not observe direct IP/LAN sessions", "Audit metadata cannot identify or block screen content", "Old weak-network acceptance remains incomplete"]
+}

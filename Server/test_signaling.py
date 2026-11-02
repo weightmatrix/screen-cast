@@ -1,12 +1,14 @@
-import asyncio, base64, json, os, struct, unittest
+import asyncio, base64, json, os, struct, unittest, tempfile
+from unittest import mock
+from audit import AuditLog, AuditUnavailable
 import signaling as service
 
 class Client:
     @classmethod
-    async def open(cls, port):
+    async def open(cls, port, host='127.0.0.1', path='/signal', tls=None):
         self = cls()
-        self.r, self.w = await asyncio.open_connection('127.0.0.1', port)
-        self.w.write(b'GET /signal HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: '+base64.b64encode(os.urandom(16))+b'\r\n\r\n')
+        self.r, self.w = await asyncio.open_connection(host, port, ssl=tls)
+        self.w.write(f'GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: '.encode()+base64.b64encode(os.urandom(16))+b'\r\n\r\n')
         await self.w.drain()
         response = await self.r.readuntil(b'\r\n\r\n')
         assert b'101 Switching' in response
@@ -25,6 +27,9 @@ class Client:
 
 class PairingTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
+        self.audit_dir = tempfile.TemporaryDirectory()
+        self.audit_path = os.path.join(self.audit_dir.name, 'connections.jsonl')
+        service.AUDIT = AuditLog(self.audit_path)
         service.ROOMS.clear(); service.RATE.clear()
         self.server = await asyncio.start_server(service.connection,'127.0.0.1',0,limit=8192)
         self.port = self.server.sockets[0].getsockname()[1]
@@ -32,6 +37,8 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         for c in self.clients: await c.close()
         self.server.close(); await self.server.wait_closed(); await asyncio.sleep(.02)
+        service.AUDIT = None
+        self.audit_dir.cleanup()
     async def client(self,role,key='a'*64):
         c=await Client.open(self.port); self.clients.append(c)
         await c.send({'role':role,'room':key}); return c
@@ -67,6 +74,36 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         a=await self.client('sender'); await a.receive()
         b=await self.client('sender'); self.assertEqual((await b.receive())[1]['type'],'error')
         self.assertIsNotNone(service.ROOMS.get('a'*64))
+    async def test_connection_audit_correlates_without_payloads(self):
+        a,b=await self.pair()
+        await a.send({'type':'offer','sdp':'v=0\r\nPRIVATE-SDP'})
+        await b.receive()
+        await a.send({'type':'done'}); await b.send({'type':'done'})
+        await a.receive(); await b.receive(); await asyncio.sleep(.02)
+        with open(self.audit_path) as stream: raw=stream.read()
+        rows=[json.loads(line) for line in raw.splitlines()]
+        joined=next(row for row in rows if row['event']=='receiver_joined')
+        waiting=next(row for row in rows if row['event']=='sender_waiting')
+        completed=next(row for row in rows if row['event']=='pairing_completed')
+        self.assertEqual(joined['pair_id'], waiting['pair_id'])
+        self.assertEqual(completed['pair_id'], joined['pair_id'])
+        self.assertEqual(completed['sender_connection_id'], waiting['connection_id'])
+        self.assertFalse(completed['media_end_observed'])
+        self.assertEqual(joined['ip'], '127.0.0.1')
+        self.assertNotIn('PRIVATE-SDP', raw); self.assertNotIn('a'*64, raw)
+        self.assertEqual(len([r for r in rows if r['event']=='peer_reported_connected']), 2)
+        self.assertTrue(any(r['event']=='signaling_closed' for r in rows))
+    async def test_audit_failure_refuses_handshake(self):
+        with mock.patch.object(service.AUDIT, 'record', side_effect=AuditUnavailable()):
+            reader,writer=await asyncio.open_connection('127.0.0.1',self.port)
+            writer.write(b'GET /signal HTTP/1.1\r\nHost: localhost\r\n\r\n'); await writer.drain()
+            self.assertIn(b'503', await reader.read())
+            writer.close(); await writer.wait_closed()
+            self.assertEqual(service.ACTIVE, 0)
+    async def test_rejection_logged(self):
+        a=await self.client('receiver'); await a.receive(); await asyncio.sleep(.02)
+        with open(self.audit_path) as stream: rows=[json.loads(line) for line in stream]
+        self.assertTrue(any(r['event']=='pairing_rejected' and r['reason']=='sender_not_found_or_busy' for r in rows))
     async def test_stun_binding_only_and_rate_limit(self):
         class Transport:
             def __init__(self): self.sent=[]
@@ -81,4 +118,25 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         stun.datagram_received(turn,('203.0.113.4',54321)); self.assertEqual(len(transport.sent),1)
         for _ in range(100): stun.datagram_received(request,('203.0.113.4',54321))
         self.assertEqual(len(transport.sent),60)
+class AuditTests(unittest.TestCase):
+    def test_rotation_permissions_and_retention(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path=os.path.join(directory,'connections.jsonl')
+            log=AuditLog(path, max_bytes=512, backups=2, retention_days=1)
+            for _ in range(12): log.record('test', ip='203.0.113.4')
+            self.assertLessEqual(len(os.listdir(directory)),3)
+            self.assertEqual(os.stat(path).st_mode & 0o777,0o600)
+            for name in os.listdir(directory):
+                with open(os.path.join(directory,name)) as stream:
+                    for line in stream: self.assertEqual(json.loads(line)['event'],'test')
+            old=path+'.2'; os.utime(old,(1,1)); log.last_cleanup=0
+            log.max_bytes=1024*1024
+            log.record('after_cleanup')
+            self.assertFalse(os.path.exists(old))
+    def test_proxy_ip_cannot_inject_logs(self):
+        with mock.patch.dict(os.environ,{'TRUST_PROXY':'1'}):
+            self.assertEqual(service.source_ip('172.18.0.2',{'x-real-ip':'203.0.113.7'}),'203.0.113.7')
+            self.assertEqual(service.source_ip('172.18.0.2',{'x-real-ip':'evil\nforged'}),'172.18.0.2')
+            self.assertEqual(service.source_ip('8.8.8.8',{'x-real-ip':'203.0.113.7'}),'8.8.8.8')
+
 if __name__ == '__main__': unittest.main()

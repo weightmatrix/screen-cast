@@ -361,11 +361,13 @@ private struct StreamingView: UIViewRepresentable {
                 let targetH = src.height * scale
                 let tx = (width - targetW) / 2
                 let ty = (height - targetH) / 2
-                let transform = CGAffineTransform(a: scale, b: 0, c: 0, d: scale, tx: tx, ty: ty)
+                let transform = CGAffineTransform(a: scale, b: 0, c: 0, d: scale,
+                                                 tx: tx - src.minX * scale, ty: ty - src.minY * scale)
                 let fitted = image.transformed(by: transform)
                 let background = CIImage(color: CIColor.black).cropped(to: drawableRect)
                 let output = fitted.composited(over: background)
-                ci.render(output, to: drawable.texture, commandBuffer: commandBuffer, bounds: drawableRect, colorSpace: colorSpace)
+                ci.render(ScreenDisplay.imageForDrawable(output, bounds: drawableRect), to: drawable.texture,
+                          commandBuffer: commandBuffer, bounds: drawableRect, colorSpace: colorSpace)
             } else {
                 let black = CIImage(color: CIColor.black).cropped(to: drawableRect)
                 ci.render(black, to: drawable.texture, commandBuffer: commandBuffer, bounds: drawableRect, colorSpace: colorSpace)

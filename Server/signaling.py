@@ -1,11 +1,30 @@
 """Bounded pairing and STUN only. No media, TURN, database, or external dependencies."""
-import asyncio, base64, collections, hashlib, ipaddress, json, os, re, struct, time
+import asyncio, base64, collections, hashlib, ipaddress, json, os, re, struct, time, uuid
+from audit import AuditLog, AuditUnavailable
 MAX_FRAME = 16384
 MAX_TOTAL = 65536
 ROOMS = {}
 RATE = {}
 ACTIVE = 0
+AUDIT = None
 class Rejected(Exception): pass
+
+def audit(event, **metadata):
+    global AUDIT
+    if AUDIT is None:
+        try:
+            days = max(1, min(3650, int(os.environ.get('AUDIT_RETENTION_DAYS', '90'))))
+            AUDIT = AuditLog(os.environ.get('AUDIT_LOG_PATH', 'audit/connections.jsonl'), retention_days=days)
+        except (OSError, ValueError) as error: raise AuditUnavailable('Connection audit unavailable') from error
+    AUDIT.record(event, **metadata)
+
+def source_ip(peer_ip, headers):
+    # Only the internal proxy may supply the client address. Invalid/multiple
+    # values fall back to the socket peer and cannot inject arbitrary log text.
+    if os.environ.get('TRUST_PROXY') == '1' and ipaddress.ip_address(peer_ip).is_private:
+        try: return str(ipaddress.ip_address(headers.get('x-real-ip', peer_ip)))
+        except ValueError: pass
+    return str(ipaddress.ip_address(peer_ip))
 
 def allowance(ip, name, limit):
     now = time.monotonic()
@@ -21,10 +40,11 @@ def allowance(ip, name, limit):
     return True
 
 class Socket:
-    def __init__(self, reader, writer):
+    def __init__(self, reader, writer, context=None):
         self.reader, self.writer = reader, writer
         self.lock = asyncio.Lock()
         self.bytes = self.messages = 0
+        self.context = context or {}
     async def frame(self, opcode, data=b''):
         if len(data) > MAX_FRAME: raise Rejected()
         header = bytes([0x80 | opcode])
@@ -65,17 +85,22 @@ async def exchange(ws):
     hello = await asyncio.wait_for(ws.receive(), 10)
     role, key = hello.get('role'), hello.get('room')
     if role not in ('sender', 'receiver') or not isinstance(key, str) or not re.fullmatch('[a-f0-9]{64}', key): raise Rejected()
+    ws.context['role'] = role
     if role == 'sender':
         if key in ROOMS or len(ROOMS) >= 32:
+            audit('pairing_rejected', **ws.context, reason='room_unavailable')
             await ws.send({'type':'error','message':'匹配码已使用或服务繁忙'}); return
-        room = {'sender': ws, 'receiver': None, 'finished': False, 'done': set(), 'bytes': 0}
+        room = {'sender': ws, 'receiver': None, 'finished': False, 'done': set(), 'bytes': 0, 'id': uuid.uuid4().hex}
         ROOMS[key] = room
     else:
         room = ROOMS.get(key)
         if not room or room['receiver']:
+            audit('pairing_rejected', **ws.context, reason='sender_not_found_or_busy')
             await ws.send({'type':'error','message':'未找到可连接的广域网投屏'}); return
         room['receiver'] = ws
     try:
+        ws.context['pair_id'] = room['id']
+        audit('sender_waiting' if role == 'sender' else 'receiver_joined', **ws.context)
         if role == 'sender': await ws.send({'type':'waiting'})
         else: await room['sender'].send({'type':'peer'})
         while True:
@@ -84,8 +109,12 @@ async def exchange(ws):
             room['bytes'] += len(json.dumps(obj, separators=(',', ':')).encode())
             if room['bytes'] > MAX_TOTAL: raise Rejected()
             if kind == 'done':
+                if role not in room['done']:
+                    audit('peer_reported_connected', **ws.context, evidence='client_report_only')
                 room['done'].add(role)
                 if len(room['done']) == 2:
+                    audit('pairing_completed', pair_id=room['id'], sender_connection_id=room['sender'].context.get('connection_id'),
+                          receiver_connection_id=room['receiver'].context.get('connection_id'), evidence='both_clients_reported', media_end_observed=False)
                     room['finished'] = True
                     for peer in (room['sender'], room['receiver']):
                         if peer: await peer.frame(8, struct.pack('!H', 1000))
@@ -117,6 +146,9 @@ async def exchange(ws):
 async def connection(reader, writer):
     global ACTIVE
     ws = None; ping = None
+    peer = writer.get_extra_info('peername') or ('unknown', 0)
+    context = {'connection_id': uuid.uuid4().hex, 'ip': peer[0], 'transport_peer_port': peer[1]}
+    started = time.monotonic(); outcome = 'closed'; observed = False
     try:
         request = await asyncio.wait_for(reader.readuntil(b'\r\n\r\n'), 10)
         if len(request) > 8192: raise Rejected()
@@ -125,29 +157,46 @@ async def connection(reader, writer):
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
         if method == 'GET' and path == '/health':
-            body = b'{"service":"pairing-only","mediaRelay":false,"maxSessionBytes":65536}'
+            body = b'{"service":"pairing-only","mediaRelay":false,"maxSessionBytes":65536,"connectionAudit":true}'
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\nConnection: close\r\n\r\n'+body)
             await writer.drain(); return
-        peer_ip = writer.get_extra_info('peername')[0]
-        ip = headers.get('x-real-ip', peer_ip) if os.environ.get('TRUST_PROXY') == '1' else peer_ip
+        ip = source_ip(peer[0], headers)
+        context['ip'] = ip
+        audit('connection_received', **context); observed = True
         if method != 'GET' or path != '/signal' or ACTIVE >= 64 or not allowance(ip, 'ws', 20): raise Rejected()
         if headers.get('upgrade', '').lower() != 'websocket' or headers.get('sec-websocket-version') != '13': raise Rejected()
         key = headers.get('sec-websocket-key', '')
         if len(base64.b64decode(key, validate=True)) != 16: raise Rejected()
+        audit('websocket_accepted', **context)
         accept = base64.b64encode(hashlib.sha1((key+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').encode()).digest())
         writer.write(b'HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+b'\r\n\r\n')
         await writer.drain()
         ACTIVE += 1
-        ws = Socket(reader, writer)
+        ws = Socket(reader, writer, context)
         ping = asyncio.create_task(keepalive(ws))
         await asyncio.wait_for(exchange(ws), 600)
-    except Exception:
+    except AuditUnavailable:
+        outcome = 'audit_unavailable'
+        # Fail closed: do not silently pair when metadata cannot be persisted.
+        print('Connection audit unavailable; pairing refused', flush=True)
+        if not ws:
+            writer.write(b'HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
+    except Exception as error:
+        outcome = 'timeout' if isinstance(error, asyncio.TimeoutError) else 'peer_closed' if isinstance(error, (EOFError, asyncio.IncompleteReadError, ConnectionError)) else 'protocol_rejected'
         if ws:
             try: await ws.frame(8, struct.pack('!H', 1008))
             except Exception: pass
         else:
             writer.write(b'HTTP/1.1 400 Bad Request\r\nConnection: close\r\nContent-Length: 0\r\n\r\n')
     finally:
+        if observed or outcome != 'closed':
+            try:
+                audit('signaling_closed' if ws else 'connection_rejected', **context, outcome=outcome,
+                      signaling_duration_ms=round((time.monotonic() - started) * 1000),
+                      received_bytes=ws.bytes if ws else 0, received_messages=ws.messages if ws else 0,
+                      media_end_observed=False)
+            except AuditUnavailable:
+                print('Connection audit unavailable during close', flush=True)
         if ping: ping.cancel()
         if ws: ACTIVE -= 1
         writer.close()
@@ -167,6 +216,7 @@ class STUN(asyncio.DatagramProtocol):
         self.transport.sendto(struct.pack('!HHI', 0x0101, len(attr), cookie)+data[8:20]+attr, addr)
 
 async def main():
+    audit('service_started', instance_id=uuid.uuid4().hex)
     host = os.environ.get('BIND_HOST', '127.0.0.1')
     server = await asyncio.start_server(connection, host, int(os.environ.get('PORT', '8322')), limit=8192)
     await asyncio.get_running_loop().create_datagram_endpoint(STUN, local_addr=('0.0.0.0', int(os.environ.get('STUN_PORT', '3478'))))

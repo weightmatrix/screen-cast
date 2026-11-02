@@ -41,12 +41,6 @@ struct MacReceiverView: View {
                     .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
             }
         }
-        .overlay(alignment: .top) {
-            if !drawerOpen {
-                Button("连接设置") { openDrawer() }
-                    .padding(.top, 10)
-            }
-        }
         .gesture(
             DragGesture(minimumDistance: 10)
                 .onEnded { value in
@@ -370,7 +364,8 @@ struct MacStreamImageView: NSViewRepresentable {
                                                        y: (bounds.height - extent.height * scale) / 2))
                 output = fitted.composited(over: output)
             }
-            context.render(output, to: drawable.texture, commandBuffer: command, bounds: bounds, colorSpace: colorSpace)
+            context.render(ScreenDisplay.imageForDrawable(output, bounds: bounds), to: drawable.texture,
+                           commandBuffer: command, bounds: bounds, colorSpace: colorSpace)
             command.present(drawable)
             let renderStart = ProcessInfo.processInfo.systemUptime
             let perf = self.perf
