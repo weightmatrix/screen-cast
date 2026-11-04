@@ -20,7 +20,13 @@ struct ContentView: View {
         }
         .padding(24)
         .frame(minWidth: 700, minHeight: 500)
-        .background(CastStyle.canvas.onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) })
+        .background {
+            CastStyle.canvas
+                .overlay(alignment: .topTrailing) {
+                    RadialGradient(colors: [Color.indigo.opacity(0.09), .clear], center: .topTrailing, startRadius: 0, endRadius: 560)
+                }
+                .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("工作模式", selection: $appMode) {
@@ -60,6 +66,23 @@ enum CastStyle {
     static let accent = Color.accentColor
 }
 
+/// A symbolic sharing illustration, never a simulated screen preview.
+private struct SharingIllustration: View {
+    var compact = false
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: compact ? 22 : 30, style: .continuous)
+                .fill(LinearGradient(colors: [Color.blue.opacity(0.14), Color.indigo.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
+            Image(systemName: "display.2")
+                .font(.system(size: compact ? 40 : 56, weight: .light))
+                .foregroundStyle(LinearGradient(colors: [.blue, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .shadow(color: .blue.opacity(0.16), radius: 12, y: 6)
+        }
+        .frame(width: compact ? 112 : 144, height: compact ? 100 : 128)
+        .accessibilityHidden(true)
+    }
+}
+
 private struct StreamListView: View {
     @ObservedObject var streamer: ScreenStreamer
     let onAdd: () -> Void
@@ -70,15 +93,14 @@ private struct StreamListView: View {
             VStack(alignment: .leading, spacing: 18) {
                 if streamer.sessions.isEmpty {
                     VStack(spacing: 16) {
-                        Image(systemName: "rectangle.on.rectangle")
-                            .font(.system(size: 42, weight: .light)).foregroundStyle(CastStyle.accent)
-                        Text("准备好开始投屏").font(.system(size: 25, weight: .semibold))
+                        SharingIllustration().padding(.bottom, 8)
+                        Text("让画面，自由连接").font(.system(size: 27, weight: .semibold))
                         Text("选择屏幕、应用或窗口，连接你的另一块屏幕。")
                             .font(.system(size: 16)).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 42)
-                    .background(CastStyle.panel, in: RoundedRectangle(cornerRadius: 22))
-                    .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.06)))
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+                    .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.primary.opacity(0.05)))
                 }
                 ForEach(streamer.sessions) { session in
                     SessionRow(session: session, streamer: streamer, onStop: { streamer.removeSession(session) }, onEdit: { editSession = session })
@@ -120,8 +142,9 @@ private struct BrowserSenderAddresses: View {
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
             copied = value
         } label: {
-            Label(copied == value ? "已复制\(title)地址" : "复制\(title)地址", systemImage: copied == value ? "checkmark" : "link")
+            Label(copied == value ? "已复制\(title)地址" : "复制\(title)地址", systemImage: copied == value ? "checkmark" : (title == "公网" ? "globe" : "wifi"))
         }
+        .controlSize(.large)
         .help(value).accessibilityLabel("复制\(title)网页接收地址")
     }
 }
@@ -144,7 +167,7 @@ private struct SessionRow: View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(session.contentName).font(.headline).lineLimit(2)
+                    Text(session.contentName).font(.system(size: 20, weight: .semibold)).lineLimit(2)
                     if case .failed(let message) = session.phase {
                         Text(message).foregroundStyle(.red).lineLimit(2)
                     } else if session.phase == .starting {
@@ -157,7 +180,8 @@ private struct SessionRow: View {
                 HStack(spacing: 8) {
                     statusDot
                     Text(session.clientCount == 0 ? "等待接收" : "\(session.clientCount) 台已连接").font(.subheadline).foregroundStyle(.secondary)
-                }
+                }.padding(.horizontal, 12).padding(.vertical, 7)
+                    .background(.primary.opacity(0.035), in: Capsule())
             }
             if session.internetEnabled && session.internetCodeConflict {
                 Text(session.internetStatus).font(.system(size: 14))
@@ -183,7 +207,7 @@ private struct SessionRow: View {
             }
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("匹配码").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Text("匹配码 · 邀请设备连接").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                     if editingCode {
                         HStack {
                             TextField("6–36 位数字", text: $codeDraft).textFieldStyle(.roundedBorder)
@@ -200,9 +224,9 @@ private struct SessionRow: View {
                         }
                     } else {
                         Button { codeDraft = session.code; editingCode = true } label: {
-                            Text(session.code).font(.system(size: 30, weight: .medium, design: .monospaced))
+                            Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
                                 .lineLimit(1).minimumScaleFactor(0.35)
-                                .tracking(4).foregroundStyle(CastStyle.accent)
+                                .tracking(3).foregroundStyle(.primary)
                         }.buttonStyle(.plain).help("修改匹配码")
                     }
                     if codeError {
@@ -214,7 +238,9 @@ private struct SessionRow: View {
                     }
                 }
                 Spacer()
+                SharingIllustration(compact: true)
             }
+            .padding(.vertical, 8)
             BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
             Divider()
             HStack(spacing: 12) {
@@ -248,7 +274,8 @@ private struct SessionRow: View {
                         }.toggleStyle(.switch).padding(20).frame(width: 480)
                     }
                 Spacer()
-                Button { session.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
+                Button { session.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                    .help("刷新画面").accessibilityLabel("刷新画面")
                 Button(action: onEdit) { Label("换源", systemImage: "rectangle.2.swap") }
                 Button(action: onStop) { Label("停止", systemImage: "stop.fill").foregroundStyle(.red.opacity(0.85)) }
             }
@@ -264,9 +291,10 @@ private struct SessionRow: View {
             if codeFocused && !codeEditorFrame.contains(event.location) { codeFocused = false }
         })
         .coordinateSpace(name: "code-card")
-        .padding(24)
-        .background(CastStyle.panel, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.06)))
+        .padding(28)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.primary.opacity(0.06)))
+        .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
     }
 
     private func commitCode() {
