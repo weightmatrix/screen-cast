@@ -4,9 +4,7 @@ import ScreenCaptureKit
 
 struct ContentView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
-    @State private var showAddSheet = false
-    @State private var showDiagnostics = false
-    @AppStorage("appMode") private var appMode = "cast"
+    let onAdd: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -16,7 +14,7 @@ struct ContentView: View {
                     .padding(16).frame(maxWidth: .infinity, alignment: .leading)
                     .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             }
-            StreamListView(streamer: streamer, onAdd: { showAddSheet = true })
+            StreamListView(streamer: streamer, onAdd: onAdd)
         }
         .padding(24)
         .frame(minWidth: 700, minHeight: 500)
@@ -26,32 +24,6 @@ struct ContentView: View {
                     RadialGradient(colors: [Color.indigo.opacity(0.09), .clear], center: .topTrailing, startRadius: 0, endRadius: 560)
                 }
                 .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
-        }
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Picker("工作模式", selection: $appMode) {
-                    Text("投屏").tag("cast")
-                    Text("接收").tag("receive")
-                }.pickerStyle(.segmented).frame(width: 160)
-            }
-            ToolbarItem(placement: .primaryAction) {
-                Button { showAddSheet = true } label: { Label("添加投屏", systemImage: "plus") }
-                    .help("选择要共享的屏幕或窗口")
-            }
-            ToolbarItem(placement: .automatic) {
-                Button { showDiagnostics.toggle() } label: { Label("连接详情", systemImage: "info.circle") }
-                    .popover(isPresented: $showDiagnostics) {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 16) {
-                                Text("连接详情").font(.headline)
-                                ForEach(streamer.sessions) { session in SessionDiagnosticsView(session: session, server: session.server) }
-                            }.padding(20)
-                        }.frame(width: 560, height: 380)
-                    }
-            }
-        }
-        .sheet(isPresented: $showAddSheet) {
-            AddStreamSheet(streamer: streamer, isPresented: $showAddSheet)
         }
         .task { streamer.loadShareableContent() }
     }
@@ -162,6 +134,7 @@ private struct SessionRow: View {
     @StateObject private var codeSuggestion = MatchingCodeSuggestion()
     @State private var localCodeSuggestion: String?
     @State private var showSettings = false
+    @State private var showConnections = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -177,11 +150,20 @@ private struct SessionRow: View {
                     }
                 }
                 Spacer()
-                HStack(spacing: 8) {
-                    statusDot
-                    Text(session.clientCount == 0 ? "等待接收" : "\(session.clientCount) 台已连接").font(.subheadline).foregroundStyle(.secondary)
-                }.padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(.primary.opacity(0.035), in: Capsule())
+                HStack(spacing: 12) {
+                    HStack(spacing: 10) {
+                        statusDot
+                        Text(session.clientCount == 0 ? "等待接收" : "\(session.clientCount) 台已连接")
+                            .font(.system(size: 18, weight: .semibold))
+                    }.padding(.horizontal, 16).frame(minHeight: 46)
+                        .background(.primary.opacity(0.04), in: Capsule())
+                    Button { showConnections.toggle() } label: { Label("连接", systemImage: "link") }
+                        .buttonStyle(AppGlassButtonStyle())
+                        .popover(isPresented: $showConnections) {
+                            SessionDiagnosticsView(session: session, server: session.server)
+                                .buttonStyle(AppGlassButtonStyle()).focusEffectDisabled()
+                        }
+                }
             }
             if session.internetEnabled && session.internetCodeConflict {
                 Text(session.internetStatus).font(.system(size: 14))
@@ -320,7 +302,7 @@ private struct SessionRow: View {
     }
 }
 
-private struct AddStreamSheet: View {
+struct AddStreamSheet: View {
     @ObservedObject var streamer: ScreenStreamer
     @Binding var isPresented: Bool
 
@@ -773,11 +755,60 @@ private struct SessionDiagnosticsView: View {
     @ObservedObject var session: StreamSession
     @ObservedObject var server: CastingServer
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(session.contentName).font(.headline)
-            Text("局域网信令端口 \(server.listeningPort.map(String.init) ?? "未监听") · 广域网 IP 信令端口 \(server.internetListeningPort.map(String.init) ?? "未监听")")
-                .font(.system(size: 14, design: .monospaced))
-            PeerDiagnosticsView(peers: server.diagnostics, disconnect: server.disconnectPeer)
-        }
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("连接设备").font(.system(size: 24, weight: .bold, design: .rounded))
+                    Text(session.contentName).font(.system(size: 15)).foregroundStyle(.secondary).lineLimit(2)
+                }
+                Spacer()
+                Text("\(session.clientCount) 台").font(.system(size: 18, weight: .semibold)).monospacedDigit()
+            }
+            Divider()
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if server.diagnostics.isEmpty {
+                        VStack(spacing: 14) {
+                            Image(systemName: "display.2").font(.system(size: 36, weight: .light)).foregroundStyle(.secondary)
+                            Text(session.clientCount == 0 ? "等待设备连接" : "正在读取连接信息…").font(.system(size: 18, weight: .semibold))
+                            Text("接收端连接这一路投屏后，会显示在这里。")
+                                .font(.system(size: 14)).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity).padding(.vertical, 36)
+                    }
+                    ForEach(server.diagnostics) { peer in
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 14) {
+                                Image(systemName: peer.device.lowercased().contains("browser") ? "globe" : "display")
+                                    .font(.system(size: 26, weight: .medium)).foregroundStyle(.blue)
+                                    .frame(width: 48, height: 48)
+                                    .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(peer.device).font(.system(size: 18, weight: .semibold)).lineLimit(2)
+                                    Text("\(peer.route) · \(peer.id.prefix(8))").font(.system(size: 13)).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button("断开", role: .destructive) { server.disconnectPeer(peer.id) }
+                            }
+                            HStack {
+                                Text("网络往返 RTT").foregroundStyle(.secondary)
+                                Spacer()
+                                Text(ReceiveTiming.text(peer.rttMS)).monospacedDigit()
+                            }.font(.system(size: 14))
+                            DisclosureGroup("网络详情") {
+                                Text("本机：\(peer.localEndpoint)\n对方：\(peer.remoteEndpoint)")
+                                    .font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
+                            }.font(.system(size: 14)).foregroundStyle(.secondary)
+                        }.padding(16).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 18))
+                    }
+                    DisclosureGroup("本路投屏诊断") {
+                        Text("局域网信令端口 \(server.listeningPort.map(String.init) ?? "未监听")\n公网 IP 信令端口 \(server.internetListeningPort.map(String.init) ?? "未监听")")
+                            .font(.system(size: 13, design: .monospaced)).textSelection(.enabled).padding(.top, 8)
+                    }.font(.system(size: 14)).foregroundStyle(.secondary)
+                }.padding(.trailing, 6)
+            }
+            Text("RTT 是网络往返时间，不是端到端画面延迟。")
+                .font(.system(size: 12)).foregroundStyle(.secondary)
+        }.padding(24).frame(width: 620, height: 500)
     }
 }

@@ -114,16 +114,49 @@ struct AppGlassButtonStyle: ButtonStyle {
 
 struct RootView: View {
     @AppStorage("appMode") private var appMode = "cast"
+    @EnvironmentObject private var streamer: ScreenStreamer
+    @State private var showAddSheet = false
+    @State private var sessionsBeforeAdding = Set<UUID>()
 
     var body: some View {
         Group {
             if appMode == "receive" { MacReceiverView() }
-            else { ContentView() }
+            else { ContentView(onAdd: beginAdding) }
         }
         .font(.system(size: 16))
         .buttonStyle(AppGlassButtonStyle())
         .controlSize(.large)
         .tint(CastStyle.accent)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 12) {
+                    Button { appMode = "cast" } label: { Label("投屏", systemImage: "arrow.up.right.video") }
+                        .buttonStyle(AppGlassButtonStyle(prominent: appMode == "cast"))
+                    Button { appMode = "receive" } label: { Label("接收", systemImage: "arrow.down.left.video") }
+                        .buttonStyle(AppGlassButtonStyle(prominent: appMode == "receive"))
+                }
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button(action: beginAdding) { Label("添加投屏", systemImage: "plus") }
+                    .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("添加投屏")
+            }
+            ToolbarItem(placement: .automatic) {
+                SettingsLink { Label("设置", systemImage: "gearshape") }
+                    .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("设置")
+            }
+        }
+        .sheet(isPresented: $showAddSheet, onDismiss: {
+            if streamer.sessions.contains(where: { !sessionsBeforeAdding.contains($0.id) }) { appMode = "cast" }
+        }) {
+            AddStreamSheet(streamer: streamer, isPresented: $showAddSheet)
+                .focusEffectDisabled()
+        }
+    }
+
+    private func beginAdding() {
+        sessionsBeforeAdding = Set(streamer.sessions.map(\.id))
+        streamer.loadShareableContent()
+        showAddSheet = true
     }
 }
 
