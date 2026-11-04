@@ -45,6 +45,27 @@ struct MacCasterApp: App {
                 Link("技术支持", destination: AppPresentation.supportURL)
             }
         }
+        Settings {
+            AppearanceSettingsView()
+                .focusEffectDisabled()
+        }
+    }
+}
+
+private struct AppearanceSettingsView: View {
+    @AppStorage("appearance.skin") private var skin = "minimal"
+
+    var body: some View {
+        Form {
+            Section("皮肤") {
+                Picker("当前皮肤", selection: $skin) {
+                    Text("极简皮肤").tag("minimal")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 460, height: 200)
+        .navigationTitle("设置")
     }
 }
 
