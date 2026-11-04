@@ -14,6 +14,12 @@ func render(_ size: Int) -> Data {
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmap)
     let context = NSGraphicsContext.current!.cgContext
+    let approved = root.appendingPathComponent("Design/BrandIcons/投屏-approved.png")
+    if let image = NSImage(contentsOf: approved) {
+        image.draw(in: NSRect(x: 0, y: 0, width: size, height: size))
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap.representation(using: .png, properties: [:])!
+    }
     context.scaleBy(x: CGFloat(size) / 1024, y: CGFloat(size) / 1024)
     let tile = NSBezierPath(roundedRect: NSRect(x: 44, y: 44, width: 936, height: 936), xRadius: 210, yRadius: 210)
     NSGradient(starting: NSColor(calibratedWhite: 0.11, alpha: 1), ending: NSColor(calibratedWhite: 0.035, alpha: 1))!
