@@ -351,9 +351,9 @@ private struct AddStreamSheet: View {
                     .frame(width: 46, height: 46)
                     .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("选择共享内容").font(.title2.weight(.semibold))
+                    Text("选择共享内容").font(.system(size: 24, weight: .bold, design: .rounded))
                     Text("共享整个屏幕，或只分享需要的应用与窗口。")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer()
                 Button(action: { streamer.loadShareableContent() }) {
@@ -362,23 +362,24 @@ private struct AddStreamSheet: View {
                 .buttonStyle(AppGlassButtonStyle())
                 .controlSize(.large)
                 .help("刷新应用列表")
-                Text("已选 \(selected.count) 项").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.vertical, 6).background(.primary.opacity(0.04), in: Capsule())
+                Text("已选 \(selected.count) 项").font(.system(size: 16, weight: .semibold)).monospacedDigit()
+                    .padding(.horizontal, 14).frame(minHeight: 46).background(.primary.opacity(0.04), in: Capsule())
                 Button("取消") { isPresented = false }
+                    .buttonStyle(AppGlassButtonStyle())
             }
 
             Divider()
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
-                    Text("整个屏幕").font(.caption.weight(.medium)).foregroundStyle(.secondary)
+                    Text("整个屏幕").font(.system(size: 20, weight: .bold, design: .rounded)).padding(.bottom, 4)
                     ForEach(streamer.displays, id: \.displayID) { display in
                         let key = "display-\(display.displayID)"
                         HStack(spacing: 8) {
-                            Image(systemName: "display").font(.system(size: 23, weight: .light)).foregroundStyle(.secondary).frame(width: 36)
+                            Image(systemName: "display").font(.system(size: 32, weight: .medium)).foregroundStyle(.secondary).frame(width: 44)
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("显示器").font(.body.weight(.medium))
-                                Text("\(Int(display.width)) × \(Int(display.height))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                                Text("显示器").font(.system(size: 20, weight: .semibold))
+                                Text("\(Int(display.width)) × \(Int(display.height))").font(.system(size: 13)).monospacedDigit().foregroundStyle(.secondary)
                             }
                             Spacer()
                             Button(selected.contains(key) ? "已选" : "选择") {
@@ -391,7 +392,7 @@ private struct AddStreamSheet: View {
                         .background(selected.contains(key) ? Color.accentColor.opacity(0.08) : Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14))
                     }
 
-                    Text("应用与窗口").font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(.top, 12)
+                    Text("应用与窗口").font(.system(size: 20, weight: .bold, design: .rounded)).padding(.top, 16).padding(.bottom, 4)
 
                     ForEach(streamer.appGroups.filter { !$0.isUnnamed }) { group in
                         AppGroupPicker(group: group, selected: $selected, selectedApps: $selectedApps, selectedWindows: $selectedWindows, streamer: streamer)
@@ -487,6 +488,8 @@ private struct AddStreamSheet: View {
         .padding(28)
         .frame(width: 800, height: 660)
         .background(CastStyle.canvas)
+        .buttonStyle(AppGlassButtonStyle())
+        .controlSize(.large)
     }
 
     private func toggleApp(key: String, name: String, app: SCRunningApplication) {
@@ -647,17 +650,17 @@ private struct AppGroupPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
+            HStack(spacing: 12) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary).frame(width: 12)
                 if let icon = group.icon {
-                    Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                    Image(nsImage: icon).resizable().frame(width: 42, height: 42)
                 } else {
-                    Image(systemName: "app.dashed").font(.system(size: 26, weight: .light)).foregroundStyle(.secondary).frame(width: 30, height: 30)
+                    Image(systemName: "app.dashed").font(.system(size: 36, weight: .medium)).foregroundStyle(.secondary).frame(width: 42, height: 42)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(group.displayName).font(.body.weight(.medium)).lineLimit(1).help(group.displayName)
-                    Text("\(group.windows.count) 个窗口").font(.caption).foregroundStyle(.secondary)
+                    Text(group.displayName).font(.system(size: 20, weight: .semibold)).lineLimit(1).help(group.displayName)
+                    Text("\(group.windows.count) 个窗口").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if let display = streamer.bestDisplay(for: [group.application]) {
