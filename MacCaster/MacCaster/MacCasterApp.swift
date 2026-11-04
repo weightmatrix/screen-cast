@@ -161,31 +161,36 @@ struct RootView: View {
         .buttonStyle(AppGlassButtonStyle())
         .controlSize(.large)
         .tint(CastStyle.accent)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
+        .safeAreaInset(edge: .top, spacing: 0) {
+            HStack(spacing: 18) {
+                Spacer()
                 HStack(spacing: 12) {
                     Button { appMode = "cast" } label: {
                         if skin == "icons3d" {
                             SkinModeLabel(title: "投屏", symbol: "arrow.up.right.video", artwork: SkinArtwork.cast)
                         } else { Label("投屏", systemImage: "arrow.up.right.video") }
                     }
-                        .buttonStyle(AppGlassButtonStyle(prominent: appMode == "cast"))
+                        .buttonStyle(.plain)
+                        .padding(6).contentShape(Rectangle())
+                        .accessibilityAddTraits(appMode == "cast" ? .isSelected : [])
                     Button { appMode = "receive" } label: {
                         if skin == "icons3d" {
                             SkinModeLabel(title: "接收", symbol: "arrow.down.left.video", artwork: SkinArtwork.receive)
                         } else { Label("接收", systemImage: "arrow.down.left.video") }
                     }
-                        .buttonStyle(AppGlassButtonStyle(prominent: appMode == "receive"))
+                        .buttonStyle(.plain)
+                        .padding(6).contentShape(Rectangle())
+                        .accessibilityAddTraits(appMode == "receive" ? .isSelected : [])
                 }
-            }
-            ToolbarItem(placement: .primaryAction) {
+                .labelStyle(.titleAndIcon)
+                Spacer()
                 Button(action: beginAdding) { Label("添加投屏", systemImage: "plus") }
                     .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("添加投屏")
-            }
-            ToolbarItem(placement: .automatic) {
                 SettingsLink { Label("设置", systemImage: "gearshape") }
                     .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("设置")
             }
+            .padding(.horizontal, 24).padding(.vertical, 10)
+            .background(CastStyle.canvas)
         }
         .sheet(isPresented: $showAddSheet, onDismiss: {
             if streamer.sessions.contains(where: { !sessionsBeforeAdding.contains($0.id) }) { appMode = "cast" }
