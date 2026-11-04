@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 @main
 struct MacCasterApp: App {
@@ -64,6 +65,13 @@ private struct AppearanceSettingsView: View {
             Section("皮肤") {
                 Picker("当前皮肤", selection: $skin) {
                     Text("极简皮肤").tag("minimal")
+                    Text("3D图标").tag("icons3d")
+                }
+                if skin == "icons3d" {
+                    HStack(spacing: 32) {
+                        SkinModeLabel(title: "投屏", symbol: "arrow.up.right.video", artwork: SkinArtwork.cast, iconSize: 80)
+                        SkinModeLabel(title: "接收", symbol: "arrow.down.left.video", artwork: SkinArtwork.receive, iconSize: 80)
+                    }.frame(maxWidth: .infinity).padding(.vertical, 8)
                 }
             }
             Section("外观") {
@@ -77,7 +85,7 @@ private struct AppearanceSettingsView: View {
         .formStyle(.grouped)
         .font(.system(size: 16))
         .controlSize(.large)
-        .frame(width: 520, height: 300)
+        .frame(width: 520, height: skin == "icons3d" ? 390 : 300)
         .navigationTitle("设置")
     }
 }
@@ -85,6 +93,31 @@ private struct AppearanceSettingsView: View {
 enum AppAppearance {
     static func scheme(_ value: String) -> ColorScheme? {
         switch value { case "light": return .light; case "dark": return .dark; default: return nil }
+    }
+}
+
+enum SkinArtwork {
+    static let cast = load("Skin3DCast")
+    static let receive = load("Skin3DReceive")
+    private static func load(_ name: String) -> NSImage? {
+        Bundle.main.url(forResource: name, withExtension: "png").flatMap { NSImage(contentsOf: $0) }
+    }
+}
+
+struct SkinModeLabel: View {
+    let title: String
+    let symbol: String
+    let artwork: NSImage?
+    var iconSize: CGFloat = 52
+    var body: some View {
+        HStack(spacing: 6) {
+            if let artwork {
+                Image(nsImage: artwork).resizable().scaledToFit().frame(width: iconSize, height: iconSize).accessibilityHidden(true)
+            } else {
+                Image(systemName: symbol).font(.system(size: 24))
+            }
+            Text(title).font(.system(size: 17, weight: .semibold))
+        }
     }
 }
 
@@ -114,6 +147,7 @@ struct AppGlassButtonStyle: ButtonStyle {
 
 struct RootView: View {
     @AppStorage("appMode") private var appMode = "cast"
+    @AppStorage("appearance.skin") private var skin = "minimal"
     @EnvironmentObject private var streamer: ScreenStreamer
     @State private var showAddSheet = false
     @State private var sessionsBeforeAdding = Set<UUID>()
@@ -130,9 +164,17 @@ struct RootView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 HStack(spacing: 12) {
-                    Button { appMode = "cast" } label: { Label("投屏", systemImage: "arrow.up.right.video") }
+                    Button { appMode = "cast" } label: {
+                        if skin == "icons3d" {
+                            SkinModeLabel(title: "投屏", symbol: "arrow.up.right.video", artwork: SkinArtwork.cast)
+                        } else { Label("投屏", systemImage: "arrow.up.right.video") }
+                    }
                         .buttonStyle(AppGlassButtonStyle(prominent: appMode == "cast"))
-                    Button { appMode = "receive" } label: { Label("接收", systemImage: "arrow.down.left.video") }
+                    Button { appMode = "receive" } label: {
+                        if skin == "icons3d" {
+                            SkinModeLabel(title: "接收", symbol: "arrow.down.left.video", artwork: SkinArtwork.receive)
+                        } else { Label("接收", systemImage: "arrow.down.left.video") }
+                    }
                         .buttonStyle(AppGlassButtonStyle(prominent: appMode == "receive"))
                 }
             }

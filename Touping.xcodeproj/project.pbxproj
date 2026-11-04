@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        CD6300000000000000000011 = {isa = PBXBuildFile; fileRef = CD6300000000000000000001; };
+        CD6300000000000000000012 = {isa = PBXBuildFile; fileRef = CD6300000000000000000002; };
         CD5300000000000000000011 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
         CD5300000000000000000012 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
         CD5300000000000000000013 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
@@ -101,6 +103,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        CD6300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = image.png; path = Skin3DCast.png; sourceTree = "<group>"; };
+        CD6300000000000000000002 = {isa = PBXFileReference; lastKnownFileType = image.png; path = Skin3DReceive.png; sourceTree = "<group>"; };
         CD5300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscovery.swift; sourceTree = "<group>"; };
         CD5300000000000000000002 = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
         CD5100000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserReceiver.swift; sourceTree = "<group>"; };
@@ -251,6 +255,8 @@
 		AB0000000000000000000301 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
+                CD6300000000000000000001,
+                CD6300000000000000000002,
                 CD4600000000000000000004,
 				AB0000000000000000000101 /* MacCasterApp.swift */,
 				AB0000000000000000000102 /* ContentView.swift */,
@@ -413,6 +419,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                CD6300000000000000000011,
+                CD6300000000000000000012,
                 CD5300000000000000000023,
                 CD5100000000000000000023,
                 CD5100000000000000000033,

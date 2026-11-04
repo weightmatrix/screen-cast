@@ -41,14 +41,19 @@ enum CastStyle {
 /// A symbolic sharing illustration, never a simulated screen preview.
 private struct SharingIllustration: View {
     var compact = false
+    @AppStorage("appearance.skin") private var skin = "minimal"
     var body: some View {
         ZStack {
+            if skin == "icons3d", let artwork = SkinArtwork.cast {
+                Image(nsImage: artwork).resizable().scaledToFit()
+            } else {
             RoundedRectangle(cornerRadius: compact ? 22 : 30, style: .continuous)
                 .fill(LinearGradient(colors: [Color.blue.opacity(0.14), Color.indigo.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
             Image(systemName: "display.2")
                 .font(.system(size: compact ? 40 : 56, weight: .light))
                 .foregroundStyle(LinearGradient(colors: [.blue, .indigo], startPoint: .topLeading, endPoint: .bottomTrailing))
                 .shadow(color: .blue.opacity(0.16), radius: 12, y: 6)
+            }
         }
         .frame(width: compact ? 112 : 144, height: compact ? 100 : 128)
         .accessibilityHidden(true)
