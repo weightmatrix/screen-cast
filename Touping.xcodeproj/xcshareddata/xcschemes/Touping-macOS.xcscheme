@@ -15,7 +15,7 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "AB0000000000000000000005"
-               BuildableName = "MacCaster.app"
+               BuildableName = "&#x674e;&#x77e5;&#x672c;&#xb7;&#x6295;&#x5c4f;.app"
                BlueprintName = "MacCaster"
                ReferencedContainer = "container:Touping.xcodeproj">
             </BuildableReference>
@@ -45,7 +45,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AB0000000000000000000005"
-            BuildableName = "MacCaster.app"
+            BuildableName = "&#x674e;&#x77e5;&#x672c;&#xb7;&#x6295;&#x5c4f;.app"
             BlueprintName = "MacCaster"
             ReferencedContainer = "container:Touping.xcodeproj">
          </BuildableReference>
@@ -62,7 +62,7 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "AB0000000000000000000005"
-            BuildableName = "MacCaster.app"
+            BuildableName = "&#x674e;&#x77e5;&#x672c;&#xb7;&#x6295;&#x5c4f;.app"
             BlueprintName = "MacCaster"
             ReferencedContainer = "container:Touping.xcodeproj">
          </BuildableReference>
