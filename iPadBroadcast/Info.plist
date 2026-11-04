@@ -24,6 +24,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>NSExtension</key>
 	<dict>
+		<key>RPBroadcastProcessMode</key>
+		<string>RPBroadcastProcessModeSampleBuffer</string>
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>RPBroadcastProcessMode</key>
@@ -36,5 +38,7 @@
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>通过本地网络向 Mac 或 iPad 发送屏幕画面。</string>
+	<key>NSBonjourServices</key>
+	<array><string>_touping._tcp</string></array>
 </dict>
 </plist>

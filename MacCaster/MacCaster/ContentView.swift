@@ -207,6 +207,7 @@ private struct SessionRow: View {
                 Toggle("允许广域网匹配码", isOn: $session.internetMatchingEnabled).toggleStyle(.switch).disabled(!session.internetEnabled)
             }
             BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
+            ConnectionPrivacyNotice()
             if session.internetEnabled {
                 Text(session.internetStatus).font(.system(size: 14))
                     .foregroundStyle(session.internetCodeConflict ? Color.red : Color.secondary)

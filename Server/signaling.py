@@ -199,11 +199,11 @@ async def connection(reader, writer):
         method, path, _ = parts[0].split(' ')
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
-        if method == 'GET' and path in ('/', '/receiver.js'):
-            asset = 'receiver.html' if path == '/' else 'receiver.js'
+        if method == 'GET' and path in ('/', '/receiver.js', '/privacy.html', '/support.html'):
+            asset = 'receiver.html' if path == '/' else path[1:]
             body = (Path(__file__).parent / 'Web' / asset).read_bytes()
             if len(body) > 65536: raise Rejected()
-            mime = b'text/html; charset=utf-8' if path == '/' else b'application/javascript; charset=utf-8'
+            mime = b'application/javascript; charset=utf-8' if path == '/receiver.js' else b'text/html; charset=utf-8'
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: '+mime+b'\r\nContent-Length: '+str(len(body)).encode()+
                 b"\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' wss://zhibenwang.com; media-src blob:; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n"+body)
             await writer.drain(); return

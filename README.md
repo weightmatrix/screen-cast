@@ -2,6 +2,8 @@
 
 Mac 使用 ScreenCaptureKit 采集屏幕、应用或单个窗口，通过统一的 WebRTC 原生 H.264 视频轨道传输。iPad 使用 VideoToolbox 解码、Metal 显示；Mac 也支持接收。
 
+当前准备 App Store 1.4（53），已安装稳定版仍为52。原生首发覆盖Mac/iPad，手机通过网页接收；媒体包含H.264视频与音频，统一Bundle ID为`Han.touping`。上架准备、检查结果及待补资料见[发布检查](AppStore/发布检查.md)。下方旧版本记录中1.3、仅视频及历史Bundle ID/日志路径不作为当前基线。53版Mac日志位于沙盒的Application Support/Han.touping/diagnostic.log。
+
 ## 项目文档与协作
 
 - [开发手册](投屏·开发手册.MD)、[开发记录](投屏·开发记录.MD)、[说明书](投屏·说明书.MD)以顶部当前基线为准。

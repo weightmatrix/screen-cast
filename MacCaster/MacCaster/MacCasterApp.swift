@@ -38,6 +38,12 @@ struct MacCasterApp: App {
                 }
         }
         .defaultSize(width: 960, height: 740)
+        .commands {
+            CommandGroup(replacing: .help) {
+                Link("隐私政策", destination: AppPresentation.privacyURL)
+                Link("技术支持", destination: AppPresentation.supportURL)
+            }
+        }
     }
 }
 

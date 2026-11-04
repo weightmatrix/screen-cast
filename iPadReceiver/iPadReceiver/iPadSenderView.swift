@@ -152,6 +152,7 @@ struct iPadSenderView: View {
                             .disabled(!active)
                     }
                 }
+                ConnectionPrivacyNotice()
                 Text("在系统弹窗中确认开始后，可以切换到其他应用继续投屏。系统不允许静默启动录屏；受保护的视频可能不会显示。声音可分别选择页面与话筒。")
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }.font(.system(size: 18)).padding(32).frame(maxWidth: 900)
@@ -161,6 +162,7 @@ struct iPadSenderView: View {
         .tint(Color(red: 0.34, green: 0.70, blue: 1))
         .onReceive(timer) { _ in refreshStatus() }
         .task {
+            BonjourDiscovery.shared.start()
             loadedConfiguration = false
             let initial = await Self.readSettings()
             guard !Task.isCancelled else { return }

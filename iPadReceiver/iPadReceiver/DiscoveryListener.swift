@@ -12,6 +12,8 @@ final class DiscoveryListener {
     private let queue = DispatchQueue(label: "discovery", qos: .utility)
 
     func start() {
+        BonjourDiscovery.shared.start()
+        #if !os(iOS)
         guard socketFd < 0 else { return }
         ConnectionDiag.shared.log("discovery start udp=\(Self.udpPort)")
 
@@ -53,9 +55,11 @@ final class DiscoveryListener {
         readSource = source
         source.resume()
         ConnectionDiag.shared.log("discovery started")
+        #endif
     }
 
     func stop() {
+        BonjourDiscovery.shared.stop()
         let source = readSource
         readSource = nil
         let fd = socketFd
@@ -125,7 +129,11 @@ final class DiscoveryListener {
     }
 
     func find(code: String) -> (ip: String, port: UInt16)? {
-        queue.sync {
+        if let endpoint = BonjourDiscovery.shared.find(code: code) { return endpoint }
+        #if os(iOS)
+        return nil
+        #else
+        return queue.sync {
             guard let entry = entries[code] else { return nil }
             if let seen = lastSeen[code], Date().timeIntervalSince(seen) > 8 {
                 entries.removeValue(forKey: code)
@@ -136,5 +144,6 @@ final class DiscoveryListener {
             ConnectionDiag.shared.log("discovery hit code=\(code) \(entry.0):\(entry.1) priority=\(entry.2)")
             return (entry.0, entry.1)
         }
+        #endif
     }
 }

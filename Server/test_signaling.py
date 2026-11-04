@@ -65,7 +65,8 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         a,b=await self.pair(); await a.send({'type':'video','data':'forbidden'})
         self.assertEqual((await a.receive())[0],8)
     async def test_receiver_page_and_script_have_private_static_headers(self):
-        for path, mime in [('/', b'text/html'), ('/receiver.js', b'application/javascript')]:
+        for path, mime in [('/', b'text/html'), ('/receiver.js', b'application/javascript'),
+                           ('/privacy.html', b'text/html'), ('/support.html', b'text/html')]:
             reader, writer = await asyncio.open_connection('127.0.0.1', self.port)
             writer.write(f'GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n'.encode()); await writer.drain()
             response = await reader.read()

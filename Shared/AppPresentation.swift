@@ -3,12 +3,27 @@ import SwiftUI
 
 /// Visible identity follows the installed app version on both native platforms.
 enum AppPresentation {
+    static let privacyURL = URL(string: "https://zhibenwang.com/touping/privacy.html")!
+    static let supportURL = URL(string: "https://zhibenwang.com/touping/support.html")!
     static var title: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
         return "李知本·投屏管理·让画面自由连接·V\(version)（\(build)）"
     }
     static let receiveWorkbench = "接收工作台"
+}
+
+struct ConnectionPrivacyNotice: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("使用公网连接时，服务器记录来源IP、随机应用标识和连接状态；画面与声音不上传到服务器。")
+                .font(.caption).foregroundStyle(.secondary)
+            HStack {
+                Link("隐私政策", destination: AppPresentation.privacyURL)
+                Link("技术支持", destination: AppPresentation.supportURL)
+            }.font(.caption)
+        }
+    }
 }
 
 struct ReceiveTimingView: View {

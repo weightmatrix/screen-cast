@@ -196,6 +196,7 @@ struct ContentView: View {
                     Toggle("接收页面声音", isOn: $client.receivesPageAudio)
                     Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
                 }.toggleStyle(.switch)
+                ConnectionPrivacyNotice()
                 Button(action: toggleConnection) {
                     Label(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开连接" : "连接画面", systemImage: isConnected ? "stop.fill" : "arrow.up.right")
                         .font(.system(size: 19, weight: .semibold))

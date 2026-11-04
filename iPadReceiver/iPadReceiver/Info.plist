@@ -27,7 +27,9 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>需要访问本地网络，以便接收来自 Mac 的投屏画面。</string>
+	<string>在同一局域网内发现投屏设备，发送或接收画面和声音。</string>
+	<key>NSBonjourServices</key>
+	<array><string>_touping._tcp</string></array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

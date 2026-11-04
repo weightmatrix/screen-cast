@@ -10,6 +10,7 @@ final class DiscoveryBroadcaster {
     private var entries: [(code: String, port: UInt16)] = []
 
     func start() {
+        #if !os(iOS)
         guard socketFd < 0 else { return }
         let fd = socket(AF_INET, SOCK_DGRAM, 0)
         guard fd >= 0 else { return }
@@ -22,6 +23,7 @@ final class DiscoveryBroadcaster {
             self?.broadcast()
         }
         RunLoop.main.add(timer!, forMode: .common)
+        #endif
     }
 
     func stop() {

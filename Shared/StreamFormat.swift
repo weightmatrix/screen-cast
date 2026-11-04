@@ -97,7 +97,7 @@ final class StreamPerformance {
         guard let gap, gap >= 0 else { return }
         record(event, milliseconds: gap)
         if report {
-            PerformanceDisk.shared.write("gap stage=\(name) event=\(event) ms=\(String(format: "%.2f", gap)) uptime=\(String(format: "%.6f", now))")
+            PerformanceDisk.shared.write("gap stage=\(name) event=\(event) ms=\(String(format: "%.2f", gap))")
         }
     }
 

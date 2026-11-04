@@ -60,7 +60,12 @@ final class CastingServer: ObservableObject {
     // Reject input even from older receivers that still expose touch controls.
     let touchEnabled = false
     var accessCode: String {
-        didSet { if oldValue != accessCode, internetEnabled { stopInternet(); startInternet() } }
+        didSet {
+            if oldValue != accessCode {
+                listener?.service = NWListener.Service(name: LocalBonjour.name(code: accessCode, port: port), type: LocalBonjour.type)
+                if internetEnabled { stopInternet(); startInternet() }
+            }
+        }
     }
     private var internetEnabled = false
     private var internetMatchingEnabled = true
@@ -260,6 +265,7 @@ final class CastingServer: ObservableObject {
         DiagLog.log("Connection", "listener start port \(port)")
         do {
             let l = try NWListener(using: .tcp, on: NWEndpoint.Port(rawValue: port)!)
+            l.service = NWListener.Service(name: LocalBonjour.name(code: accessCode, port: port), type: LocalBonjour.type)
             l.stateUpdateHandler = { [weak self, weak l] state in
                 DispatchQueue.main.async {
                     guard let self, let l else { return }

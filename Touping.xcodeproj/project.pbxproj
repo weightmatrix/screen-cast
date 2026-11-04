@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        CD5300000000000000000011 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
+        CD5300000000000000000012 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
+        CD5300000000000000000013 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
+        CD5300000000000000000021 = {isa = PBXBuildFile; fileRef = CD5300000000000000000002; };
+        CD5300000000000000000022 = {isa = PBXBuildFile; fileRef = CD5300000000000000000002; };
+        CD5300000000000000000023 = {isa = PBXBuildFile; fileRef = CD5300000000000000000002; };
         CD5100000000000000000011 = {isa = PBXBuildFile; fileRef = CD5100000000000000000001; };
         CD5100000000000000000012 = {isa = PBXBuildFile; fileRef = CD5100000000000000000001; };
         CD5100000000000000000013 = {isa = PBXBuildFile; fileRef = CD5100000000000000000001; };
@@ -95,6 +101,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        CD5300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscovery.swift; sourceTree = "<group>"; };
+        CD5300000000000000000002 = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
         CD5100000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserReceiver.swift; sourceTree = "<group>"; };
         CD5100000000000000000002 = {isa = PBXFileReference; lastKnownFileType = text.html; name = receiver.html; path = ../Server/Web/receiver.html; sourceTree = "<group>"; };
         CD5100000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = receiver.js; path = ../Server/Web/receiver.js; sourceTree = "<group>"; };
@@ -201,6 +209,8 @@
 		9545EFB652514483A91D4D8E /* Shared */ = {
 			isa = PBXGroup;
 			children = (
+                CD5300000000000000000001,
+                CD5300000000000000000002,
                 CD5100000000000000000001,
                 CD5100000000000000000002,
                 CD5100000000000000000003,
@@ -382,6 +392,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                CD5300000000000000000021,
                 CD5100000000000000000021,
                 CD5100000000000000000031,
 				AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */,
@@ -392,6 +403,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                CD5300000000000000000022,
                 CD5100000000000000000022,
                 CD5100000000000000000032,
 			);
@@ -401,6 +413,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                CD5300000000000000000023,
                 CD5100000000000000000023,
                 CD5100000000000000000033,
 				ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */,
@@ -428,6 +441,7 @@
                 EE0000000000000000000005,
                 EE0000000000000000000002,
                 CD5100000000000000000011,
+                CD5300000000000000000011,
                 FA0000000000000000000002,
 				1E0965052A3B4A549CCDAB52 /* BroadcastSettings.swift in Sources */,
 				C77032960A994E3DAEC9AF95 /* iPadSenderView.swift in Sources */,
@@ -449,6 +463,7 @@
 				9DA644E696854AC8931ABDDB /* StreamFormat.swift in Sources */,
                 EE0000000000000000000003,
                 CD5100000000000000000012,
+                CD5300000000000000000012,
                 FA0000000000000000000003,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -475,6 +490,7 @@
 				0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */,
                 EE0000000000000000000004,
                 CD5100000000000000000013,
+                CD5300000000000000000013,
                 FA0000000000000000000004,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -578,7 +594,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 2;
 			};
 			name = Debug;
 		};
@@ -657,7 +673,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 2;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -743,7 +759,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 2;
 			};
 			name = Debug;
 		};
@@ -825,7 +841,7 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 2;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
