@@ -3,7 +3,7 @@
 公网入口：https://zhibenwang.com/touping/health
 WebSocket：wss://zhibenwang.com/touping/signal
 独立应用沙盒：`/srv/apps/touping/`；源码部署目录：`/srv/apps/touping/app/`。
-旧`/home/ubuntu/touping-signal`只保留兼容符号链接，不保存第二份数据。
+旧home兼容链接已归档至沙盒backups，不再使用；所有部署操作使用此规范路径。
 容器：touping-signaling，独立 Compose project `touping`。
 
 服务只处理SDP/ICE配对和有界连接元数据，不接收屏幕、音频或任意二进制消息，不提供TURN、视频转发或下载。每端配对帧累计最多64KiB、96帧；每对连接描述总计最多64KiB；单帧16KiB、SDP12KiB；最多64个连接、32个等待房间；等待最多10分钟。配对握手每IP每分钟20次，直连审计入口另限60次。配对时发送匹配码SHA-256，不发送原始匹配码。
@@ -13,6 +13,12 @@ WebSocket：wss://zhibenwang.com/touping/signal
 STUN仅响应IPv4 Binding请求（20–256字节请求，32字节响应），每IP每分钟60次；不支持TURN Allocate。自有UDP3478在本次外网探测超时，容器内/服务器本机探测通过；客户端配置Cloudflare公开STUN备用，仅探测地址，不申请TURN。若希望只使用自有地址探测，可在云防火墙放行UDP3478并在真实跨网测试通过后移除备用。不要把UDP3478配置成视频代理。
 
 ## 部署
+
+### 目录规则（全部投屏业务文件归沙盒）
+
+程序及网页在`app/`、`app/Web/`；审计在`data/`；密钥在`secrets/`；脚本在`ops/`；上传和生成的待发布文件一律用`ops/staging/`（部署账户持有0700），不要用服务器/tmp、/root或home散放。旧/tmp部署暂存、日志和旧home入口已归档到`backups/cleanup-20261104/`，未删除原审计、回滚材料或其他项目文件。
+
+首次路由脚本安装为`ops/deploy_route.py`，以sudo运行；它只在沙盒backups保留配置备份、ops/staging生成候选配置。现有路由正常时不必再运行。systemd的标准unit入口仅链接到ops；Docker镜像/容器文件系统及systemd自动生成的PrivateTmp仍由系统管理，不挪进业务目录，也不关闭这些隔离保护。网页仍只读挂载，不因目录整理重启投屏或其他应用。
 
 ### 52版：受限自有STUN与失败诊断
 
@@ -48,7 +54,7 @@ Web目录只读挂载到/app/Web，原子替换HTML/JS即可发布静态修正�
 
 默认5MiB一卷、最多40卷（约200MiB），90天为过期阈值；先触及容量上限会提前淘汰旧记录，不保证90天完整覆盖。`TOUPING_AUDIT_RETENTION_DAYS`可配置1–3650天，有审计写入时至多每小时执行一次过期清理，空闲时不单独唤醒。运维人员需按自己的保存需求定期安全归档；原始记录不得提交公开Git仓库。
 
-运维查看：`sudo tail -n 50 /home/ubuntu/touping-signal/audit/connections.jsonl`。`transport_peer_port`是服务实际接受的TCP对端端口（反向代理存在时通常属于代理），不是声称已观测到用户公网源端口。日志是本机运维记录，没有防篡改或独立时间戳存证保证。
+运维查看：`sudo tail -n 50 /srv/apps/touping/data/audit/connections.jsonl`。`transport_peer_port`是服务实际接受的TCP对端端口（反向代理存在时通常属于代理），不是声称已观测到用户公网源端口。日志是本机运维记录，没有防篡改或独立时间戳存证保证。
 
 这些记录证明服务器观察到的配对事件及客户端声明，不是实名身份验证或画面内容证明；服务器在配对成功后退出，无法观测实际投屏结束，`signaling_duration_ms`不是投屏时长。局域匹配/局域IP不在服务端审计覆盖内；公网IP直连自50版补充客户端生命周期报告，限制见上文。不读取或审核画面，不能用连接日志代替内容治理。
 

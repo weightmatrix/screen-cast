@@ -1,8 +1,10 @@
-"""Run on the existing server after the isolated signaling container is healthy."""
+"""Run with sudo after the isolated signaling container is healthy."""
 from pathlib import Path
 import subprocess, time, shutil
-root=Path('/home/ubuntu/touping-signal')
-backups=root/'backups';backups.mkdir(exist_ok=True)
+sandbox=Path('/srv/apps/touping')
+root=sandbox/'app'
+backups=sandbox/'backups';backups.mkdir(exist_ok=True)
+staging=sandbox/'ops'/'staging';staging.mkdir(mode=0o700,parents=True,exist_ok=True)
 location=(root/'touping-nginx-location.conf').read_text()
 def docker(*args): return subprocess.run(['sudo','-n','docker',*args],check=True,capture_output=True,text=True)
 for attempt in range(10):
@@ -25,7 +27,7 @@ originals=[]
 for remote,name in files:
     old=backups/(name+'-'+stamp+'.conf')
     docker('cp','paike-nginx-1:'+remote,str(old))
-    new=root/(name+'-next.conf');new.write_text(insert(old.read_text()))
+    new=staging/(name+'-next.conf');new.write_text(insert(old.read_text()))
     originals.append((remote,old,new))
 try:
     for remote,old,new in originals:docker('cp',str(new),'paike-nginx-1:'+remote)

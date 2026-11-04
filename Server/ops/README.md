@@ -6,7 +6,9 @@
 
 腾讯：`/srv/apps/touping/{app,data/audit,data/replication,ops,secrets,backups}`。
 搬瓦工：`/srv/apps/touping/{data/replica,ops,secrets,backups,.ssh}`。
-原腾讯部署入口为兼容链接；`app/audit`链接到`../data/audit`，使旧备份Compose仍可挂载同一日志。禁止把任何data/secrets目录映射到HTTP或提交仓库。
+旧腾讯home部署入口已归档；`app/audit`仍在沙盒内链接到`../data/audit`，使旧备份Compose可挂载同一日志。禁止把任何data/secrets目录映射到HTTP或提交仓库。
+
+所有上传在`ops/staging/`，不要使用服务器/tmp或home；部署账户持有该目录0700，发布后原子移动到对应app/Web或ops。旧散落日志、暂存、旧路由脚本和候选配置统一在`backups/cleanup-20261104/`私有归档。路由脚本现在位于ops，sudo运行，所有临时配置也写ops/staging。
 
 腾讯app目录保持原部署账户，沙盒root:ubuntu 0750；data/audit保持65534:65534 0700，日志0600。secrets和backups仅root可读。搬瓦工沙盒root:touping-audit 0710，ops为root持有且组可读执行；replica为touping-audit 0700，文件0600。该账户home为沙盒、无sudo，只有受限专用密钥，不复用管理员密钥。
 
