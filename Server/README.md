@@ -14,6 +14,12 @@ STUN仅响应IPv4 Binding请求（20–256字节请求，32字节响应），每
 
 ## 部署
 
+### 52版：受限自有STUN与失败诊断
+
+腾讯旧STUN从本次客户端网络外部探测超时，未修改云安全组；新增搬瓦工`/srv/apps/touping/ops/stun_server.py`和`touping-stun.service`，UDP3478只做IPv4 Binding，32字节响应，无TURN Allocate/媒体转发。拒绝坏长度/属性边界，100包/秒总量、每IP60包/分钟、2048个IP条目。DynamicUser辅以touping-audit组遍历ops，仅能读脚本；systemd明确禁读data/secrets/backups/.ssh，无能力、只读、CPU5%/32MiB/Tasks8。不重启代理。旧腾讯入口保留；客户端首选搬瓦工、Cloudflare备用。两台自有机器没有配置公网IPv6，不声称已提供IPv6 STUN。运维检查`systemctl status touping-stun.service`及外部Binding事务，停用只disable --now该unit，不动代理。
+
+Web目录只读挂载到/app/Web，原子替换HTML/JS即可发布静态修正；首次新增挂载需要在app目录只重建touping容器。52前compose和Web备份在backups/before52，镜像touping-signaling:before-build52，回滚这些项保留审计。客户端与网页新增无IP的ICE阶段、数量和超时诊断；公网候选交换完整仍可能不能直连，本次手机蜂窝复测即失败，不能把STUN响应当作跨网验收。
+
 ### 51版：网页接收入口
 
 `https://zhibenwang.com/touping/`提供无外部依赖的WebRTC接收页，发送端生成`#code=<匹配码>`片段链接预填代码；不把代码放HTTP查询或referrer。公网须开启发送端广域及匹配码，复用原生配对、H.264/Opus轨道及最多4个公网接收槽，无媒体中继或TURN。浏览器握手接受platform=browser，使用随机localStorage实例ID、通用Browser机型和OS版本0（未知），不抓原始UA/硬件标识；沿用私有审计及异地快照。

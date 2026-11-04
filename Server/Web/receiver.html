@@ -7,5 +7,6 @@
 <form id="join"><label>匹配码 <input id="code" inputmode="numeric" pattern="[0-9]{8}" maxlength="8" autocomplete="off" required aria-label="八位匹配码"></label><button id="start" type="submit">开始接收</button><button id="stop" type="button" class="secondary" disabled>断开</button></form>
 <div id="status" role="status" aria-live="polite">等待连接</div><video id="video" autoplay playsinline controls muted></video>
 <div class="actions"><button id="sound" type="button" class="secondary">开启声音</button><button id="fullscreen" type="button" class="secondary">全屏观看</button></div>
+<details><summary>连接诊断（仅状态和数量，不含IP或匹配码）</summary><pre id="diagnostics" style="white-space:pre-wrap;font-size:13px">尚未开始</pre></details>
 <p class="note" id="notice">画面由发送设备直接传输；不申请摄像头或麦克风权限。请保持页面在前台。</p>
 <noscript>需要启用浏览器 JavaScript 才能接收投屏。</noscript></body></html>

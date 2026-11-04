@@ -1,0 +1,26 @@
+[Unit]
+Description=Touping STUN Binding only
+After=network.target
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+ExecStart=/usr/bin/python3 /srv/apps/touping/ops/stun_server.py
+DynamicUser=yes
+SupplementaryGroups=touping-audit
+UMask=0077
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+InaccessiblePaths=/srv/apps/touping/data /srv/apps/touping/secrets /srv/apps/touping/backups /srv/apps/touping/.ssh
+RestrictAddressFamilies=AF_INET AF_UNIX
+CPUQuota=5%
+MemoryMax=32M
+TasksMax=8
+
+[Install]
+WantedBy=multi-user.target

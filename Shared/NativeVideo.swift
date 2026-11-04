@@ -585,6 +585,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         case "candidate":
             guard let sdp = object["candidate"] as? String, sdp.utf8.count <= 2048,
                   !sdp.contains(" typ relay"), let line = object["line"] as? Int32 else { return }
+            if internet { PerformanceDisk.shared.write("native.iceCandidate id=\(id) remote \(Self.candidateSummary(sdp))") }
             let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: line, sdpMid: object["mid"] as? String)
             if remoteSet { peer?.add(candidate, completionHandler: { _ in }) }
             else if candidates.count < 64 { candidates.append(candidate) }
@@ -757,11 +758,22 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             }
         }
     }
-    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {}
+    private static func candidateSummary(_ candidate: String) -> String {
+        let fields = candidate.split(separator: " ").map(String.init)
+        let value = fields.firstIndex(of: "typ").flatMap { $0 + 1 < fields.count ? fields[$0 + 1] : nil } ?? "unknown"
+        let type = ["host", "srflx", "prflx", "relay"].contains(value) ? value : "unknown"
+        let address = fields.count > 4 ? fields[4] : ""
+        let family = address.hasSuffix(".local") ? "mdns" : address.contains(":") ? "ipv6" : "ipv4"
+        return "type=\(type) family=\(family)"
+    }
+    func peerConnection(_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState) {
+        if internet { PerformanceDisk.shared.write("native.iceGather id=\(id) state=\(newState.rawValue)") }
+    }
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         guard !candidate.sdp.contains(" typ relay") else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.closed, !self.connected else { return }
+            if self.internet { PerformanceDisk.shared.write("native.iceCandidate id=\(self.id) local \(Self.candidateSummary(candidate.sdp))") }
             self.sendSignal?(["type":"candidate", "candidate":candidate.sdp, "mid":candidate.sdpMid as Any? ?? NSNull(), "line":candidate.sdpMLineIndex])
         }
     }

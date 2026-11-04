@@ -9,6 +9,7 @@ services:
     read_only: true
     volumes:
       - ${TOUPING_AUDIT_DIR:-../data/audit}:/var/log/touping
+      - ./Web:/app/Web:ro
     environment:
       AUDIT_RETENTION_DAYS: ${TOUPING_AUDIT_RETENTION_DAYS:-90}
     cap_drop: [ALL]

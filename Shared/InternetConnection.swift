@@ -165,7 +165,7 @@ enum InternetSettings {
     static func localBrowserAddress(ip: String, port: UInt16, code: String) -> String { "http://\(ip):\(port)/#code=\(code)" }
     static let signalingURL = URL(string: "wss://zhibenwang.com/touping/signal")!
     static let auditURL = URL(string: "wss://zhibenwang.com/touping/audit")!
-    static let stunURL = "stun:49.233.174.254:3478"
+    static let stunURL = "stun:67.216.201.61:3478"
     static func room(_ code: String) -> String { SHA256.hash(data: Data(code.utf8)).map { String(format: "%02x", $0) }.joined() }
     static func tlsParameters(code: String) -> NWParameters {
         let tls = NWProtocolTLS.Options()
