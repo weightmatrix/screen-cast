@@ -107,7 +107,7 @@ private struct StreamListView: View {
                 }
                 if streamer.sessions.isEmpty { Button(action: onAdd) {
                     Label("添加投屏", systemImage: "plus").frame(maxWidth: .infinity).padding(.vertical, 6)
-                }.buttonStyle(.borderedProminent) }
+                }.buttonStyle(AppGlassButtonStyle(prominent: true)) }
             }
             .frame(maxWidth: 760).frame(maxWidth: .infinity)
         }
@@ -227,7 +227,7 @@ private struct SessionRow: View {
                             Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
                                 .lineLimit(1).minimumScaleFactor(0.35)
                                 .tracking(3).foregroundStyle(.primary)
-                        }.buttonStyle(.plain).help("修改匹配码")
+                        }.buttonStyle(AppGlassButtonStyle()).help("修改匹配码")
                     }
                     if codeError {
                         Text("匹配码已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
@@ -274,7 +274,7 @@ private struct SessionRow: View {
                         }.toggleStyle(.switch).padding(20).frame(width: 480)
                     }
                 Spacer()
-                Button { session.refresh() } label: { Image(systemName: "arrow.clockwise") }
+                Button { session.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                     .help("刷新画面").accessibilityLabel("刷新画面")
                 Button(action: onEdit) { Label("换源", systemImage: "rectangle.2.swap") }
                 Button(action: onStop) { Label("停止", systemImage: "stop.fill").foregroundStyle(.red.opacity(0.85)) }
@@ -359,8 +359,8 @@ private struct AddStreamSheet: View {
                 Button(action: { streamer.loadShareableContent() }) {
                     Image(systemName: "arrow.clockwise")
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
+                .buttonStyle(AppGlassButtonStyle())
+                .controlSize(.large)
                 .help("刷新应用列表")
                 Text("已选 \(selected.count) 项").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.vertical, 6).background(.primary.opacity(0.04), in: Capsule())
@@ -384,7 +384,7 @@ private struct AddStreamSheet: View {
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
                             }
-                            .buttonStyle(.bordered).controlSize(.regular)
+                            .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
                             .tint(selected.contains(key) ? .blue : nil)
                         }
                         .padding(14)
@@ -472,7 +472,7 @@ private struct AddStreamSheet: View {
                         selectedDisplays.removeAll()
                         isPresented = false
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(AppGlassButtonStyle(prominent: true))
                     .disabled(!code.isEmpty && !MatchingCode.isValid(code))
                     Button("清除选择") {
                         selected.removeAll()
@@ -480,7 +480,7 @@ private struct AddStreamSheet: View {
                         selectedWindows.removeAll()
                         selectedDisplays.removeAll()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(AppGlassButtonStyle())
                 }
             }
         }
@@ -553,7 +553,7 @@ private struct EditStreamSheet: View {
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
                             }
-                            .buttonStyle(.bordered).controlSize(.regular)
+                            .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
                             .tint(selected.contains(key) ? .blue : nil)
                         }
                         .padding(14)
@@ -578,14 +578,14 @@ private struct EditStreamSheet: View {
                     Button("确认切换 (\(selected.count)个)") {
                         applyChanges()
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(AppGlassButtonStyle(prominent: true))
                     Button("清除选择") {
                         selected.removeAll()
                         selectedApps.removeAll()
                         selectedWindows.removeAll()
                         selectedDisplays.removeAll()
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(AppGlassButtonStyle())
                 }
             }
         }
@@ -666,7 +666,7 @@ private struct AppGroupPicker: View {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
                         else { selected.insert(key); selectedApps.append((group.displayName, group.application)) }
                     }
-                    .buttonStyle(.bordered).controlSize(.regular)
+                    .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
                     .tint(selected.contains(key) ? .blue : nil)
                 }
             }
@@ -686,7 +686,7 @@ private struct AppGroupPicker: View {
                             if selected.contains(key) { selected.remove(key); selectedWindows.removeAll { $0.1 === window } }
                             else { selected.insert(key); selectedWindows.append((title, window)) }
                         }
-                        .buttonStyle(.bordered).controlSize(.regular)
+                        .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
                         .tint(selected.contains(key) ? .blue : nil)
                     }
                     .padding(.leading, 28)
@@ -720,7 +720,7 @@ private struct EditAppGroupPicker: View {
                     Button("投屏整个应用") {
                         selectedFilter = filter; selectedName = group.displayName
                     }
-                    .buttonStyle(.bordered).controlSize(.regular)
+                    .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
                     .tint(selectedFilter === filter ? .blue : nil)
                 }
             }
@@ -739,7 +739,7 @@ private struct EditAppGroupPicker: View {
                         Button("选择") {
                             selectedFilter = filter; selectedName = title
                         }
-                        .buttonStyle(.bordered).controlSize(.regular)
+                        .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
                         .tint(selectedFilter === filter ? .blue : nil)
                     }
                 }
@@ -760,7 +760,7 @@ private struct pickerRow: View {
         Button("选择") {
             selectedFilter = filter; selectedName = name
         }
-        .buttonStyle(.bordered).controlSize(.regular)
+        .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
         .tint(selectedFilter === filter ? .blue : nil)
     }
 }

@@ -76,9 +76,8 @@ struct MacReceiverView: View {
         ScrollView {
         VStack(alignment: .leading, spacing: 24) {
             Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
+            Text(AppPresentation.receiveWorkbench).font(.system(size: 26, weight: .semibold))
             HStack {
-                Text(AppPresentation.receiveWorkbench).font(.system(size: 26, weight: .semibold))
-                Spacer()
                 Button {
                     client.disconnect()
                     appMode = "cast"
@@ -86,12 +85,13 @@ struct MacReceiverView: View {
                     Label("投屏模式", systemImage: "arrow.up.circle")
                         .font(.system(size: 16))
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(AppGlassButtonStyle())
                 .controlSize(.large)
+                Spacer()
                 Button { closeDrawer() } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 23)).foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(AppGlassButtonStyle())
             }
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
@@ -99,7 +99,7 @@ struct MacReceiverView: View {
                     Button { client.disconnect(); connectMode = mode.rawValue } label: {
                         Text(mode.label).font(.system(size: 16, weight: .medium))
                             .frame(maxWidth: .infinity, minHeight: 44)
-                    }.buttonStyle(.bordered).tint(connectMode == mode.rawValue ? .blue : .gray)
+                    }.buttonStyle(AppGlassButtonStyle(prominent: connectMode == mode.rawValue))
                 }
             }
             if connectMode == "wanIP" {
@@ -138,7 +138,7 @@ struct MacReceiverView: View {
                 Button(action: toggleConnection) {
                 Text(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开" : "连接").frame(maxWidth: .infinity)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(AppGlassButtonStyle(prominent: true))
             .tint(isConnected ? .red : .blue)
 
             Divider()

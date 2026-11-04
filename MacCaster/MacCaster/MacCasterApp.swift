@@ -4,6 +4,7 @@ import SwiftUI
 struct MacCasterApp: App {
     @NSApplicationDelegateAdaptor(RecordingAppDelegate.self) private var appDelegate
     @StateObject private var streamer = ScreenStreamer()
+    @AppStorage("appearance.colorScheme") private var appearance = "system"
 
     init() {
         #if DEBUG
@@ -23,6 +24,7 @@ struct MacCasterApp: App {
         WindowGroup("投屏") {
             RootView()
                 .focusEffectDisabled()
+                .preferredColorScheme(AppAppearance.scheme(appearance))
                 .environmentObject(streamer)
                 .task {
                     #if DEBUG
@@ -48,12 +50,14 @@ struct MacCasterApp: App {
         Settings {
             AppearanceSettingsView()
                 .focusEffectDisabled()
+                .preferredColorScheme(AppAppearance.scheme(appearance))
         }
     }
 }
 
 private struct AppearanceSettingsView: View {
     @AppStorage("appearance.skin") private var skin = "minimal"
+    @AppStorage("appearance.colorScheme") private var appearance = "system"
 
     var body: some View {
         Form {
@@ -62,10 +66,49 @@ private struct AppearanceSettingsView: View {
                     Text("极简皮肤").tag("minimal")
                 }
             }
+            Section("外观") {
+                Picker("深浅色", selection: $appearance) {
+                    Text("跟随系统").tag("system")
+                    Text("固定浅色").tag("light")
+                    Text("固定深色").tag("dark")
+                }.pickerStyle(.segmented)
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 200)
+        .font(.system(size: 16))
+        .controlSize(.large)
+        .frame(width: 520, height: 300)
         .navigationTitle("设置")
+    }
+}
+
+enum AppAppearance {
+    static func scheme(_ value: String) -> ColorScheme? {
+        switch value { case "light": return .light; case "dark": return .dark; default: return nil }
+    }
+}
+
+struct AppGlassButtonStyle: ButtonStyle {
+    var prominent = false
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let label = configuration.label
+            .font(.system(size: 16, weight: .medium))
+            .padding(.horizontal, 18)
+            .frame(minWidth: 24, minHeight: 46)
+            .contentShape(RoundedRectangle(cornerRadius: 14))
+            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
+        if #available(macOS 26.0, *) {
+            if prominent {
+                label.glassEffect(.regular.tint(.accentColor.opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                label.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
+            }
+        } else {
+            label.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(configuration.isPressed ? 0.2 : 0.08)))
+        }
     }
 }
 
@@ -77,11 +120,10 @@ struct RootView: View {
             if appMode == "receive" { MacReceiverView() }
             else { ContentView() }
         }
-        .font(.body)
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
+        .font(.system(size: 16))
+        .buttonStyle(AppGlassButtonStyle())
+        .controlSize(.large)
         .tint(CastStyle.accent)
-        .preferredColorScheme(appMode == "receive" ? .dark : nil)
     }
 }
 
@@ -105,7 +147,7 @@ struct MacModePicker: View {
                     }
                     .frame(width: 140, height: 90)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(AppGlassButtonStyle(prominent: true))
                 .tint(.blue)
 
                 Button {
@@ -117,7 +159,7 @@ struct MacModePicker: View {
                     }
                     .frame(width: 140, height: 90)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(AppGlassButtonStyle(prominent: true))
                 .tint(.green)
             }
         }
