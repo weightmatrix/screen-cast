@@ -466,8 +466,10 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var timeout: DispatchWorkItem?
     private var bitrate: Int
     private var fps: Int
-    init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60) {
+    let directAudit: DirectConnectionAudit?
+    init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60, auditDirect: Bool = false, auditSessionID: String? = nil) {
         self.bitrate = bitrate; self.fps = fps; self.internet = internet; sending = source != nil
+        directAudit = auditDirect ? DirectConnectionAudit(sessionID: auditSessionID, sending: source != nil) : nil
         super.init()
         captureSource = source
         let config = RTCConfiguration()
@@ -590,6 +592,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         }
     }
     func stop() {
+        directAudit?.record("ended")
         guard !closed else { return }; closed = true
         timeout?.cancel(); statsWork?.cancel(); firstFrameWork?.cancel(); disconnectedWork?.cancel()
         renderLock.lock(); renderClosed = true; imageHandler = nil; renderLock.unlock()
@@ -736,6 +739,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             if newState == .connected || newState == .completed {
                 self.disconnectedWork?.cancel(); self.disconnectedWork = nil
                 guard !self.connected else { return }; self.connected = true
+                self.directAudit?.record("connected")
                 self.timeout?.cancel(); self.captureSource?.requestKeyFrame(); self.applyQuality(); self.stats(); self.onConnected?()
                 self.renderLock.lock(); let hasFrames = self.frames > 0; self.renderLock.unlock()
                 if !self.sending && !hasFrames {
@@ -816,7 +820,7 @@ final class NativeVideoRoom: @unchecked Sendable {
         let session = URLSession(configuration: configuration); self.session = session
         let socket = session.webSocketTask(with: InternetSettings.signalingURL); self.socket = socket
         socket.maximumMessageSize = 16384; socket.resume()
-        send(["role":sending ? "sender" : "receiver", "room":InternetSettings.room(code)])
+        send(["role":sending ? "sender" : "receiver", "room":InternetSettings.room(code), "device": DeviceAuditMetadata.value])
         read(socket)
     }
     func stop() {

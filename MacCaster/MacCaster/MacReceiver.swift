@@ -668,10 +668,12 @@ final class MacReceiverClient: ObservableObject {
         msg.append(UInt8(5))
         msg.append(payload)
         conn.send(content: msg, completion: .idempotent)
-        let video = NativeVideoPeer(internet: internetDirect)
+        let video = NativeVideoPeer(internet: internetDirect, auditDirect: internetDirect)
         configureNativePeer(video)
         video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
-        NativeVideo.send(["type":"hello", "version":3], over: conn)
+        var hello: [String: Any] = ["type":"hello", "version":3]
+        if let auditID = video.directAudit?.sessionID { hello["audit_session"] = auditID }
+        NativeVideo.send(hello, over: conn)
     }
 
     private func readLoop(on connection: NWConnection) {

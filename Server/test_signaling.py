@@ -64,6 +64,45 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_media_messages(self):
         a,b=await self.pair(); await a.send({'type':'video','data':'forbidden'})
         self.assertEqual((await a.receive())[0],8)
+    async def test_bounded_device_metadata_is_audited_not_forwarded(self):
+        device = {'installation_id': 'b' * 32, 'platform': 'iPadOS', 'model': 'iPad11,1',
+                  'os_version': '26.0.1', 'app_version': '1.4', 'app_build': '50'}
+        a = await Client.open(self.port); self.clients.append(a)
+        await a.send({'role': 'sender', 'room': 'a' * 64, 'device': device})
+        self.assertEqual((await a.receive())[1], {'type': 'waiting'})
+        with open(self.audit_path) as stream: events = [json.loads(line) for line in stream]
+        record = next(event for event in events if event['event'] == 'device_reported')
+        self.assertEqual(record['device'], device)
+        self.assertEqual(record['evidence'], 'client_report_only')
+        self.assertFalse(record['mac_address_available'])
+        self.assertNotIn('room', record)
+        b = await self.client('receiver'); self.assertEqual((await a.receive())[1], {'type': 'peer'})
+    async def test_rejects_device_fields_outside_allowlist(self):
+        for value in [{'mac': '00:11:22:33:44:55'}, 'invalid', {'installation_id': 'a' * 5000}]:
+            a = await Client.open(self.port); self.clients.append(a)
+            await a.send({'role': 'sender', 'room': 'a' * 64, 'device': value})
+            self.assertEqual((await a.receive())[0], 8)
+        self.assertFalse(service.ROOMS)
+    async def test_direct_report_is_bounded_metadata_only_without_room(self):
+        device = {'installation_id': 'b' * 32, 'platform': 'macOS', 'model': 'Mac16,10',
+                  'os_version': '26.0.1', 'app_version': '1.4', 'app_build': '50'}
+        packet = {'role': 'audit', 'route': 'internet_ip', 'session_id': 'c' * 32,
+                  'peer_role': 'sender', 'event': 'connected', 'device': device}
+        a = await Client.open(self.port, path='/audit'); self.clients.append(a); await a.send(packet)
+        self.assertEqual((await a.receive())[1], {'type': 'audit_recorded'})
+        self.assertFalse(service.ROOMS)
+        with open(self.audit_path) as stream: records = [json.loads(line) for line in stream]
+        record = next(value for value in records if value['event'] == 'direct_connection_reported')
+        self.assertEqual(record['session_id'], 'c' * 32)
+        self.assertEqual(record['ip'], '127.0.0.1')
+        b = await Client.open(self.port, path='/audit'); self.clients.append(b)
+        await b.send({**packet, 'sdp': 'forbidden'})
+        self.assertEqual((await b.receive())[0], 8)
+        c = await Client.open(self.port); self.clients.append(c); await c.send(packet)
+        self.assertEqual((await c.receive())[0], 8)
+        d = await Client.open(self.port, path='/audit'); self.clients.append(d)
+        await d.send({'role': 'sender', 'room': 'a' * 64})
+        self.assertEqual((await d.receive())[0], 8)
     async def test_room_shared_byte_budget(self):
         a,b=await self.pair(); room=service.ROOMS['a'*64]; room['bytes']=65530
         await a.send({'type':'candidate','candidate':'candidate:x','mid':'0','line':0})

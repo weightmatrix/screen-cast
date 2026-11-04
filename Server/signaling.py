@@ -45,6 +45,7 @@ class Socket:
         self.lock = asyncio.Lock()
         self.bytes = self.messages = 0
         self.context = context or {}
+        self.audit_only = False
     async def frame(self, opcode, data=b''):
         if len(data) > MAX_FRAME: raise Rejected()
         header = bytes([0x80 | opcode])
@@ -81,9 +82,30 @@ async def keepalive(ws):
         await asyncio.sleep(60)
         await ws.frame(9)
 
+def device_metadata(value):
+    if value is None: return None  # Older clients remain compatible.
+    patterns = {'installation_id': '[a-f0-9]{32}', 'platform': 'macOS|iPadOS',
+                'model': '[A-Za-z0-9_,.-]{1,64}', 'os_version': '[0-9.]{1,32}',
+                'app_version': '[A-Za-z0-9_.+-]{1,32}', 'app_build': '[A-Za-z0-9_.+-]{1,32}'}
+    if not isinstance(value, dict) or set(value) != set(patterns): raise Rejected()
+    if any(not isinstance(value[key], str) or not re.fullmatch(pattern, value[key]) for key, pattern in patterns.items()): raise Rejected()
+    return value
+
 async def exchange(ws):
     hello = await asyncio.wait_for(ws.receive(), 10)
     role, key = hello.get('role'), hello.get('room')
+    if (role == 'audit') != ws.audit_only: raise Rejected()
+    if role == 'audit':
+        if set(hello) != {'role', 'route', 'session_id', 'peer_role', 'event', 'device'}: raise Rejected()
+        if hello['route'] != 'internet_ip' or hello['peer_role'] not in ('sender', 'receiver') or hello['event'] not in ('attempt', 'connected', 'ended'): raise Rejected()
+        if not isinstance(hello['session_id'], str) or not re.fullmatch('[a-f0-9]{32}', hello['session_id']): raise Rejected()
+        device = device_metadata(hello['device'])
+        if device is None: raise Rejected()
+        audit('direct_connection_reported', **ws.context, route='internet_ip', session_id=hello['session_id'],
+              peer_role=hello['peer_role'], lifecycle=hello['event'], device=device,
+              evidence='client_report_only', mac_address_available=False)
+        await ws.send({'type': 'audit_recorded'})
+        return
     if role == 'suggest':
         excluded = hello.get('exclude', [])
         if set(hello) - {'role', 'exclude'} or not isinstance(excluded, list) or len(excluded) > 32 or any(
@@ -100,6 +122,9 @@ async def exchange(ws):
         return
     if role not in ('sender', 'receiver') or not isinstance(key, str) or not re.fullmatch('[a-f0-9]{64}', key): raise Rejected()
     ws.context['role'] = role
+    device = device_metadata(hello.get('device'))
+    audit('device_reported', **ws.context, device=device, evidence='client_report_only',
+          device_metadata_available=device is not None, mac_address_available=False)
     if role == 'sender':
         if key in ROOMS:
             audit('pairing_rejected', **ws.context, reason='room_unavailable')
@@ -180,7 +205,8 @@ async def connection(reader, writer):
         ip = source_ip(peer[0], headers)
         context['ip'] = ip
         audit('connection_received', **context); observed = True
-        if method != 'GET' or path != '/signal' or ACTIVE >= 64 or not allowance(ip, 'ws', 20): raise Rejected()
+        if method != 'GET' or path not in ('/signal', '/audit') or ACTIVE >= 64: raise Rejected()
+        if not allowance(ip, 'audit' if path == '/audit' else 'ws', 60 if path == '/audit' else 20): raise Rejected()
         if headers.get('upgrade', '').lower() != 'websocket' or headers.get('sec-websocket-version') != '13': raise Rejected()
         key = headers.get('sec-websocket-key', '')
         if len(base64.b64decode(key, validate=True)) != 16: raise Rejected()
@@ -190,6 +216,7 @@ async def connection(reader, writer):
         await writer.drain()
         ACTIVE += 1
         ws = Socket(reader, writer, context)
+        ws.audit_only = path == '/audit'
         ping = asyncio.create_task(keepalive(ws))
         await asyncio.wait_for(exchange(ws), 600)
     except AuditUnavailable:

@@ -4,6 +4,87 @@ import Security
 import CryptoKit
 import WebRTC
 import Combine
+import Darwin
+
+/// App-instance identity, not a hardware identifier or proof of identity.
+enum DeviceAuditMetadata {
+    static let value: [String: String] = {
+        let defaults = UserDefaults.standard
+        let identifier = defaults.string(forKey: "auditInstallationID") ?? UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        defaults.set(identifier, forKey: "auditInstallationID")
+        let platform: String
+        let model: String
+        #if os(macOS)
+        platform = "macOS"
+        var size = 0
+        sysctlbyname("hw.model", nil, &size, nil, 0)
+        var buffer = [CChar](repeating: 0, count: max(1, min(size, 128)))
+        model = sysctlbyname("hw.model", &buffer, &size, nil, 0) == 0 ? String(cString: buffer) : "unknown"
+        #else
+        platform = "iPadOS"
+        var info = utsname(); uname(&info)
+        let capacity = MemoryLayout.size(ofValue: info.machine)
+        model = withUnsafePointer(to: &info.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: capacity) { String(cString: $0) }
+        }
+        #endif
+        let version = ProcessInfo.processInfo.operatingSystemVersion
+        return ["installation_id": identifier, "platform": platform, "model": model,
+                "os_version": "\(version.majorVersion).\(version.minorVersion).\(version.patchVersion)",
+                "app_version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown",
+                "app_build": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown"]
+    }()
+}
+
+/// Three bounded, best-effort lifecycle reports. No media and no background retry loop.
+final class DirectConnectionAudit {
+    let sessionID: String
+    private let role: String
+    private var events = Set<String>()
+    private let eventLock = NSLock()
+    private static let slotLock = NSLock()
+    private static var active = 0
+    private static func reserve() -> Bool {
+        slotLock.lock(); defer { slotLock.unlock() }
+        guard active < 16 else { return false }; active += 1; return true
+    }
+    private static func release() { slotLock.lock(); active -= 1; slotLock.unlock() }
+    init(sessionID: String? = nil, sending: Bool) {
+        self.sessionID = sessionID ?? UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        role = sending ? "sender" : "receiver"
+        record("attempt")
+    }
+    func record(_ event: String) {
+        eventLock.lock(); defer { eventLock.unlock() }
+        guard ["attempt", "connected", "ended"].contains(event), events.insert(event).inserted else { return }
+        guard Self.reserve() else { PerformanceDisk.shared.write("audit.direct report_capacity_reached"); return }
+        let packet: [String: Any] = ["role": "audit", "route": "internet_ip", "session_id": sessionID,
+                                    "peer_role": role, "event": event, "device": DeviceAuditMetadata.value]
+        Task {
+            defer { Self.release() }
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 8; configuration.timeoutIntervalForResource = 10
+            configuration.urlCache = nil
+            let session = URLSession(configuration: configuration)
+            let socket = session.webSocketTask(with: InternetSettings.auditURL)
+            socket.maximumMessageSize = 2048; socket.resume()
+            let timeout = Task {
+                try? await Task.sleep(nanoseconds: 8_000_000_000)
+                if !Task.isCancelled { socket.cancel(with: .goingAway, reason: nil) }
+            }
+            defer { timeout.cancel(); socket.cancel(with: .normalClosure, reason: nil); session.invalidateAndCancel() }
+            do {
+                let data = try JSONSerialization.data(withJSONObject: packet)
+                try await socket.send(.string(String(decoding: data, as: UTF8.self)))
+                let message = try await socket.receive()
+                guard case .string(let text) = message,
+                      let response = text.data(using: .utf8),
+                      let object = try JSONSerialization.jsonObject(with: response) as? [String: Any],
+                      object["type"] as? String == "audit_recorded" else { throw URLError(.badServerResponse) }
+            } catch { PerformanceDisk.shared.write("audit.direct report_failed event=\(event)") }
+        }
+    }
+}
 
 /// One bounded lookup per conflict, never a background availability poll.
 /// The normal sender registration remains the final atomic collision check.
@@ -81,6 +162,7 @@ enum ConnectionMode: String, CaseIterable, Identifiable {
 
 enum InternetSettings {
     static let signalingURL = URL(string: "wss://zhibenwang.com/touping/signal")!
+    static let auditURL = URL(string: "wss://zhibenwang.com/touping/audit")!
     static let stunURL = "stun:49.233.174.254:3478"
     static func room(_ code: String) -> String { SHA256.hash(data: Data(code.utf8)).map { String(format: "%02x", $0) }.joined() }
     static func tlsParameters(code: String) -> NWParameters {

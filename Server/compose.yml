@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     read_only: true
     volumes:
-      - ./audit:/var/log/touping
+      - ${TOUPING_AUDIT_DIR:-../data/audit}:/var/log/touping
     environment:
       AUDIT_RETENTION_DAYS: ${TOUPING_AUDIT_RETENTION_DAYS:-90}
     cap_drop: [ALL]

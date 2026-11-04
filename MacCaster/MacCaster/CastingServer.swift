@@ -417,7 +417,10 @@ final class CastingServer: ObservableObject {
                 guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { conn.cancel(); return }
                 if object["type"] as? String == "hello" {
                     guard nativePeers[key] == nil else { conn.cancel(); return }
-                    let video = NativeVideoPeer(source: nativeSource, internet: internetConnections.contains(key), bitrate: nativeBitrate, fps: nativeFPS)
+                    let suppliedAuditID = object["audit_session"] as? String
+                    let auditID = suppliedAuditID.flatMap { $0.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil ? $0 : nil }
+                    let video = NativeVideoPeer(source: nativeSource, internet: internetConnections.contains(key), bitrate: nativeBitrate, fps: nativeFPS,
+                                                auditDirect: internetConnections.contains(key), auditSessionID: auditID)
                     nativePeers[key] = video
                     watch(video, route: internetConnections.contains(key) ? "广域网 IP" : "局域网")
                     video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }

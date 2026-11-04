@@ -1,0 +1,6 @@
+#!/bin/sh
+# This root-owned wrapper is the backup account's only authorized SSH command.
+ulimit -v 196608
+ulimit -f 450560
+ulimit -t 180
+exec /usr/bin/timeout 1200 /usr/bin/nice -n 19 /usr/bin/python3 /srv/apps/touping/ops/audit_snapshot.py receive

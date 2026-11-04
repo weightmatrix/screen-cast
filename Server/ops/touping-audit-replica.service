@@ -1,0 +1,26 @@
+[Unit]
+Description=Touping private audit backup
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /srv/apps/touping/ops/audit_snapshot.py send
+User=root
+UMask=0077
+Nice=15
+IOSchedulingClass=idle
+CPUQuota=10%
+MemoryMax=384M
+TimeoutStartSec=20min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/apps/touping/data/replication
+ReadOnlyPaths=/srv/apps/touping/data/audit /srv/apps/touping/secrets /srv/apps/touping/ops
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LimitFSIZE=240M
+
+[Install]
+WantedBy=multi-user.target
