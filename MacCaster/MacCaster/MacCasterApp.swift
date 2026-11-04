@@ -22,6 +22,7 @@ struct MacCasterApp: App {
     var body: some Scene {
         WindowGroup("投屏") {
             RootView()
+                .focusEffectDisabled()
                 .environmentObject(streamer)
                 .task {
                     #if DEBUG
