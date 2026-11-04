@@ -329,6 +329,7 @@ private struct AddStreamSheet: View {
     @State private var selectedWindows: [(String, SCWindow)] = []
     @State private var selectedDisplays: [(String, SCDisplay)] = []
     @State private var expandedApps: Set<String> = []
+    @State private var showOptions = false
     @State private var bitrate: Int
     @State private var fps: Int
     @State private var showsCursor: Bool = true
@@ -345,28 +346,40 @@ private struct AddStreamSheet: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("添加投屏流").font(.title2.bold())
+                Image(systemName: "rectangle.on.rectangle")
+                    .font(.system(size: 22, weight: .light)).foregroundStyle(.blue)
+                    .frame(width: 46, height: 46)
+                    .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 13))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("选择共享内容").font(.title2.weight(.semibold))
+                    Text("共享整个屏幕，或只分享需要的应用与窗口。")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
                 Spacer()
                 Button(action: { streamer.loadShareableContent() }) {
-                    Image(systemName: "arrow.clockwise.circle")
+                    Image(systemName: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
                 .help("刷新应用列表")
-                Text("已选 \(selected.count) 个").font(.system(size: 16)).foregroundStyle(.blue)
+                Text("已选 \(selected.count) 项").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.vertical, 6).background(.primary.opacity(0.04), in: Capsule())
                 Button("取消") { isPresented = false }
             }
 
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("显示器").font(.system(size: 15)).foregroundStyle(.secondary)
+                LazyVStack(alignment: .leading, spacing: 10) {
+                    Text("整个屏幕").font(.caption.weight(.medium)).foregroundStyle(.secondary)
                     ForEach(streamer.displays, id: \.displayID) { display in
                         let key = "display-\(display.displayID)"
                         HStack(spacing: 8) {
-                            Image(systemName: "display").frame(width: 20)
-                            Text("显示器 \(Int(display.width))×\(Int(display.height))").font(.system(size: 16))
+                            Image(systemName: "display").font(.system(size: 23, weight: .light)).foregroundStyle(.secondary).frame(width: 36)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("显示器").font(.body.weight(.medium))
+                                Text("\(Int(display.width)) × \(Int(display.height))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            }
                             Spacer()
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
@@ -375,23 +388,32 @@ private struct AddStreamSheet: View {
                             .tint(selected.contains(key) ? .blue : nil)
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(selected.contains(key) ? Color.blue.opacity(0.12) : Color.clear))
+                        .background(selected.contains(key) ? Color.accentColor.opacity(0.08) : Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14))
                     }
 
-                    Text("应用与窗口").font(.system(size: 15)).foregroundStyle(.secondary).padding(.top, 8)
+                    Text("应用与窗口").font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(.top, 12)
 
-                    ForEach(streamer.appGroups) { group in
+                    ForEach(streamer.appGroups.filter { !$0.isUnnamed }) { group in
                         AppGroupPicker(group: group, selected: $selected, selectedApps: $selectedApps, selectedWindows: $selectedWindows, streamer: streamer)
                     }
+                    if streamer.appGroups.contains(where: \.isUnnamed) {
+                        Text("其他项目 · 系统未提供应用名称").font(.caption).foregroundStyle(.secondary).padding(.top, 12)
+                        ForEach(streamer.appGroups.filter(\.isUnnamed)) { group in
+                            AppGroupPicker(group: group, selected: $selected, selectedApps: $selectedApps, selectedWindows: $selectedWindows, streamer: streamer)
+                        }
+                    }
                 }
+                .padding(.vertical, 8).padding(.trailing, 8)
             }
 
             if !selected.isEmpty {
                 Divider()
 
                 let allNames = selectedApps.map(\.0) + selectedWindows.map(\.0) + selectedDisplays.map(\.0)
-                Text("已选：\(allNames.joined(separator: "、"))").font(.system(size: 16)).lineLimit(2)
+                Text(allNames.joined(separator: "、")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
 
+                DisclosureGroup("画质与连接", isExpanded: $showOptions) {
+                VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 16) {
                     Menu("画质预设") {
                         Button("均衡 · 12 Mbps / 30 fps") { bitrate = 12_000_000; fps = 30 }
@@ -418,10 +440,12 @@ private struct AddStreamSheet: View {
                             .frame(width: 230)
                     }
                 }
+                }.padding(.top, 8)
+                }.padding(.vertical, 4)
 
                 HStack {
                     Spacer()
-                    Button("开始投屏 (\(selected.count)个)") {
+                    Button("开始投屏") {
                         let useCode = code.isEmpty ? MatchingCode.generate() : code
                         streamer.lastCode = useCode
                         streamer.defaultBitrate = bitrate
@@ -461,7 +485,7 @@ private struct AddStreamSheet: View {
             }
         }
         .padding(28)
-        .frame(width: 860, height: 720)
+        .frame(width: 800, height: 660)
         .background(CastStyle.canvas)
     }
 
@@ -625,17 +649,22 @@ private struct AppGroupPicker: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                    .font(.system(size: 15)).foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary).frame(width: 12)
                 if let icon = group.icon {
-                    Image(nsImage: icon).resizable().frame(width: 20, height: 20)
+                    Image(nsImage: icon).resizable().frame(width: 30, height: 30)
+                } else {
+                    Image(systemName: "app.dashed").font(.system(size: 26, weight: .light)).foregroundStyle(.secondary).frame(width: 30, height: 30)
                 }
-                Text(group.application.applicationName).font(.system(size: 16)).bold()
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(group.displayName).font(.body.weight(.medium)).lineLimit(1).help(group.displayName)
+                    Text("\(group.windows.count) 个窗口").font(.caption).foregroundStyle(.secondary)
+                }
                 Spacer()
                 if let display = streamer.bestDisplay(for: [group.application]) {
                     let key = "app-\(group.application.bundleIdentifier)-\(display.displayID)"
-                    Button(selected.contains(key) ? "已选" : "投屏整个应用") {
+                    Button(selected.contains(key) ? "已选择" : "选择应用") {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
-                        else { selected.insert(key); selectedApps.append((group.application.applicationName, group.application)) }
+                        else { selected.insert(key); selectedApps.append((group.displayName, group.application)) }
                     }
                     .buttonStyle(.bordered).controlSize(.regular)
                     .tint(selected.contains(key) ? .blue : nil)
@@ -646,7 +675,8 @@ private struct AppGroupPicker: View {
 
             if isExpanded {
                 ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
-                    let title = (window.title ?? "").isEmpty ? "未命名窗口" : window.title ?? ""
+                    let trimmedTitle = (window.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let title = trimmedTitle.isEmpty ? "未命名窗口 · \(window.windowID)" : trimmedTitle
                     let key = "window-\(window.windowID)"
                     HStack(spacing: 8) {
                         Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)
@@ -663,8 +693,8 @@ private struct AppGroupPicker: View {
                 }
             }
         }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.035)))
+        .padding(12)
+        .background(.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -683,12 +713,12 @@ private struct EditAppGroupPicker: View {
                 if let icon = group.icon {
                     Image(nsImage: icon).resizable().frame(width: 16, height: 16)
                 }
-                Text(group.application.applicationName).font(.system(size: 16)).bold()
+                Text(group.displayName).font(.system(size: 16)).bold()
                 Spacer()
                 if let display = streamer.bestDisplay(for: [group.application]) {
                     let filter = SCContentFilter(display: display, including: [group.application], exceptingWindows: [])
                     Button("投屏整个应用") {
-                        selectedFilter = filter; selectedName = group.application.applicationName
+                        selectedFilter = filter; selectedName = group.displayName
                     }
                     .buttonStyle(.bordered).controlSize(.regular)
                     .tint(selectedFilter === filter ? .blue : nil)
@@ -699,7 +729,8 @@ private struct EditAppGroupPicker: View {
 
             if isExpanded {
                 ForEach(Array(group.windows.enumerated()), id: \.offset) { _, window in
-                    let title = (window.title ?? "").isEmpty ? "未命名" : window.title ?? ""
+                    let trimmedTitle = (window.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    let title = trimmedTitle.isEmpty ? "未命名窗口 · \(window.windowID)" : trimmedTitle
                     let filter = SCContentFilter(desktopIndependentWindow: window)
                     HStack {
                         Image(systemName: "rectangle.on.rectangle").foregroundStyle(.secondary)

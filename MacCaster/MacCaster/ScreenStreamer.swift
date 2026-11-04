@@ -16,6 +16,8 @@ final class ScreenStreamer: NSObject, ObservableObject {
         var id = UUID()
         let application: SCRunningApplication
         let windows: [SCWindow]
+        var isUnnamed: Bool { application.applicationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        var displayName: String { ScreenStreamer.displayName(for: application) }
         var icon: NSImage? {
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: application.bundleIdentifier) {
                 return NSWorkspace.shared.icon(forFile: url.path)
@@ -66,11 +68,20 @@ final class ScreenStreamer: NSObject, ObservableObject {
 
     private func sortAppGroups() {
         appGroups.sort { a, b in
+            if a.isUnnamed != b.isUnnamed { return !a.isUnnamed }
             let ca = usageCounts[a.application.bundleIdentifier] ?? 0
             let cb = usageCounts[b.application.bundleIdentifier] ?? 0
             if ca != cb { return ca > cb }
-            return a.application.applicationName.localizedStandardCompare(b.application.applicationName) == .orderedAscending
+            let order = a.displayName.localizedStandardCompare(b.displayName)
+            return order == .orderedSame ? a.application.processID < b.application.processID : order == .orderedAscending
         }
+    }
+
+    static func displayName(for application: SCRunningApplication) -> String {
+        let name = application.applicationName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { return name }
+        let bundle = application.bundleIdentifier.trimmingCharacters(in: .whitespacesAndNewlines)
+        return bundle.isEmpty ? "未命名应用 · \(application.processID)" : bundle
     }
 
     func loadShareableContent() {
@@ -90,7 +101,16 @@ final class ScreenStreamer: NSObject, ObservableObject {
                 for window in content.windows {
                     if let app = window.owningApplication { grouped[app, default: []].append(window) }
                 }
-                self.appGroups = grouped.map { AppGroup(application: $0.key, windows: $0.value) }
+                self.appGroups = grouped.map { app, windows in
+                    let sorted = windows.sorted { a, b in
+                        let aTitle = (a.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        let bTitle = (b.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                        if aTitle.isEmpty != bTitle.isEmpty { return !aTitle.isEmpty }
+                        let order = aTitle.localizedStandardCompare(bTitle)
+                        return order == .orderedSame ? a.windowID < b.windowID : order == .orderedAscending
+                    }
+                    return AppGroup(application: app, windows: sorted)
+                }
                 self.displays = content.displays
                 self.sortAppGroups()
             }
@@ -128,7 +148,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
         removeSession(session)
 
         if !apps.isEmpty {
-            let name = apps.map { $0.applicationName }.joined(separator: " + ")
+            let name = apps.map { Self.displayName(for: $0) }.joined(separator: " + ")
             if let display = bestDisplay(for: apps) {
                 for app in apps { recordUsage(bundleIdentifier: app.bundleIdentifier) }
                 addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []),
