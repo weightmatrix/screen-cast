@@ -1,5 +1,6 @@
 """Bounded pairing and STUN only. No media, TURN, database, or external dependencies."""
 import asyncio, base64, collections, hashlib, ipaddress, json, os, re, secrets, struct, time, uuid
+from pathlib import Path
 from audit import AuditLog, AuditUnavailable
 MAX_FRAME = 16384
 MAX_TOTAL = 65536
@@ -84,7 +85,7 @@ async def keepalive(ws):
 
 def device_metadata(value):
     if value is None: return None  # Older clients remain compatible.
-    patterns = {'installation_id': '[a-f0-9]{32}', 'platform': 'macOS|iPadOS',
+    patterns = {'installation_id': '[a-f0-9]{32}', 'platform': 'macOS|iPadOS|browser',
                 'model': '[A-Za-z0-9_,.-]{1,64}', 'os_version': '[0-9.]{1,32}',
                 'app_version': '[A-Za-z0-9_.+-]{1,32}', 'app_build': '[A-Za-z0-9_.+-]{1,32}'}
     if not isinstance(value, dict) or set(value) != set(patterns): raise Rejected()
@@ -198,6 +199,14 @@ async def connection(reader, writer):
         method, path, _ = parts[0].split(' ')
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
+        if method == 'GET' and path in ('/', '/receiver.js'):
+            asset = 'receiver.html' if path == '/' else 'receiver.js'
+            body = (Path(__file__).parent / 'Web' / asset).read_bytes()
+            if len(body) > 65536: raise Rejected()
+            mime = b'text/html; charset=utf-8' if path == '/' else b'application/javascript; charset=utf-8'
+            writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: '+mime+b'\r\nContent-Length: '+str(len(body)).encode()+
+                b"\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' wss://zhibenwang.com; media-src blob:; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n"+body)
+            await writer.drain(); return
         if method == 'GET' and path == '/health':
             body = b'{"service":"pairing-only","mediaRelay":false,"maxSessionBytes":65536,"connectionAudit":true}'
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\nConnection: close\r\n\r\n'+body)

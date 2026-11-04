@@ -161,6 +161,8 @@ enum ConnectionMode: String, CaseIterable, Identifiable {
 }
 
 enum InternetSettings {
+    static func browserAddress(code: String) -> String { "https://zhibenwang.com/touping/#code=\(code)" }
+    static func localBrowserAddress(ip: String, port: UInt16, code: String) -> String { "http://\(ip):\(port)/#code=\(code)" }
     static let signalingURL = URL(string: "wss://zhibenwang.com/touping/signal")!
     static let auditURL = URL(string: "wss://zhibenwang.com/touping/audit")!
     static let stunURL = "stun:49.233.174.254:3478"

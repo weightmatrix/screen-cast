@@ -70,11 +70,12 @@ final class SampleHandler: RPBroadcastSampleHandler {
                         self?.lastDiagnosticSnapshot = json
                     }
                     let ips = CastingServer.localIPs.joined(separator: "、")
-                    let network = "\(ips)/\(server.listeningPort ?? 0)/\(server.internetListeningPort ?? 0)"
+                    let network = "\(ips)/\(server.listeningPort ?? 0)/\(server.internetListeningPort ?? 0)/\(server.browserListeningPort ?? 0)"
                     if network != self?.lastDiagnosticNetwork {
                         defaults.set(ips, forKey: "broadcastLocalIPs")
                         defaults.set(Int(server.listeningPort ?? 0), forKey: "broadcastSignalPort")
                         defaults.set(Int(server.internetListeningPort ?? 0), forKey: "broadcastInternetPort")
+                        defaults.set(Int(server.browserListeningPort ?? 0), forKey: "broadcastBrowserPort")
                         self?.lastDiagnosticNetwork = network
                     }
                     if let command = defaults.string(forKey: "broadcastKick"), !command.isEmpty {

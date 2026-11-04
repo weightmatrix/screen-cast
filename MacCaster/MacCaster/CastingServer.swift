@@ -19,6 +19,8 @@ final class CastingServer: ObservableObject {
     @Published private(set) var lastError: String?
     @Published private(set) var diagnostics: [PeerDiagnostic] = []
     @Published private(set) var internetListeningPort: UInt16?
+    @Published private(set) var browserListeningPort: UInt16?
+    private var browserServer: BrowserReceiverServer?
     var listeningPort: UInt16? { isRunning ? listener?.port?.rawValue : nil }
     private var diagnosticValues: [String: PeerDiagnostic] = [:]
     private func watch(_ video: NativeVideoPeer, route: String) {
@@ -26,7 +28,8 @@ final class CastingServer: ObservableObject {
         video.onDiagnostic = { [weak self, weak video] value in
             guard let self, let video,
                 self.nativePeers.values.contains(where: { $0 === video }) ||
-                self.connectedInternetRooms.values.contains(where: { $0.video === video }) else { return }
+                self.connectedInternetRooms.values.contains(where: { $0.video === video }) ||
+                self.browserServer?.videos.contains(where: { $0 === video }) == true else { return }
             var snapshot = value
             snapshot.route = route
             self.diagnosticValues[value.id] = snapshot
@@ -34,11 +37,12 @@ final class CastingServer: ObservableObject {
         }
     }
     private func publishDiagnostics() {
-        let active = Set(nativePeers.values.map(\.diagnosticID) + connectedInternetRooms.values.map { $0.video.diagnosticID })
+        let active = Set(nativePeers.values.map(\.diagnosticID) + connectedInternetRooms.values.map { $0.video.diagnosticID } + (browserServer?.videos.map(\.diagnosticID) ?? []))
         diagnosticValues = diagnosticValues.filter { active.contains($0.key) }
         diagnostics = diagnosticValues.values.sorted { $0.id < $1.id }
     }
     func disconnectPeer(_ id: String) {
+        browserServer?.disconnect(id)
         if let connection = connections.first(where: { nativePeers[ObjectIdentifier($0)]?.diagnosticID == id }) {
             drop(connection)
         } else if let item = connectedInternetRooms.first(where: { $0.value.video.diagnosticID == id }) {
@@ -84,6 +88,7 @@ final class CastingServer: ObservableObject {
         nativePeers.values.forEach { $0.quality(bitrate: bitrate, fps: fps) }
         nativeRoom?.video.quality(bitrate: bitrate, fps: fps)
         connectedInternetRooms.values.forEach { $0.video.quality(bitrate: bitrate, fps: fps) }
+        browserServer?.videos.forEach { $0.quality(bitrate: bitrate, fps: fps) }
     }
     private var internetRetry: DispatchWorkItem?
     private var internetFailures = 0
@@ -261,6 +266,7 @@ final class CastingServer: ObservableObject {
                     switch state {
                     case .ready:
                         self.isRunning = true
+                        self.startBrowser()
                         self.startInternet()
                         DiagLog.log("Connection", "listener ready port \(self.port)")
                     case .failed(let e):
@@ -301,6 +307,7 @@ final class CastingServer: ObservableObject {
     }
 
     func stop() {
+        browserServer?.stop(); browserServer = nil; browserListeningPort = nil
         stopInternet()
         DiagLog.log("Connection", "server stop port \(port) connections=\(connections.count)")
         bindRetryWorkItem?.cancel()
@@ -472,7 +479,23 @@ final class CastingServer: ObservableObject {
 
     private func notifyClientCountChanged() {
         publishDiagnostics()
-        onClientCountChanged?(authenticatedConnections.count + connectedInternetRooms.count)
+        onClientCountChanged?(authenticatedConnections.count + connectedInternetRooms.count + (browserServer?.connectedCount ?? 0))
+    }
+
+    private func startBrowser() {
+        guard browserServer == nil, port <= 63535 else { return }
+        let browser = BrowserReceiverServer(port: port + 2000, code: { [weak self] in self?.accessCode ?? "" }, addresses: { Self.localIPs }) { [weak self] in
+            guard let self else { return NativeVideoPeer(internet: false) }
+            let video = NativeVideoPeer(source: self.nativeSource, internet: false, bitrate: self.nativeBitrate, fps: self.nativeFPS)
+            self.watch(video, route: "局域网页")
+            video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
+            return video
+        }
+        browserServer = browser
+        let browserPort = browser.port
+        browser.onReady = { [weak self] ready in self?.browserListeningPort = ready ? browserPort : nil }
+        browser.onChanged = { [weak self] in self?.notifyClientCountChanged() }
+        browser.start()
     }
 
     func sendConfig(_ serializedFD: Data) {

@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import ReplayKit
+import UIKit
 
 struct iPadSenderView: View {
     @AppStorage("appMode") private var appMode = "cast"
@@ -10,6 +11,7 @@ struct iPadSenderView: View {
     @State private var localIPs = ""
     @State private var signalPort = 0
     @State private var internetPort = 0
+    @State private var browserPort = 0
     @State private var pageAudio = false
     @State private var micAudio = false
     @State private var bitrate = 8_000_000
@@ -128,6 +130,18 @@ struct iPadSenderView: View {
                     Text(status).foregroundStyle(active ? .green : .secondary)
                 }.padding(28).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("网页接收地址").font(.headline)
+                    if active, let webPort = UInt16(exactly: browserPort), webPort > 0 {
+                        ForEach(localIPs.components(separatedBy: "、").filter(BrowserReceiverServer.isLocalAddress), id: \.self) { ip in
+                            browserAddress("局域网", InternetSettings.localBrowserAddress(ip: ip, port: webPort, code: code))
+                        }
+                    } else { Text("开始系统广播后生成局域网地址。").foregroundStyle(.secondary) }
+                    if active && internetEnabled && internetMatchingEnabled { browserAddress("公网", InternetSettings.browserAddress(code: code)) }
+                    Text("浏览器打开地址后点击开始接收；公网须开启广域网匹配码，画面不经服务器。")
+                        .font(.caption).foregroundStyle(.secondary)
+                }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
                 VStack(alignment: .leading, spacing: 16) {
                     Button { showDiagnostics.toggle() } label: { Label("诊断", systemImage: "waveform.path.ecg") }
                     if showDiagnostics {
@@ -243,7 +257,7 @@ struct iPadSenderView: View {
             DispatchQueue.main.async {
                 refreshing = false
                 active = snapshot.active; peers = snapshot.peers; localIPs = snapshot.localIPs
-                signalPort = snapshot.signalPort; internetPort = snapshot.internetPort
+                signalPort = snapshot.signalPort; internetPort = snapshot.internetPort; browserPort = snapshot.browserPort
                 internetStatus = snapshot.internetStatus; resolutionStatus = snapshot.resolutionStatus
                 status = !snapshot.active && snapshot.status == "正在投屏" ? "投屏已结束" : snapshot.status
             }
@@ -265,12 +279,24 @@ struct iPadSenderView: View {
             settingsQueue.async { continuation.resume(returning: SenderInitialSettings()) }
         }
     }
+    private func browserAddress(_ title: String, _ value: String) -> some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text(value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+            }
+            Spacer()
+            Button("复制") { UIPasteboard.general.string = value }.accessibilityLabel("复制\(title)网页接收地址")
+        }
+    }
+
     private struct SenderLiveStatus {
         let active: Bool
         let peers: [PeerDiagnostic]
         let localIPs: String
         let signalPort: Int
         let internetPort: Int
+        let browserPort: Int
         let internetStatus: String
         let resolutionStatus: String
         let status: String
@@ -282,6 +308,7 @@ struct iPadSenderView: View {
             localIPs = store.string(forKey: "broadcastLocalIPs") ?? ""
             signalPort = store.integer(forKey: "broadcastSignalPort")
             internetPort = store.integer(forKey: "broadcastInternetPort")
+            browserPort = store.integer(forKey: "broadcastBrowserPort")
             internetStatus = store.string(forKey: "broadcastInternetStatus") ?? "等待广域网匹配"
             resolutionStatus = store.string(forKey: "broadcastResolutionStatus") ?? ""
             status = store.string(forKey: "broadcastStatus") ?? "等待开始"

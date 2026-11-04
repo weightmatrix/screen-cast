@@ -14,6 +14,16 @@ STUN仅响应IPv4 Binding请求（20–256字节请求，32字节响应），每
 
 ## 部署
 
+### 51版：网页接收入口
+
+`https://zhibenwang.com/touping/`提供无外部依赖的WebRTC接收页，发送端生成`#code=<匹配码>`片段链接预填代码；不把代码放HTTP查询或referrer。公网须开启发送端广域及匹配码，复用原生配对、H.264/Opus轨道及最多4个公网接收槽，无媒体中继或TURN。浏览器握手接受platform=browser，使用随机localStorage实例ID、通用Browser机型和OS版本0（未知），不抓原始UA/硬件标识；沿用私有审计及异地快照。
+
+部署还需上传`Web/receiver.html`、`Web/receiver.js`至app/Web；Docker复制Web目录。现有nginx/touping路由即可，不改业务路由或端口。静态资源no-store/no-referrer/nosniff/CSP，单份最多64KiB；不把媒体写入HTTP或WebSocket。配对成功关闭信令后，浏览器保持媒体连接。更换静态资源也需重建本投屏镜像，不运行其他应用发布脚本。
+
+局域页面由Mac/iPad发送端自己提供，默认10318（原信令端口+2000），不依赖云服务器；仅接受私网来源及本机Host、同源JSON POST和匹配码，4个局域网页会话上限，其他数据/数量/超时保护见开发手册。只在可信局域网使用HTTP；公网使用HTTPS入口，不将局域HTTP端口映射为公网服务。页面默认静音，手动开声/全屏；后台、锁屏、穿透失败及旧Safari兼容须真机验证。
+
+51前服务文件备份`/srv/apps/touping/backups/before51/`，镜像`touping-signaling:before-build51`。回滚只恢复这四个服务文件并重建touping容器，保留data/audit及异地副本；旧服务不读取Web目录。客户端50备份仅本机保留，不提交构建产物。
+
 ### 50版：设备元数据与双机隔离备份
 
 腾讯云和搬瓦工各有独立`/srv/apps/touping/`，不混入其他应用目录。腾讯云`app/`为服务源码，`data/audit/`为原始审计，`data/replication/`为最近成功回执，`ops/`为运维脚本和timer，`secrets/`为专用SSH密钥及固定主机公钥，`backups/`为部署回滚材料。搬瓦工只运行SSH受限接收脚本，快照放`data/replica/`；不部署第二套配对服务，不接收音视频。其他应用可沿用`/srv/apps/<app>/`约定，本任务没有迁移其既有服务。

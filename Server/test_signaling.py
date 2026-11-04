@@ -64,6 +64,25 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
     async def test_no_media_messages(self):
         a,b=await self.pair(); await a.send({'type':'video','data':'forbidden'})
         self.assertEqual((await a.receive())[0],8)
+    async def test_receiver_page_and_script_have_private_static_headers(self):
+        for path, mime in [('/', b'text/html'), ('/receiver.js', b'application/javascript')]:
+            reader, writer = await asyncio.open_connection('127.0.0.1', self.port)
+            writer.write(f'GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n'.encode()); await writer.drain()
+            response = await reader.read()
+            writer.close(); await writer.wait_closed()
+            self.assertIn(b'200 OK', response); self.assertIn(mime, response)
+            self.assertIn(b'Referrer-Policy: no-referrer', response)
+            self.assertIn(b'Cache-Control: no-store', response)
+            self.assertNotIn(b'Access-Control-Allow-Origin: *', response)
+        self.assertFalse(service.ROOMS)
+    async def test_browser_receiver_metadata_joins_native_sender(self):
+        sender = await self.client('sender'); await sender.receive()
+        receiver = await Client.open(self.port); self.clients.append(receiver)
+        await receiver.send({'role':'receiver','room':'a'*64,'device':{'installation_id':'c'*32,
+            'platform':'browser','model':'Browser','os_version':'0','app_version':'1.4','app_build':'51-web'}})
+        self.assertEqual((await sender.receive())[1], {'type':'peer'})
+        with open(self.audit_path) as stream: records = [json.loads(line) for line in stream]
+        self.assertTrue(any(row.get('device', {}).get('platform') == 'browser' for row in records if row.get('device')))
     async def test_bounded_device_metadata_is_audited_not_forwarded(self):
         device = {'installation_id': 'b' * 32, 'platform': 'iPadOS', 'model': 'iPad11,1',
                   'os_version': '26.0.1', 'app_version': '1.4', 'app_build': '50'}

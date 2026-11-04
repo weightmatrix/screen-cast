@@ -3,6 +3,7 @@ FROM ${RUNTIME_IMAGE}
 WORKDIR /app
 COPY signaling.py /app/signaling.py
 COPY audit.py /app/audit.py
+COPY Web /app/Web
 USER 65534:65534
 ENV BIND_HOST=0.0.0.0 TRUST_PROXY=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 ENV AUDIT_LOG_PATH=/var/log/touping/connections.jsonl

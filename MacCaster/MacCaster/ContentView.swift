@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ScreenCaptureKit
 
 struct ContentView: View {
@@ -133,6 +134,37 @@ private struct CodeEditorFrameKey: PreferenceKey {
     static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
 }
 
+private struct BrowserSenderAddresses: View {
+    @ObservedObject var server: CastingServer
+    let code: String
+    let internet: Bool
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("网页接收地址").font(.headline)
+            if let port = server.browserListeningPort {
+                ForEach(CastingServer.localIPs.filter(BrowserReceiverServer.isLocalAddress), id: \.self) { ip in
+                    address("局域网", InternetSettings.localBrowserAddress(ip: ip, port: port, code: code))
+                }
+            } else { Text("局域网页入口未就绪").foregroundStyle(.secondary) }
+            if internet { address("公网", InternetSettings.browserAddress(code: code)) }
+            else { Text("公网网页接收需开启广域网直连和匹配码。").foregroundStyle(.secondary) }
+            Text("在浏览器输入地址后点击开始接收；音视频由本机直传。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+    private func address(_ title: String, _ value: String) -> some View {
+        HStack {
+            VStack(alignment: .leading) {
+                Text(title).font(.caption).foregroundStyle(.secondary)
+                Text(value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
+            }
+            Spacer()
+            Button("复制") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string) }
+                .accessibilityLabel("复制\(title)网页接收地址")
+        }
+    }
+}
+
 private struct SessionRow: View {
     @ObservedObject var session: StreamSession
     @ObservedObject var streamer: ScreenStreamer
@@ -174,6 +206,7 @@ private struct SessionRow: View {
                 Toggle("允许广域网直连", isOn: $session.internetEnabled).toggleStyle(.switch)
                 Toggle("允许广域网匹配码", isOn: $session.internetMatchingEnabled).toggleStyle(.switch).disabled(!session.internetEnabled)
             }
+            BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
             if session.internetEnabled {
                 Text(session.internetStatus).font(.system(size: 14))
                     .foregroundStyle(session.internetCodeConflict ? Color.red : Color.secondary)
