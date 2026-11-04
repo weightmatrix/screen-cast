@@ -9,8 +9,7 @@ struct ContentView: View {
     @AppStorage("appMode") private var appMode = "cast"
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            header
+        VStack(alignment: .leading, spacing: 16) {
             if let error = streamer.contentError {
                 Label(error, systemImage: "exclamationmark.circle")
                     .foregroundStyle(.red).textSelection(.enabled)
@@ -18,73 +17,47 @@ struct ContentView: View {
                     .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
             }
             StreamListView(streamer: streamer, onAdd: { showAddSheet = true })
-            defaultSettingsPanel
         }
-        .padding(28)
-        .frame(minWidth: 860, minHeight: 640)
+        .padding(24)
+        .frame(minWidth: 700, minHeight: 500)
         .background(CastStyle.canvas.onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) })
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Picker("工作模式", selection: $appMode) {
+                    Text("投屏").tag("cast")
+                    Text("接收").tag("receive")
+                }.pickerStyle(.segmented).frame(width: 160)
+            }
+            ToolbarItem(placement: .primaryAction) {
+                Button { showAddSheet = true } label: { Label("添加投屏", systemImage: "plus") }
+                    .help("选择要共享的屏幕或窗口")
+            }
+            ToolbarItem(placement: .automatic) {
+                Button { showDiagnostics.toggle() } label: { Label("连接详情", systemImage: "info.circle") }
+                    .popover(isPresented: $showDiagnostics) {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text("连接详情").font(.headline)
+                                ForEach(streamer.sessions) { session in SessionDiagnosticsView(session: session, server: session.server) }
+                            }.padding(20)
+                        }.frame(width: 560, height: 380)
+                    }
+            }
+        }
         .sheet(isPresented: $showAddSheet) {
             AddStreamSheet(streamer: streamer, isPresented: $showAddSheet)
         }
         .task { streamer.loadShareableContent() }
     }
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 16) {
-            Image(systemName: "display.2")
-                .font(.system(size: 28, weight: .medium))
-                .foregroundStyle(CastStyle.accent)
-                .frame(width: 60, height: 60)
-                .background(CastStyle.accent.opacity(0.1), in: RoundedRectangle(cornerRadius: 18))
-            VStack(alignment: .leading, spacing: 6) {
-                Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
-                Text("投屏工作台").font(.system(size: 30, weight: .semibold))
-            }
-            Spacer()
-            Button { appMode = "receive" } label: { Label(AppPresentation.receiveWorkbench, systemImage: "arrow.down.left") }
-        }
-    }
-
-    private var defaultSettingsPanel: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if showDiagnostics {
-                Text("本机局域网地址：" + CastingServer.localIPs.joined(separator: "、"))
-                    .font(.system(size: 14, design: .monospaced)).textSelection(.enabled)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        ForEach(streamer.sessions) { session in SessionDiagnosticsView(session: session, server: session.server) }
-                    }
-                }.frame(maxHeight: 210)
-            }
-            HStack {
-                Button { showDiagnostics.toggle() } label: { Label("诊断", systemImage: "waveform.path.ecg") }
-                Spacer()
-                Text("画质可在每个投屏卡片内单独调整").font(.system(size: 14)).foregroundStyle(.secondary)
-            }
-        }
-    }
 
 }
 
 // Shared native styling; no changes to capture or transport behavior.
 enum CastStyle {
-    static let canvas = Color(red: 0.035, green: 0.05, blue: 0.075)
-    static let panel = Color(red: 0.07, green: 0.09, blue: 0.125)
-    static let accent = Color(red: 0.34, green: 0.70, blue: 1)
-}
-
-struct CastButtonStyle: ButtonStyle {
-    var primary = false
-    @Environment(\.isEnabled) private var isEnabled
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 16, weight: .medium))
-            .padding(.horizontal, 18).frame(minHeight: 46)
-            .foregroundStyle(primary ? Color.black : Color.white.opacity(0.9))
-            .background(primary ? CastStyle.accent : Color.white.opacity(configuration.isPressed ? 0.13 : 0.055), in: RoundedRectangle(cornerRadius: 13))
-            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(.white.opacity(primary ? 0 : 0.08)))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.8 : 1) : 0.35)
-    }
+    static let canvas = Color(nsColor: .windowBackgroundColor)
+    static let panel = Color(nsColor: .controlBackgroundColor)
+    static let accent = Color.accentColor
 }
 
 private struct StreamListView: View {
@@ -95,14 +68,6 @@ private struct StreamListView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("正在投屏").font(.system(size: 18, weight: .semibold))
-                    Text("\(streamer.sessions.count)")
-                        .font(.system(size: 14, weight: .medium, design: .monospaced))
-                        .foregroundStyle(CastStyle.accent).padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(CastStyle.accent.opacity(0.1), in: Capsule())
-                    Spacer()
-                }
                 if streamer.sessions.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "rectangle.on.rectangle")
@@ -118,10 +83,11 @@ private struct StreamListView: View {
                 ForEach(streamer.sessions) { session in
                     SessionRow(session: session, streamer: streamer, onStop: { streamer.removeSession(session) }, onEdit: { editSession = session })
                 }
-                Button(action: onAdd) {
+                if streamer.sessions.isEmpty { Button(action: onAdd) {
                     Label("添加投屏", systemImage: "plus").frame(maxWidth: .infinity).padding(.vertical, 6)
-                }.buttonStyle(CastButtonStyle(primary: true))
+                }.buttonStyle(.borderedProminent) }
             }
+            .frame(maxWidth: 760).frame(maxWidth: .infinity)
         }
         .sheet(item: $editSession) { session in
             EditStreamSheet(session: session, streamer: streamer)
@@ -138,30 +104,25 @@ private struct BrowserSenderAddresses: View {
     @ObservedObject var server: CastingServer
     let code: String
     let internet: Bool
+    @State private var copied = ""
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("网页接收地址").font(.headline)
+        HStack(spacing: 12) {
             if let port = server.browserListeningPort {
-                ForEach(CastingServer.localIPs.filter(BrowserReceiverServer.isLocalAddress), id: \.self) { ip in
+                if let ip = CastingServer.localIPs.first(where: BrowserReceiverServer.isLocalAddress) {
                     address("局域网", InternetSettings.localBrowserAddress(ip: ip, port: port, code: code))
                 }
-            } else { Text("局域网页入口未就绪").foregroundStyle(.secondary) }
+            } else { Text("局域网准备中…").font(.caption).foregroundStyle(.secondary) }
             if internet { address("公网", InternetSettings.browserAddress(code: code)) }
-            else { Text("公网网页接收需开启广域网直连和匹配码。").foregroundStyle(.secondary) }
-            Text("在浏览器输入地址后点击开始接收；音视频由本机直传。")
-                .font(.caption).foregroundStyle(.secondary)
         }
     }
     private func address(_ title: String, _ value: String) -> some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(title).font(.caption).foregroundStyle(.secondary)
-                Text(value).font(.system(size: 13, design: .monospaced)).textSelection(.enabled)
-            }
-            Spacer()
-            Button("复制") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string) }
-                .accessibilityLabel("复制\(title)网页接收地址")
+        Button {
+            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(value, forType: .string)
+            copied = value
+        } label: {
+            Label(copied == value ? "已复制\(title)地址" : "复制\(title)地址", systemImage: copied == value ? "checkmark" : "link")
         }
+        .help(value).accessibilityLabel("复制\(title)网页接收地址")
     }
 }
 
@@ -177,38 +138,28 @@ private struct SessionRow: View {
     @State private var codeEditorFrame = CGRect.zero
     @StateObject private var codeSuggestion = MatchingCodeSuggestion()
     @State private var localCodeSuggestion: String?
+    @State private var showSettings = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text(session.contentName).font(.system(size: 22, weight: .semibold)).lineLimit(2)
+                    Text(session.contentName).font(.headline).lineLimit(2)
                     if case .failed(let message) = session.phase {
                         Text(message).foregroundStyle(.red).lineLimit(2)
                     } else if session.phase == .starting {
                         Text("正在连接画面…").foregroundStyle(.orange)
                     } else {
-                        HStack(spacing: 14) {
-                            Text("\(session.encWidth) × \(session.encHeight)")
-                            Text("\(Int(session.currentFPS)) fps")
-                            Text("\(session.bitrate / 1_000_000) Mbps")
-                        }.font(.system(size: 15, design: .monospaced)).foregroundStyle(.secondary)
+                        Text("正在共享").font(.subheadline).foregroundStyle(.secondary)
                     }
                 }
                 Spacer()
                 HStack(spacing: 8) {
                     statusDot
-                    Text("\(session.clientCount) 台已连接").font(.system(size: 15))
-                }.padding(.horizontal, 14).padding(.vertical, 9)
-                    .background(.white.opacity(0.04), in: Capsule())
+                    Text(session.clientCount == 0 ? "等待接收" : "\(session.clientCount) 台已连接").font(.subheadline).foregroundStyle(.secondary)
+                }
             }
-            HStack(spacing: 24) {
-                Toggle("允许广域网直连", isOn: $session.internetEnabled).toggleStyle(.switch)
-                Toggle("允许广域网匹配码", isOn: $session.internetMatchingEnabled).toggleStyle(.switch).disabled(!session.internetEnabled)
-            }
-            BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
-            ConnectionPrivacyNotice()
-            if session.internetEnabled {
+            if session.internetEnabled && session.internetCodeConflict {
                 Text(session.internetStatus).font(.system(size: 14))
                     .foregroundStyle(session.internetCodeConflict ? Color.red : Color.secondary)
                 if session.internetCodeConflict {
@@ -263,24 +214,39 @@ private struct SessionRow: View {
                     }
                 }
                 Spacer()
-                Toggle("显示光标", isOn: $session.showsCursor).toggleStyle(.switch).fixedSize()
-                Toggle("页面声音", isOn: $session.sendsPageAudio).toggleStyle(.switch)
-                Toggle("话筒声音", isOn: $session.sendsMicrophone).toggleStyle(.switch)
             }
-            HStack(spacing: 18) {
-                Text("码率").foregroundStyle(.secondary)
-                Slider(value: Binding(get: { Double(session.bitrate) / 1_000_000 },
-                                      set: { session.updateQuality(bitrate: Int($0 * 1_000_000)) }),
-                       in: 8...100, step: 2).frame(maxWidth: 240)
-                Text("\(session.bitrate / 1_000_000) Mbps")
-                    .font(.system(size: 17, design: .monospaced)).frame(width: 110, alignment: .leading)
-                Spacer(minLength: 0)
-                Picker("帧率", selection: Binding(get: { session.fps }, set: { session.updateQuality(fps: $0) })) {
-                    Text("30 fps").tag(30)
-                    Text("60 fps").tag(60)
-                }.labelsHidden().pickerStyle(.segmented).frame(width: 180)
-            }
+            BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
+            Divider()
             HStack(spacing: 12) {
+                Button { showSettings.toggle() } label: { Label("投屏设置", systemImage: "slider.horizontal.3") }
+                    .popover(isPresented: $showSettings) {
+                        VStack(alignment: .leading, spacing: 18) {
+                            Text("投屏设置").font(.headline)
+                            Toggle("显示光标", isOn: $session.showsCursor)
+                            Toggle("页面声音", isOn: $session.sendsPageAudio)
+                            Toggle("话筒声音", isOn: $session.sendsMicrophone)
+                            Divider()
+                            Toggle("允许公网直连", isOn: $session.internetEnabled)
+                            Toggle("允许公网匹配码", isOn: $session.internetMatchingEnabled).disabled(!session.internetEnabled)
+                            Divider()
+                            Text("\(session.encWidth) × \(session.encHeight) · \(Int(session.currentFPS)) fps")
+                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                            HStack {
+                                Text("码率")
+                                Spacer()
+                                Text("\(session.bitrate / 1_000_000) Mbps").monospacedDigit().foregroundStyle(.secondary)
+                            }
+                            Slider(value: Binding(get: { Double(session.bitrate) / 1_000_000 },
+                                      set: { session.updateQuality(bitrate: Int($0 * 1_000_000)) }),
+                                   in: 8...100, step: 2).accessibilityLabel("投屏码率")
+                            Picker("帧率", selection: Binding(get: { session.fps }, set: { session.updateQuality(fps: $0) })) {
+                                Text("30 fps").tag(30)
+                                Text("60 fps").tag(60)
+                            }.pickerStyle(.segmented)
+                            Text(session.internetStatus).font(.caption).foregroundStyle(.secondary)
+                            ConnectionPrivacyNotice()
+                        }.toggleStyle(.switch).padding(20).frame(width: 480)
+                    }
                 Spacer()
                 Button { session.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                 Button(action: onEdit) { Label("换源", systemImage: "rectangle.2.swap") }
@@ -299,8 +265,8 @@ private struct SessionRow: View {
         })
         .coordinateSpace(name: "code-card")
         .padding(24)
-        .background(CastStyle.panel, in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(.white.opacity(0.07)))
+        .background(CastStyle.panel, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.primary.opacity(0.06)))
     }
 
     private func commitCode() {
@@ -322,7 +288,7 @@ private struct SessionRow: View {
     }
 
     private var statusDot: some View {
-        Circle().fill(session.phase == .streaming ? Color.green : Color.red).frame(width: 10, height: 10)
+        Circle().fill(session.phase == .streaming ? (session.clientCount > 0 ? Color.green : Color.orange) : Color.red).frame(width: 7, height: 7)
     }
 }
 
@@ -356,8 +322,8 @@ private struct AddStreamSheet: View {
                 Button(action: { streamer.loadShareableContent() }) {
                     Image(systemName: "arrow.clockwise.circle")
                 }
-                .buttonStyle(CastButtonStyle())
-                .controlSize(.large)
+                .buttonStyle(.bordered)
+                .controlSize(.regular)
                 .help("刷新应用列表")
                 Text("已选 \(selected.count) 个").font(.system(size: 16)).foregroundStyle(.blue)
                 Button("取消") { isPresented = false }
@@ -377,7 +343,7 @@ private struct AddStreamSheet: View {
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
                             }
-                            .buttonStyle(CastButtonStyle()).controlSize(.large)
+                            .buttonStyle(.bordered).controlSize(.regular)
                             .tint(selected.contains(key) ? .blue : nil)
                         }
                         .padding(14)
@@ -454,7 +420,7 @@ private struct AddStreamSheet: View {
                         selectedDisplays.removeAll()
                         isPresented = false
                     }
-                    .buttonStyle(CastButtonStyle(primary: true))
+                    .buttonStyle(.borderedProminent)
                     .disabled(!code.isEmpty && !MatchingCode.isValid(code))
                     Button("清除选择") {
                         selected.removeAll()
@@ -462,7 +428,7 @@ private struct AddStreamSheet: View {
                         selectedWindows.removeAll()
                         selectedDisplays.removeAll()
                     }
-                    .buttonStyle(CastButtonStyle())
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -535,7 +501,7 @@ private struct EditStreamSheet: View {
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
                             }
-                            .buttonStyle(CastButtonStyle()).controlSize(.large)
+                            .buttonStyle(.bordered).controlSize(.regular)
                             .tint(selected.contains(key) ? .blue : nil)
                         }
                         .padding(14)
@@ -560,14 +526,14 @@ private struct EditStreamSheet: View {
                     Button("确认切换 (\(selected.count)个)") {
                         applyChanges()
                     }
-                    .buttonStyle(CastButtonStyle(primary: true))
+                    .buttonStyle(.borderedProminent)
                     Button("清除选择") {
                         selected.removeAll()
                         selectedApps.removeAll()
                         selectedWindows.removeAll()
                         selectedDisplays.removeAll()
                     }
-                    .buttonStyle(CastButtonStyle())
+                    .buttonStyle(.bordered)
                 }
             }
         }
@@ -643,7 +609,7 @@ private struct AppGroupPicker: View {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
                         else { selected.insert(key); selectedApps.append((group.application.applicationName, group.application)) }
                     }
-                    .buttonStyle(CastButtonStyle()).controlSize(.large)
+                    .buttonStyle(.bordered).controlSize(.regular)
                     .tint(selected.contains(key) ? .blue : nil)
                 }
             }
@@ -662,7 +628,7 @@ private struct AppGroupPicker: View {
                             if selected.contains(key) { selected.remove(key); selectedWindows.removeAll { $0.1 === window } }
                             else { selected.insert(key); selectedWindows.append((title, window)) }
                         }
-                        .buttonStyle(CastButtonStyle()).controlSize(.large)
+                        .buttonStyle(.bordered).controlSize(.regular)
                         .tint(selected.contains(key) ? .blue : nil)
                     }
                     .padding(.leading, 28)
@@ -696,7 +662,7 @@ private struct EditAppGroupPicker: View {
                     Button("投屏整个应用") {
                         selectedFilter = filter; selectedName = group.application.applicationName
                     }
-                    .buttonStyle(CastButtonStyle()).controlSize(.large)
+                    .buttonStyle(.bordered).controlSize(.regular)
                     .tint(selectedFilter === filter ? .blue : nil)
                 }
             }
@@ -714,7 +680,7 @@ private struct EditAppGroupPicker: View {
                         Button("选择") {
                             selectedFilter = filter; selectedName = title
                         }
-                        .buttonStyle(CastButtonStyle()).controlSize(.large)
+                        .buttonStyle(.bordered).controlSize(.regular)
                         .tint(selectedFilter === filter ? .blue : nil)
                     }
                 }
@@ -735,7 +701,7 @@ private struct pickerRow: View {
         Button("选择") {
             selectedFilter = filter; selectedName = name
         }
-        .buttonStyle(CastButtonStyle()).controlSize(.large)
+        .buttonStyle(.bordered).controlSize(.regular)
         .tint(selectedFilter === filter ? .blue : nil)
     }
 }

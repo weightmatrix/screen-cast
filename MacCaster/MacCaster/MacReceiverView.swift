@@ -86,7 +86,7 @@ struct MacReceiverView: View {
                     Label("投屏模式", systemImage: "arrow.up.circle")
                         .font(.system(size: 16))
                 }
-                .buttonStyle(CastButtonStyle())
+                .buttonStyle(.bordered)
                 .controlSize(.large)
                 Button { closeDrawer() } label: {
                     Image(systemName: "xmark.circle.fill").font(.system(size: 23)).foregroundStyle(.secondary)
@@ -138,7 +138,7 @@ struct MacReceiverView: View {
                 Button(action: toggleConnection) {
                 Text(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开" : "连接").frame(maxWidth: .infinity)
             }
-            .buttonStyle(CastButtonStyle(primary: true))
+            .buttonStyle(.borderedProminent)
             .tint(isConnected ? .red : .blue)
 
             Divider()

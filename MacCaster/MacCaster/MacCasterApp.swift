@@ -20,7 +20,7 @@ struct MacCasterApp: App {
     }
 
     var body: some Scene {
-        WindowGroup(AppPresentation.title) {
+        WindowGroup("投屏") {
             RootView()
                 .environmentObject(streamer)
                 .task {
@@ -37,7 +37,7 @@ struct MacCasterApp: App {
                     #endif
                 }
         }
-        .defaultSize(width: 960, height: 740)
+        .defaultSize(width: 820, height: 600)
         .commands {
             CommandGroup(replacing: .help) {
                 Link("隐私政策", destination: AppPresentation.privacyURL)
@@ -55,11 +55,11 @@ struct RootView: View {
             if appMode == "receive" { MacReceiverView() }
             else { ContentView() }
         }
-        .font(.system(size: 16))
-        .buttonStyle(CastButtonStyle())
-        .controlSize(.large)
+        .font(.body)
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
         .tint(CastStyle.accent)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(appMode == "receive" ? .dark : nil)
     }
 }
 
