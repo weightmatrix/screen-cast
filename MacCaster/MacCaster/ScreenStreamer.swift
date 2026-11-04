@@ -240,6 +240,9 @@ extension ScreenStreamer {
 
 final class StreamSession: NSObject, ObservableObject, Identifiable {
     let id = UUID()
+    let recorder = LocalLessonRecorder(automaticKey: "lessonAutomatic.send")
+    private var recordingAudioTimer: DispatchSourceTimer?
+    private let recordingAudioConsumer = UUID()
     let port: UInt16
     @Published var contentName: String
     @Published var code: String {
@@ -330,6 +333,19 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
 
     func start() {
         guard stream == nil else { return }
+        if recordingAudioTimer == nil {
+            let timer = DispatchSource.makeTimerSource(queue: workQueue)
+            timer.schedule(deadline: .now(), repeating: .milliseconds(10))
+            timer.setEventHandler { [weak self] in
+                guard let self, self.recorder.acceptsFrames else { return }
+                let stereo = self.server.nativeSource.audio.read(frames: 480, consumer: self.recordingAudioConsumer)
+                let mono = stride(from: 0, to: stereo.count - 1, by: 2).map {
+                    max(-1, min(1, (Float(stereo[$0]) + Float(stereo[$0 + 1])) / 32768))
+                }
+                self.recorder.appendAudio(mono, time: CACurrentMediaTime())
+            }
+            recordingAudioTimer = timer; timer.resume()
+        }
         DiagLog.log("Stream", "start port \(port)")
         server.configureNative(bitrate: bitrate, fps: targetFPS)
         server.start()
@@ -348,6 +364,11 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     func stop() {
+        recorder.stop()
+        workQueue.sync {
+            recordingAudioTimer?.cancel(); recordingAudioTimer = nil
+            server.nativeSource.audio.remove(consumer: recordingAudioConsumer)
+        }
         qualityWorkItem?.cancel()
         qualityWorkItem = nil
         releaseRemoteTouch()
@@ -653,6 +674,7 @@ extension StreamSession {
 extension StreamSession {
     private func encodeH264(_ pb: CVPixelBuffer) {
         drawAnnotations(on: pb)
+        recorder.appendVideo(CIImage(cvPixelBuffer: pb))
         server.nativeSource.append(pb)
     }
 }

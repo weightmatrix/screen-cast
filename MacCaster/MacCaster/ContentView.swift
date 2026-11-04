@@ -233,6 +233,7 @@ private struct SessionRow: View {
             HStack(spacing: 12) {
                 Button { showSettings.toggle() } label: { Label("投屏设置", systemImage: "slider.horizontal.3") }
                     .popover(isPresented: $showSettings) {
+                        ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             Text("投屏设置").font(.headline)
                             Toggle("显示光标", isOn: $session.showsCursor)
@@ -258,7 +259,10 @@ private struct SessionRow: View {
                             }.pickerStyle(.segmented)
                             Text(session.internetStatus).font(.caption).foregroundStyle(.secondary)
                             ConnectionPrivacyNotice()
+                            Divider()
+                            LocalRecordingControls(recorder: session.recorder)
                         }.toggleStyle(.switch).padding(20).frame(width: 480)
+                        }.frame(maxHeight: 680)
                     }
                 Spacer()
                 Button { session.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }

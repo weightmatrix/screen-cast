@@ -8,6 +8,14 @@ import SwiftUI
 /// never blocks WebRTC or the audio render thread; only two pictures are retained.
 final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     @Published private(set) var isArmed = false
+    @Published private(set) var isRecording = false
+    @Published var automatic: Bool = false {
+        didSet {
+            UserDefaults.standard.set(automatic, forKey: automaticKey)
+            if automatic { start() } else { stop() }
+        }
+    }
+    private let automaticKey: String
     @Published private(set) var message = "未录课"
     @Published private(set) var folder: URL?
     @Published private(set) var lastFile: URL?
@@ -37,8 +45,15 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         var audioTime = -Double.infinity
         init(folder: URL, size: CGSize, time: Double) throws {
             self.size = size; started = time
-            let name = "录课-\(Int(Date().timeIntervalSince1970))-\(UUID().uuidString.prefix(8)).mp4"
-            writer = try AVAssetWriter(outputURL: folder.appendingPathComponent(name), fileType: .mp4)
+            let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
+            let stem = formatter.string(from: Date())
+            var url = folder.appendingPathComponent(stem + ".mp4")
+            var suffix = 2
+            while FileManager.default.fileExists(atPath: url.path) {
+                url = folder.appendingPathComponent("\(stem) (\(suffix)).mp4"); suffix += 1
+            }
+            writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
             video = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
                 AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 8_000_000,
@@ -62,7 +77,8 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
     }
 
-    init(folder: URL? = nil, segmentDuration: TimeInterval = 600) {
+    init(folder: URL? = nil, segmentDuration: TimeInterval = 600, automaticKey: String = "lessonAutomatic.receive") {
+        self.automaticKey = automaticKey
         self.segmentDuration = segmentDuration
         Self.instances.add(self)
         if let folder { self.folder = folder; return }
@@ -72,6 +88,8 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                 scope = url; _ = url.startAccessingSecurityScopedResource(); self.folder = url
             }
         }
+        automatic = UserDefaults.standard.bool(forKey: automaticKey)
+        if automatic, self.folder != nil { start() }
     }
 
     func chooseFolder() {
@@ -100,7 +118,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     func stop() {
         guard isArmed else { return }
         lock.lock(); accepting = false; lock.unlock()
-        isArmed = false; isSaving = true; message = "正在保存录课…"
+        isArmed = false; isRecording = false; isSaving = true; message = "正在保存录课…"
         queue.async {
             self.finishSegment()
             if self.finishing == 0 { self.publish("已停止录课"); DispatchQueue.main.async { self.isSaving = false } }
@@ -119,6 +137,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return accepting ? generation : nil
     }
+    var acceptsFrames: Bool { ticket() != nil }
     private func valid(_ token: UUID) -> Bool {
         lock.lock(); defer { lock.unlock() }
         return generation == token
@@ -152,7 +171,9 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                 guard segment.pixels.append(buffer, withPresentationTime: CMTime(seconds: time - segment.started, preferredTimescale: 60000)) else {
                     throw segment.writer.error ?? RecordingError.message("录课视频写入失败")
                 }
+                let firstFrame = self.lastVideoTime == -.infinity
                 self.lastVideoTime = time
+                if firstFrame { DispatchQueue.main.async { if self.isArmed { self.isRecording = true } } }
             } catch { self.fail(error) }
         }
     }
@@ -193,8 +214,8 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
 
     private func finishSegment() {
         guard let current = segment else { return }
-        segment = nil; finishing += 1
-        DispatchQueue.main.async { self.isSaving = true }
+        segment = nil; finishing += 1; lastVideoTime = -.infinity
+        DispatchQueue.main.async { self.isSaving = true; self.isRecording = false }
         current.video.markAsFinished(); current.audio.markAsFinished()
         current.writer.finishWriting {
             self.queue.async {
@@ -211,7 +232,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     private func fail(_ error: Error) {
         lock.lock(); accepting = false; generation = UUID(); lock.unlock()
         if let segment { segment.writer.cancelWriting(); self.segment = nil }
-        DispatchQueue.main.async { self.isArmed = false; self.message = error.localizedDescription }
+        DispatchQueue.main.async { self.isArmed = false; self.isRecording = false; self.message = error.localizedDescription }
     }
     /// Keep AppKit alive until all active files have written their MP4 indexes.
     static func prepareForTermination(_ reply: @escaping () -> Void) -> Bool {
@@ -240,16 +261,23 @@ struct LocalRecordingControls: View {
     @ObservedObject var recorder: LocalLessonRecorder
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("本地录课").font(.headline)
-            Text(recorder.folder?.path ?? "请先选择录课文件夹").font(.caption).textSelection(.enabled)
             HStack {
                 Button("选择文件夹") { recorder.chooseFolder() }.disabled(recorder.isArmed || recorder.isSaving)
-                Button(recorder.isArmed ? "停止录课" : "开启自动录课") {
-                    if recorder.isArmed { recorder.stop() } else { recorder.start() }
-                }.disabled(!recorder.isArmed && recorder.isSaving)
+                    .help(recorder.folder?.path ?? "选择录课保存位置")
             }
-            Text(recorder.message).font(.caption)
-            Text("保存接收到的画面及当前接收的声音；MP4，最长边 1920、最高 30 fps，每 10 分钟分段。断线后自动续录为新文件。").font(.caption).foregroundStyle(.secondary)
+            HStack(spacing: 12) {
+                Toggle("开启自动录课", isOn: $recorder.automatic).toggleStyle(.checkbox)
+                Spacer()
+                Button { if recorder.isArmed { recorder.stop() } else { recorder.start() } } label: {
+                    Circle().fill(recorder.isRecording ? Color.green : Color.secondary.opacity(0.15))
+                        .frame(width: 18, height: 18)
+                }.disabled(!recorder.isArmed && recorder.isSaving)
+                    .help(recorder.isArmed ? "停止本次录课" : "开始录课")
+                    .accessibilityLabel(recorder.isArmed ? "停止录课" : "开始录课")
+            }
+            if !recorder.isArmed && recorder.message != "未录课" && recorder.message != "录课已保存" && recorder.message != "已停止录课" {
+                Text(recorder.message).font(.caption).foregroundStyle(.secondary)
+            }
             if let url = recorder.lastFile {
                 Button("显示最近录课") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }

@@ -27,11 +27,13 @@ import CoreImage
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         precondition(!recorder.isSaving && !recorder.isArmed)
+        precondition(!recorder.isRecording)
         let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }
         precondition(files.count >= 4, "Timed rollover, reconnect and rotation must produce separate files: \(recorder.message)")
         var totalVideo = 0, totalAudio = 0
         var sizes = Set<String>()
         for file in files {
+            precondition(file.lastPathComponent.range(of: #"^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}( \(\d+\))?\.mp4$"#, options: .regularExpression) != nil)
             let asset = AVURLAsset(url: file)
             let videos = try await asset.loadTracks(withMediaType: .video)
             let audios = try await asset.loadTracks(withMediaType: .audio)

@@ -102,13 +102,6 @@ struct MacReceiverView: View {
                     }.buttonStyle(AppGlassButtonStyle(prominent: connectMode == mode.rawValue))
                 }
             }
-            if connectMode == "wanIP" {
-                Text("需要发送端可达的公网地址和映射端口；不经过配对服务器。")
-                    .font(.system(size: 14)).foregroundStyle(.secondary)
-            } else if connectMode == "wanCode" {
-                Text("发送端需开启广域网直连。仅交换配对信息；无法穿透时会报错，不转发视频。")
-                    .font(.system(size: 14)).foregroundStyle(.secondary)
-            }
             if connectMode == "ip" || connectMode == "wanIP" {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(connectMode == "wanIP" ? "对方公网地址" : "对方局域网地址").font(.system(size: 16)).foregroundStyle(.secondary)
@@ -125,8 +118,8 @@ struct MacReceiverView: View {
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("匹配码").font(.system(size: 16)).foregroundStyle(.secondary)
                 TextField("6–36 位数字", text: $matchCode)
+                    .accessibilityLabel("匹配码")
                     .textFieldStyle(.roundedBorder)
                     .frame(width: 180)
             }
