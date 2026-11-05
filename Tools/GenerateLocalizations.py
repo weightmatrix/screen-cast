@@ -148,6 +148,13 @@ ROWS += """
 投送者拒绝申请或连接已达上限|投送者拒絕申請或連線已達上限|Request declined or connection limit reached|Solicitud rechazada o límite alcanzado|Anfrage abgelehnt oder Limit erreicht|Demande refusée ou limite atteinte|Richiesta rifiutata o limite raggiunto|申請が拒否されたか接続上限に達しました|요청이 거절되었거나 연결 한도에 도달했습니다
 请更新投送端以启用公网接入审批|請更新投送端以啟用公網審批|Update the sender to enable Internet approval|Actualiza el emisor para habilitar la aprobación|Sender für Internetfreigaben aktualisieren|Mettez l’émetteur à jour pour l’approbation Internet|Aggiorna il mittente per approvare l’accesso Internet|送信側を更新して接続承認を有効にしてください|전송 앱을 업데이트하여 인터넷 승인을 활성화하세요
 """
+ROWS += """
+语言|語言|Language|Idioma|Sprache|Langue|Lingua|言語|언어
+设置|設定|Settings|Ajustes|Einstellungen|Réglages|Impostazioni|設定|설정
+完成|完成|Done|Listo|Fertig|Terminé|Fine|完了|완료
+皮肤|佈景|Theme|Tema|Design|Thème|Tema|テーマ|테마
+外观|外觀|Appearance|Apariencia|Darstellung|Apparence|Aspetto|外観|화면 모드
+"""
 strings = {}
 for row in ROWS.strip().splitlines():
     if not row.strip(): continue

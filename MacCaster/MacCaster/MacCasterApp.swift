@@ -5,6 +5,7 @@ import AppKit
 struct MacCasterApp: App {
     @NSApplicationDelegateAdaptor(RecordingAppDelegate.self) private var appDelegate
     @StateObject private var streamer = ScreenStreamer()
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     @AppStorage("appearance.colorScheme") private var appearance = "system"
 
     init() {
@@ -24,6 +25,7 @@ struct MacCasterApp: App {
     var body: some Scene {
         WindowGroup("投屏") {
             RootView()
+                .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
                 .preferredColorScheme(AppAppearance.scheme(appearance))
                 .environmentObject(streamer)
@@ -50,6 +52,7 @@ struct MacCasterApp: App {
         }
         Settings {
             AppearanceSettingsView()
+                .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
                 .preferredColorScheme(AppAppearance.scheme(appearance))
         }
@@ -81,11 +84,14 @@ private struct AppearanceSettingsView: View {
                     Text("固定深色").tag("dark")
                 }.pickerStyle(.segmented)
             }
+            Section("语言") {
+                AppLanguagePicker()
+            }
         }
         .formStyle(.grouped)
         .font(.system(size: 16))
         .controlSize(.large)
-        .frame(width: 520, height: skin == "icons3d" ? 390 : 300)
+        .frame(width: 520, height: skin == "icons3d" ? 480 : 390)
         .navigationTitle("设置")
     }
 }
@@ -116,7 +122,7 @@ struct SkinModeLabel: View {
             } else {
                 Image(systemName: symbol).font(.system(size: 24))
             }
-            Text(title).font(.system(size: 17, weight: .semibold))
+            Text(LocalizedStringKey(title)).font(.system(size: 17, weight: .semibold))
         }
     }
 }

@@ -45,7 +45,7 @@ struct iPadSenderView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button { appMode = "receive" } label: { Label(AppPresentation.receiveWorkbench, systemImage: "arrow.down.left") }
+                    Button { appMode = "receive" } label: { Label(LocalizedStringKey(AppPresentation.receiveWorkbench), systemImage: "arrow.down.left") }
                         .buttonStyle(.bordered).controlSize(.large)
                 }
                 VStack(alignment: .leading, spacing: 24) {

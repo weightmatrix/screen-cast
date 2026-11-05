@@ -1,6 +1,44 @@
 import Foundation
 import SwiftUI
 
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system, simplified = "zh-Hans", traditional = "zh-Hant"
+    case english = "en", spanish = "es", german = "de", french = "fr"
+    case italian = "it", japanese = "ja", korean = "ko"
+    static let storageKey = "appearance.language"
+    var id: String { rawValue }
+    var nativeName: String {
+        switch self {
+        case .system: return "跟随系统"
+        case .simplified: return "简体中文"
+        case .traditional: return "繁體中文"
+        case .english: return "English"
+        case .spanish: return "Español"
+        case .german: return "Deutsch"
+        case .french: return "Français"
+        case .italian: return "Italiano"
+        case .japanese: return "日本語"
+        case .korean: return "한국어"
+        }
+    }
+    static func locale(_ value: String) -> Locale {
+        guard let choice = Self(rawValue: value), choice != .system else { return .autoupdatingCurrent }
+        return Locale(identifier: choice.rawValue)
+    }
+}
+
+struct AppLanguagePicker: View {
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
+    var body: some View {
+        Picker("语言", selection: $language) {
+            ForEach(AppLanguage.allCases) { choice in
+                if choice == .system { Text("跟随系统").tag(choice.rawValue) }
+                else { Text(verbatim: choice.nativeName).tag(choice.rawValue) }
+            }
+        }
+    }
+}
+
 /// Visible identity follows the installed app version on both native platforms.
 enum AppPresentation {
     static let privacyURL = URL(string: "https://zhibenwang.com/touping/privacy.html")!
@@ -10,7 +48,7 @@ enum AppPresentation {
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
         return "李知本·投屏自由·V\(version)（\(build)）"
     }
-    static var receiveWorkbench: String { NSLocalizedString("接收工作台", comment: "Receiver title") }
+    static let receiveWorkbench = "接收工作台"
 }
 
 struct ConnectionLegalNotice: View {

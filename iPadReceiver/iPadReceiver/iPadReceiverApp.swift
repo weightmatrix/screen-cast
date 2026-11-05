@@ -2,16 +2,20 @@ import SwiftUI
 
 @main
 struct iPadReceiverApp: App {
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     init() { StartupTiming.entered = ProcessInfo.processInfo.systemUptime }
     var body: some Scene {
         WindowGroup {
             RootView()
+                .environment(\.locale, AppLanguage.locale(language))
         }
     }
 }
 
 struct RootView: View {
     @AppStorage("appMode") private var appMode = ""
+    @State private var showSettings = false
+    @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     var body: some View {
         Group {
             #if DEBUG
@@ -27,6 +31,23 @@ struct RootView: View {
             content
             #endif
         }.preferredColorScheme(.dark)
+        .overlay(alignment: .topTrailing) {
+            Button { showSettings = true } label: {
+                Image(systemName: "gearshape").padding(12)
+            }
+            .accessibilityLabel("设置")
+            .background(.regularMaterial, in: Circle()).padding(12)
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationView {
+                Form { Section("语言") { AppLanguagePicker() } }
+                    .navigationTitle("设置")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) {
+                        Button("完成") { showSettings = false }
+                    } }
+            }.navigationViewStyle(.stack)
+                .environment(\.locale, AppLanguage.locale(language))
+        }
         .onAppear { StartupTiming.rootVisible() }
         .task {
             #if DEBUG

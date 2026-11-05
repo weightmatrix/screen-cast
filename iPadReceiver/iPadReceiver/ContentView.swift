@@ -137,7 +137,7 @@ struct ContentView: View {
                 Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
                 HStack {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(AppPresentation.receiveWorkbench).font(.system(size: 30, weight: .semibold))
+                        Text(LocalizedStringKey(AppPresentation.receiveWorkbench)).font(.system(size: 30, weight: .semibold))
                     }
                     Spacer()
                     Button { closeDrawer() } label: {
@@ -153,7 +153,7 @@ struct ContentView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(ConnectionMode.allCases) { mode in
                     Button { client.disconnect(); connectMode = mode.rawValue } label: {
-                        Text(mode.label).font(.system(size: 16, weight: .medium))
+                        Text(LocalizedStringKey(mode.label)).font(.system(size: 16, weight: .medium))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(.bordered).tint(connectMode == mode.rawValue ? .blue : .gray)
                 }
@@ -204,7 +204,7 @@ struct ContentView: View {
                 }.buttonStyle(.plain)
                 HStack(spacing: 12) {
                     Circle().fill(statusColor).frame(width: 9, height: 9)
-                    Text(statusText).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
+                    Text(LocalizedStringKey(statusText)).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
                 }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
                     .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 16))
                 DisclosureGroup("连接诊断") {
@@ -235,9 +235,9 @@ struct ContentView: View {
 
     private var statusText: String {
         switch client.status {
-        case .idle: client.recoveryMessage.isEmpty ? NSLocalizedString("未连接", comment: "Connection status") : client.recoveryMessage
-        case .connecting: client.recoveryMessage.isEmpty ? NSLocalizedString("连接中...", comment: "Connection status") : client.recoveryMessage
-        case .connected: NSLocalizedString("已连接", comment: "Connection status")
+        case .idle: client.recoveryMessage.isEmpty ? "未连接" : client.recoveryMessage
+        case .connecting: client.recoveryMessage.isEmpty ? "连接中..." : client.recoveryMessage
+        case .connected: "已连接"
         case .failed(let m): client.recoveryMessage.isEmpty ? m : client.recoveryMessage
         }
     }

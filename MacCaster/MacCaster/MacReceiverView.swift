@@ -77,7 +77,7 @@ struct MacReceiverView: View {
         ScrollView {
         VStack(alignment: .leading, spacing: 24) {
             Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
-            Text(AppPresentation.receiveWorkbench).font(.system(size: 26, weight: .semibold))
+            Text(LocalizedStringKey(AppPresentation.receiveWorkbench)).font(.system(size: 26, weight: .semibold))
             HStack {
                 Button {
                     client.disconnect()
@@ -98,7 +98,7 @@ struct MacReceiverView: View {
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 ForEach(ConnectionMode.allCases) { mode in
                     Button { client.disconnect(); connectMode = mode.rawValue } label: {
-                        Text(mode.label).font(.system(size: 16, weight: .medium))
+                        Text(LocalizedStringKey(mode.label)).font(.system(size: 16, weight: .medium))
                             .frame(maxWidth: .infinity, minHeight: 44)
                     }.buttonStyle(AppGlassButtonStyle(prominent: connectMode == mode.rawValue))
                 }
@@ -144,7 +144,7 @@ struct MacReceiverView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Circle().fill(statusColor).frame(width: 8, height: 8)
-                    Text(statusText).font(.subheadline)
+                    Text(LocalizedStringKey(statusText)).font(.subheadline)
                 }
                 if isConnected {
                     ReceiveTimingView(timing: client.receiveTiming).foregroundStyle(.secondary)
@@ -166,9 +166,9 @@ struct MacReceiverView: View {
 
     private var statusText: String {
         switch client.status {
-        case .idle: client.recoveryMessage.isEmpty ? NSLocalizedString("未连接", comment: "Connection status") : client.recoveryMessage
-        case .connecting: client.recoveryMessage.isEmpty ? NSLocalizedString("连接中...", comment: "Connection status") : client.recoveryMessage
-        case .connected: NSLocalizedString("已连接", comment: "Connection status")
+        case .idle: client.recoveryMessage.isEmpty ? "未连接" : client.recoveryMessage
+        case .connecting: client.recoveryMessage.isEmpty ? "连接中..." : client.recoveryMessage
+        case .connected: "已连接"
         case .failed(let m): client.recoveryMessage.isEmpty ? m : client.recoveryMessage
         }
     }

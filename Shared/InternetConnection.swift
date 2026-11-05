@@ -158,10 +158,10 @@ enum ConnectionMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .localIP: return NSLocalizedString("局域 IP 直连", comment: "Connection mode")
-        case .localCode: return NSLocalizedString("局域匹配码", comment: "Connection mode")
-        case .internetIP: return NSLocalizedString("广域网 IP 直连", comment: "Connection mode")
-        case .internetCode: return NSLocalizedString("广域网匹配码", comment: "Connection mode")
+        case .localIP: return "局域 IP 直连"
+        case .localCode: return "局域匹配码"
+        case .internetIP: return "广域网 IP 直连"
+        case .internetCode: return "广域网匹配码"
         }
     }
 }
