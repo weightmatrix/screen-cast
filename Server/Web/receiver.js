@@ -27,7 +27,59 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：72\n阶段：${s.closed?'已结束':s.connected?'已直连':s.paired?'配对完成，直连检查':'等待配对'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}`;
+    $('diagnostics').textContent=`网页版本：75\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+  }
+  function mediaDescription(s) {
+    const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
+    const value=key=>Number.isFinite(media?.[key])?media[key]:'未知';
+    return `视频轨道：${track?`${track.readyState} / ${track.muted?'等待数据':'有数据'}`:'未收到'}\n视频RTP：包=${value('packetsReceived')} / 字节=${value('bytesReceived')}\n视频帧：收到=${value('framesReceived')} / 解码=${value('framesDecoded')} / 关键帧=${value('keyFramesDecoded')} / 丢弃=${value('framesDropped')}\n编码：${s.codec||'未知'}\n播放器：${video.videoWidth||0}×${video.videoHeight||0} / ready=${video.readyState} / ${video.paused?'暂停':'播放中'} / 已呈现=${s.presented??'未知'}\n播放错误：${s.playError||'无'} / 媒体错误码：${video.error?.code||'无'}\n统计：${s.statsError?'暂不可用':media?'已读取':'等待读取'}`;
+  }
+  function pictureReady(s) {
+    const video=$('video');
+    return video.videoWidth>0 && video.videoHeight>0 && video.readyState>=2 && (s.presented>0 || video.currentTime>0);
+  }
+  function mediaStatus(s) {
+    if(current!==s || s.closed || !s.connected) return;
+    const video=$('video');
+    if(pictureReady(s)) {
+      if(!s.picture) {s.picture=true;status('已连接 · 已收到画面');}
+    } else if(!s.picture && performance.now()-s.connectedAt>=12000) {
+      if(s.playError) status('已直连，但播放器尚未播放；请点击“播放画面”');
+      else if(!s.stream?.getVideoTracks().length) status('已直连，但没有收到视频轨道；请检查投送端是否仍在分享');
+      else if(s.media && s.media.bytesReceived===0) status('已直连，但没有收到视频数据；请检查投送端是否仍在分享');
+      else if(s.media && s.media.framesDecoded===0) status('已直连，视频尚未解码；请复制下方连接诊断');
+      else if(video.paused) status('已直连，但播放器尚未播放；请点击“播放画面”');
+      else status('已直连，仍未显示画面；请复制下方连接诊断');
+    }
+    diagnostics(s);
+  }
+  function playVideo(s, manual=false) {
+    if(current!==s || s.closed || (!manual && s.picture)) return;
+    const video=$('video');
+    try {
+      Promise.resolve(video.play()).then(()=>{if(current!==s || s.closed)return;s.playError='';mediaStatus(s);},error=>{
+        if(current!==s || s.closed)return;
+        s.playError=['NotAllowedError','NotSupportedError','AbortError'].includes(error.name)?error.name:'播放失败';
+        status('已收到媒体轨道，请点击“播放画面”');diagnostics(s);
+      });
+    } catch(_) {s.playError='播放失败';diagnostics(s);}
+  }
+  async function sampleMedia(s) {
+    if(current!==s || s.closed || !s.connected || s.statsBusy) return;
+    s.statsBusy=true;
+    try {
+      const stats=await s.pc.getStats();
+      if(current!==s || s.closed)return;
+      let inbound;
+      stats.forEach(item=>{if(item.type==='inbound-rtp' && (item.kind||item.mediaType)==='video' && !item.isRemote)inbound=item;});
+      s.media=inbound;s.statsError=false;
+      const codec=inbound && stats.get(inbound.codecId);
+      s.codec=codec && /^video\/(H264|VP8|VP9|AV1)$/i.test(codec.mimeType)?codec.mimeType:'';
+      const quality=$('video').getVideoPlaybackQuality?.();
+      if(Number.isFinite(quality?.totalVideoFrames))s.presented=quality.totalVideoFrames;
+      mediaStatus(s);
+    } catch(_) {if(current===s && !s.closed){s.statsError=true;mediaStatus(s);}}
+    finally {s.statsBusy=false;}
   }
   function send(s, object) {
     if (current !== s || s.closed) return;
@@ -48,10 +100,10 @@
     if (!s || s.closed) return;
     if(s.connected) report(s, 'ended');
     window.ToupingRoom?.stop(s);
-    s.closed = true; clearTimeout(s.timeout); clearTimeout(s.disconnected); clearTimeout(s.retry); clearInterval(s.clock);
+    s.closed = true; clearTimeout(s.timeout); clearTimeout(s.disconnected); clearTimeout(s.retry); clearInterval(s.clock); clearInterval(s.mediaClock);
     if (local && s.id) fetch('./leave', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:s.id}),keepalive:true}).catch(()=>{});
     s.abort.abort(); if(s.ws) s.ws.close(); s.pc.close(); diagnostics(s);
-    if (current === s) { current = null; $('video').srcObject = null; $('start').disabled=false; $('stop').disabled=true; status(text || '已断开'); }
+    if (current === s) { current = null; $('video').srcObject = null; $('start').disabled=false; $('stop').disabled=true; $('play').disabled=true; status(text || '已断开'); }
   }
   function fail(s, error) { if (current === s && !s.closed) { console.warn('接收连接失败：', error.message); stop(s, error.message || '连接失败，请重试'); } }
   async function receive(s, packet) {
@@ -94,7 +146,7 @@
       id=Array.from(crypto.getRandomValues(new Uint8Array(16)), x=>x.toString(16).padStart(2,'0')).join('');
       try { localStorage.setItem('touping-browser-id',id); } catch(_) {}
     }
-    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'72-web'};
+    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'75-web'};
   }
   function report(s, event) {
     if(local || !/^[a-f0-9]{32}$/.test(s.auditSession || '')) return;
@@ -145,9 +197,24 @@
       abort:new AbortController(),chain:Promise.resolve(),pending:[],ice:[],messages:0,bytes:0,received:0,closed:false,connected:false};
     window.ToupingRoom?.attach(s);
     current=s; $('start').disabled=true; $('stop').disabled=false; status('正在连接发送端…');
-    const stream=new MediaStream(); $('video').srcObject=stream;
+    const stream=new MediaStream(); s.stream=stream;
     s.pc.createDataChannel('native-video-stats-v1',{negotiated:true,id:0,ordered:false,maxRetransmits:0});
-    s.pc.ontrack=event=>{if(current!==s) return; stream.addTrack(event.track); window.ToupingRoom?.track(s,stream); $('video').play().catch(()=>{if(current===s && !s.closed) status('已收到媒体轨道，请点击播放器播放');});};
+    s.pc.ontrack=event=>{
+      if(current!==s || s.closed) return;
+      if(!stream.getTracks().includes(event.track))stream.addTrack(event.track);
+      // Attach a populated stream: Safari may not activate an initially empty stream.
+      $('video').srcObject=new MediaStream(stream.getTracks());
+      $('play').disabled=false;
+      // Optional audio metering must never prevent video playback.
+      try {window.ToupingRoom?.track(s,stream);} catch(_) {s.meterError=true;}
+      event.track.addEventListener('unmute',()=>{playVideo(s);diagnostics(s);},{signal:s.abort.signal});
+      event.track.addEventListener('ended',()=>diagnostics(s),{signal:s.abort.signal});
+      playVideo(s);diagnostics(s);
+    };
+    for(const name of ['loadeddata','playing','resize','pause','waiting','error']) {
+      $('video').addEventListener(name,()=>{if(current===s && !s.closed)mediaStatus(s);},{signal:s.abort.signal});
+    }
+    s.mediaClock=setInterval(()=>sampleMedia(s),2000);
     s.pc.onicecandidate=event=>{if(event.candidate) try {tally(s.localCandidates,event.candidate.candidate); diagnostics(s); send(s,{type:'candidate',candidate:event.candidate.candidate,mid:event.candidate.sdpMid,line:event.candidate.sdpMLineIndex});} catch(error){fail(s,error);}};
     s.pc.onicecandidateerror=event=>{s.stunErrors++; s.stunCode=event.errorCode; if(current===s) diagnostics(s);};
     s.pc.onicegatheringstatechange=()=>{if(current===s) diagnostics(s);};
@@ -156,7 +223,7 @@
       if(current!==s || s.closed) return;
       const state=s.pc.connectionState;
       if(state==='connected') {
-        s.connected=true; s.connectedAt=performance.now(); report(s, 'connected'); clearTimeout(s.timeout); clearTimeout(s.disconnected); clearInterval(s.clock); diagnostics(s); status('已连接 · 设备直接传输');
+        s.connected=true; s.connectedAt=performance.now(); report(s, 'connected'); clearTimeout(s.timeout); clearTimeout(s.disconnected); clearInterval(s.clock); diagnostics(s); status('已直连，等待首帧画面…'); sampleMedia(s);
         if(!local) { try {send(s,{type:'done'});} catch(error){fail(s,error);} }
       } else if(state==='failed') fail(s,Error('无法直连，请检查网络；此服务不提供视频中继'));
       else if(state==='disconnected') {status('连接中断，正在等待网络恢复…'); s.disconnected=setTimeout(()=>fail(s,Error('连接已中断，请重新接收')),8000);}
@@ -168,6 +235,7 @@
     try { if(local) await localJoin(s,code); else await publicJoin(s,code); } catch(error){fail(s,error);}
   });
   $('stop').onclick=()=>stop(current);
+  $('play').onclick=()=>{if(current)playVideo(current,true);};
   $('sound').onclick=()=>{const video=$('video'); video.muted=!video.muted; $('sound').textContent=video.muted?t('开启声音'):t('关闭声音'); if(!video.muted) video.play().catch(()=>status('请点击播放器播放声音'));};
   $('fullscreen').onclick=()=>{const video=$('video'); if(video.requestFullscreen) video.requestFullscreen().catch(()=>{}); else if(video.webkitEnterFullscreen) video.webkitEnterFullscreen();};
   window.addEventListener('pagehide',()=>stop(current));

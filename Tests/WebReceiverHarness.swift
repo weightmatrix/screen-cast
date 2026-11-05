@@ -8,7 +8,10 @@ import CoreImage
         precondition(BrowserReceiverServer.isLocalAddress("127.0.0.1"))
         precondition(!BrowserReceiverServer.isLocalAddress("8.8.8.8"))
         precondition(!BrowserReceiverServer.isLocalAddress("172.32.0.1"))
-        let source = NativeScreenSource(); source.configure(fps: 15, dimension: 640)
+        let width = Int(ProcessInfo.processInfo.environment["TOUPING_TEST_WIDTH"] ?? "640") ?? 640
+        let height = Int(ProcessInfo.processInfo.environment["TOUPING_TEST_HEIGHT"] ?? "480") ?? 480
+        precondition((320...5120).contains(width) && (180...2880).contains(height) && width % 2 == 0 && height % 2 == 0)
+        let source = NativeScreenSource(); source.configure(fps: 15, dimension: max(width, height))
         let addresses = ProcessInfo.processInfo.environment["TOUPING_TEST_LAN_IP"].map { [$0] } ?? []
         let server = BrowserReceiverServer(port: 20319, code: { "61328407" }, addresses: { addresses }) {
             NativeVideoPeer(source: source, internet: false, bitrate: 8_000_000, fps: 15)
@@ -31,13 +34,13 @@ import CoreImage
         defer { server.stop(); room.stop() }
         let context = CIContext(options: [.cacheIntermediates: false])
         var pixel: CVPixelBuffer?
-        CVPixelBufferCreate(nil, 640, 480, kCVPixelFormatType_32BGRA,
+        CVPixelBufferCreate(nil, width, height, kCVPixelFormatType_32BGRA,
             [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel)
         guard let pixel else { fatalError("No test buffer") }
-        var image = CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: 640, height: 480))
+        var image = CIImage(color: .black).cropped(to: CGRect(x: 0, y: 0, width: width, height: height))
         for (color, rect) in zip([CIColor.red, .green, .blue, .yellow],
-            [CGRect(x: 0,y: 240,width: 320,height: 240), CGRect(x: 320,y: 240,width: 320,height: 240),
-             CGRect(x: 0,y: 0,width: 320,height: 240), CGRect(x: 320,y: 0,width: 320,height: 240)]) {
+            [CGRect(x: 0,y: height / 2,width: width / 2,height: height / 2), CGRect(x: width / 2,y: height / 2,width: width / 2,height: height / 2),
+             CGRect(x: 0,y: 0,width: width / 2,height: height / 2), CGRect(x: width / 2,y: 0,width: width / 2,height: height / 2)]) {
             image = CIImage(color: color).cropped(to: rect).composited(over: image)
         }
         context.render(image, to: pixel)
