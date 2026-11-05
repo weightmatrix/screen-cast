@@ -7,6 +7,8 @@ struct iPadSenderView: View {
     @AppStorage("appMode") private var appMode = "cast"
     @State private var code = ""
     @State private var showDiagnostics = false
+    @State private var pendingSubmission: String?
+    @State private var pending: [PendingConnection] = []
     @State private var peers: [PeerDiagnostic] = []
     @State private var localIPs = ""
     @State private var signalPort = 0
@@ -142,6 +144,14 @@ struct iPadSenderView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
+                ConnectionLegalNotice()
+                PendingConnectionsView(requests: pending) { id, accepted in
+                    guard pendingSubmission == nil else { return }
+                    pendingSubmission = id
+                    if !BroadcastSettings.store.set((accepted ? "accept:" : "reject:") + id, forKey: "broadcastApproval") {
+                        pendingSubmission = nil; status = "审批命令无法共享，请检查应用签名"
+                    }
+                }.disabled(pendingSubmission != nil)
                 VStack(alignment: .leading, spacing: 16) {
                     Button { showDiagnostics.toggle() } label: { Label("诊断", systemImage: "waveform.path.ecg") }
                     if showDiagnostics {
@@ -258,7 +268,8 @@ struct iPadSenderView: View {
             let snapshot = SenderLiveStatus()
             DispatchQueue.main.async {
                 refreshing = false
-                active = snapshot.active; peers = snapshot.peers; localIPs = snapshot.localIPs
+                active = snapshot.active; peers = snapshot.peers; pending = snapshot.active ? snapshot.pending : [];
+                if let id = pendingSubmission, !pending.contains(where: { $0.id == id }) { pendingSubmission = nil } localIPs = snapshot.localIPs
                 signalPort = snapshot.signalPort; internetPort = snapshot.internetPort; browserPort = snapshot.browserPort
                 internetStatus = snapshot.internetStatus; resolutionStatus = snapshot.resolutionStatus
                 status = !snapshot.active && snapshot.status == "正在投屏" ? "投屏已结束" : snapshot.status
@@ -295,6 +306,7 @@ struct iPadSenderView: View {
     private struct SenderLiveStatus {
         let active: Bool
         let peers: [PeerDiagnostic]
+        let pending: [PendingConnection]
         let localIPs: String
         let signalPort: Int
         let internetPort: Int
@@ -307,6 +319,7 @@ struct iPadSenderView: View {
             let store = BroadcastSettings.store
             peers = active ? (store.string(forKey: "broadcastPeers").flatMap { $0.data(using: .utf8) }
                 .flatMap { try? JSONDecoder().decode([PeerDiagnostic].self, from: $0) } ?? []) : []
+            pending = (store.string(forKey: "broadcastPending").flatMap { $0.data(using: .utf8) }.flatMap { try? JSONDecoder().decode([PendingConnection].self, from: $0) }) ?? []
             localIPs = store.string(forKey: "broadcastLocalIPs") ?? ""
             signalPort = store.integer(forKey: "broadcastSignalPort")
             internetPort = store.integer(forKey: "broadcastInternetPort")

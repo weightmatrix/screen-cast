@@ -41,10 +41,40 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         self.audit_dir.cleanup()
     async def client(self,role,key='a'*64):
         c=await Client.open(self.port); self.clients.append(c)
-        await c.send({'role':role,'room':key}); return c
+        await c.send({'role':role,'room':key,'approval':1}); return c
     async def pair(self):
         a=await self.client('sender'); self.assertEqual((await a.receive())[1]['type'],'waiting')
-        b=await self.client('receiver'); self.assertEqual((await a.receive())[1]['type'],'peer'); return a,b
+        b=await self.client('receiver'); self.assertEqual((await a.receive())[1]['type'],'peer')
+        self.assertEqual((await b.receive())[1]['type'], 'waiting_approval')
+        await a.send({'type':'approve'})
+        self.assertEqual((await a.receive())[1]['type'], 'approved')
+        self.assertEqual((await b.receive())[1]['type'], 'approved')
+        return a,b
+    async def test_cannot_negotiate_before_approval(self):
+        a = await self.client('sender'); await a.receive()
+        b = await self.client('receiver'); await a.receive(); await b.receive()
+        await a.send({'type':'offer','sdp':'v=0\r\nforbidden'})
+        self.assertEqual((await a.receive())[0], 8)
+        self.assertEqual((await b.receive())[1]['type'], 'error')
+
+    async def test_receiver_cannot_approve_itself(self):
+        a = await self.client('sender'); await a.receive()
+        b = await self.client('receiver'); await a.receive(); await b.receive()
+        await b.send({'type':'approve'})
+        self.assertEqual((await b.receive())[0], 8)
+
+    async def test_sender_must_support_approval(self):
+        a = await Client.open(self.port); self.clients.append(a)
+        await a.send({'role':'sender','room':'a'*64})
+        self.assertEqual((await a.receive())[1]['type'], 'error')
+        self.assertFalse(service.ROOMS)
+
+    async def test_rejected_request_never_receives_media_offer(self):
+        a = await self.client('sender'); await a.receive()
+        b = await self.client('receiver'); await a.receive(); await b.receive()
+        await a.send({'type':'reject'})
+        self.assertEqual((await b.receive())[1]['type'], 'error')
+
     async def test_pairing_forward_and_both_connected_close(self):
         a,b=await self.pair()
         msg={'type':'offer','sdp':'v=0\r\nexample'}; await a.send(msg); self.assertEqual((await b.receive())[1],msg)
@@ -88,7 +118,7 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         device = {'installation_id': 'b' * 32, 'platform': 'iPadOS', 'model': 'iPad11,1',
                   'os_version': '26.0.1', 'app_version': '1.4', 'app_build': '50'}
         a = await Client.open(self.port); self.clients.append(a)
-        await a.send({'role': 'sender', 'room': 'a' * 64, 'device': device})
+        await a.send({'role': 'sender', 'room': 'a' * 64, 'device': device, 'approval':1})
         self.assertEqual((await a.receive())[1], {'type': 'waiting'})
         with open(self.audit_path) as stream: events = [json.loads(line) for line in stream]
         record = next(event for event in events if event['event'] == 'device_reported')
@@ -222,10 +252,13 @@ class AuditTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path=os.path.join(directory,'connections.jsonl')
             log=AuditLog(path, max_bytes=512, backups=2, retention_days=1)
-            for _ in range(12): log.record('test', ip='203.0.113.4')
-            self.assertLessEqual(len(os.listdir(directory)),3)
+            for _ in range(6): log.record('test', ip='203.0.113.4')
+            with self.assertRaises(AuditUnavailable):
+                for _ in range(12): log.record('test', ip='203.0.113.4')
+            self.assertLessEqual(len([name for name in os.listdir(directory) if name != ".lock"]),3)
             self.assertEqual(os.stat(path).st_mode & 0o777,0o600)
             for name in os.listdir(directory):
+                if name == ".lock": continue
                 with open(os.path.join(directory,name)) as stream:
                     for line in stream: self.assertEqual(json.loads(line)['event'],'test')
             old=path+'.2'; os.utime(old,(1,1)); log.last_cleanup=0

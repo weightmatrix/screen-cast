@@ -1,3 +1,11 @@
+## 2026-11-05 当前运维要求
+
+境外复制已停止（腾讯timer禁用，service inactive/dead），不新增第二台。保留已有快照待依法核对，不擅自删除。audit_snapshot.py未升级200段格式，且destination_region不是CN时拒绝发送；禁止重启旧境外复制任务。
+
+当前源日志最多200个5MiB段，固定184天，满后拒绝新配对；不要通过删除未到期日志恢复容量，应扩容并调整有界实现。新的cleanup_audit.py和touping-audit-cleanup.service/timer只在境内运行，主日志及admin-audit使用共享.lock；锁文件归各数据目录所有者，避免root清理造成nobody写入失败。标准systemd入口只链接ops，脚本/上传均留在投屏沙盒。后台日志读挂载及管理操作写目录见排课仓库docker-compose.touping-audit.yml；不得向HTTP暴露data目录。
+
+下方为旧复制运维档案，不代表仍在启用。
+
 # 投屏审计运维沙盒
 
 应用目录统一为`/srv/apps/<app>/`。目录隔离还须配合账户、权限、容器/服务资源限制；仅创建文件夹不等于OS级安全沙盒。下列配置只涉及投屏，不迁移或停止其他应用。

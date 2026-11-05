@@ -28,6 +28,10 @@ private final class Counts: @unchecked Sendable {
         server.onInternetStatus = { if $0.contains("匹配就绪") { registrations += 1 } }
         server.onClientCountChanged = { viewers = $0 }
         server.configureNative(bitrate: 8_000_000, fps: 30)
+        let approval = server.$pendingConnections.sink { requests in
+            for request in requests { DispatchQueue.main.async { server.respondToRequest(request.id, accept: true) } }
+        }
+        defer { approval.cancel() }
         server.start(); server.setInternetEnabled(true)
         let first = NativeVideoRoom(code: code), second = NativeVideoRoom(code: code)
         first.video.onImage = { _ in counts.frame(0) }; second.video.onImage = { _ in counts.frame(1) }

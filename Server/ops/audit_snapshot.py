@@ -102,6 +102,8 @@ def create_snapshot(audit, output):
 def send(root):
     root = Path(root)
     config = json.loads((root / 'secrets/replication.json').read_text())
+    if config.get('destination_region') != 'CN':
+        raise ValueError('Replication disabled: a verified domestic destination is required')
     state = root / 'data/replication'
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
     receipt = state / 'last-success.json'

@@ -14,7 +14,7 @@ def audit(event, **metadata):
     global AUDIT
     if AUDIT is None:
         try:
-            days = max(1, min(3650, int(os.environ.get('AUDIT_RETENTION_DAYS', '90'))))
+            days = 184  # Fixed operational policy; legal holds are handled separately.
             AUDIT = AuditLog(os.environ.get('AUDIT_LOG_PATH', 'audit/connections.jsonl'), retention_days=days)
         except (OSError, ValueError) as error: raise AuditUnavailable('Connection audit unavailable') from error
     AUDIT.record(event, **metadata)
@@ -78,6 +78,14 @@ class Socket:
             if not isinstance(obj, dict): raise Rejected()
             return obj
 
+async def maintain_audit():
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            if AUDIT is not None: AUDIT.cleanup()
+        except OSError:
+            print('Connection audit maintenance failed; check private storage', flush=True)
+
 async def keepalive(ws):
     while True:
         await asyncio.sleep(60)
@@ -92,17 +100,33 @@ def device_metadata(value):
     if any(not isinstance(value[key], str) or not re.fullmatch(pattern, value[key]) for key, pattern in patterns.items()): raise Rejected()
     return value
 
+async def expire_approval(room):
+    await asyncio.sleep(60)
+    if room['approved']: return
+    try: audit('admission_expired', pair_id=room['id'])
+    except AuditUnavailable: print('Connection audit unavailable during admission expiry', flush=True)
+    for peer in (room['sender'], room['receiver']):
+        if peer:
+            try:
+                await peer.send({'type':'error','message':'接入申请已超时'})
+                await peer.frame(8, struct.pack('!H', 1000))
+                peer.writer.close()
+            except (OSError, ConnectionError): pass
+
 async def exchange(ws):
     hello = await asyncio.wait_for(ws.receive(), 10)
     role, key = hello.get('role'), hello.get('room')
     if (role == 'audit') != ws.audit_only: raise Rejected()
     if role == 'audit':
-        if set(hello) != {'role', 'route', 'session_id', 'peer_role', 'event', 'device'}: raise Rejected()
-        if hello['route'] != 'internet_ip' or hello['peer_role'] not in ('sender', 'receiver') or hello['event'] not in ('attempt', 'connected', 'ended'): raise Rejected()
+        if set(hello) - {'role', 'route', 'session_id', 'peer_role', 'event', 'device', 'duration_ms'}: raise Rejected()
+        if hello.get('route') not in ('internet_ip', 'internet_code') or hello['peer_role'] not in ('sender', 'receiver') or hello['event'] not in ('attempt', 'approved', 'rejected', 'connected', 'ended'): raise Rejected()
         if not isinstance(hello['session_id'], str) or not re.fullmatch('[a-f0-9]{32}', hello['session_id']): raise Rejected()
+        if hello['event'] in ('approved', 'rejected') and (hello['route'] != 'internet_ip' or hello['peer_role'] != 'sender'): raise Rejected()
+        duration = hello.get('duration_ms')
+        if duration is not None and (hello['event'] != 'ended' or type(duration) is not int or not 0 <= duration <= 31 * 86400000): raise Rejected()
         device = device_metadata(hello['device'])
         if device is None: raise Rejected()
-        audit('direct_connection_reported', **ws.context, route='internet_ip', session_id=hello['session_id'],
+        audit('direct_connection_reported', **ws.context, route=hello['route'], session_id=hello['session_id'], duration_ms=duration,
               peer_role=hello['peer_role'], lifecycle=hello['event'], device=device,
               evidence='client_report_only', mac_address_available=False)
         await ws.send({'type': 'audit_recorded'})
@@ -127,13 +151,15 @@ async def exchange(ws):
     audit('device_reported', **ws.context, device=device, evidence='client_report_only',
           device_metadata_available=device is not None, mac_address_available=False)
     if role == 'sender':
+        if hello.get('approval') != 1:
+            await ws.send({'type':'error','message':'请更新投送端以启用公网接入审批'}); return
         if key in ROOMS:
             audit('pairing_rejected', **ws.context, reason='room_unavailable')
             await ws.send({'type':'error','code':'code_in_use','message':'匹配码已使用，请修改匹配码'}); return
         if len(ROOMS) >= 32:
             audit('pairing_rejected', **ws.context, reason='server_busy')
             await ws.send({'type':'error','code':'server_busy','message':'配对服务繁忙，请稍后重试'}); return
-        room = {'sender': ws, 'receiver': None, 'finished': False, 'done': set(), 'bytes': 0, 'id': uuid.uuid4().hex}
+        room = {'sender': ws, 'receiver': None, 'finished': False, 'approved': False, 'approval_timeout': None, 'done': set(), 'bytes': 0, 'id': uuid.uuid4().hex}
         ROOMS[key] = room
     else:
         room = ROOMS.get(key)
@@ -145,12 +171,27 @@ async def exchange(ws):
         ws.context['pair_id'] = room['id']
         audit('sender_waiting' if role == 'sender' else 'receiver_joined', **ws.context)
         if role == 'sender': await ws.send({'type':'waiting'})
-        else: await room['sender'].send({'type':'peer'})
+        else:
+            await ws.send({'type':'waiting_approval'})
+            await room['sender'].send({'type':'peer'})
+            room['approval_timeout'] = asyncio.create_task(expire_approval(room))
         while True:
             obj = await ws.receive()
             kind = obj.get('type')
             room['bytes'] += len(json.dumps(obj, separators=(',', ':')).encode())
             if room['bytes'] > MAX_TOTAL: raise Rejected()
+            if kind in ('approve', 'reject'):
+                if role != 'sender' or not room['receiver'] or room['approved'] or set(obj) != {'type'}: raise Rejected()
+                audit('admission_approved' if kind == 'approve' else 'admission_rejected', **ws.context)
+                if kind == 'reject':
+                    await room['receiver'].send({'type':'error','message':'投送者拒绝申请或连接已达上限'})
+                    return
+                room['approved'] = True
+                if room['approval_timeout']: room['approval_timeout'].cancel()
+                for peer in (room['sender'], room['receiver']):
+                    await peer.send({'type':'approved', 'session_id':room['id']})
+                continue
+            if not room['approved']: raise Rejected()
             if kind == 'done':
                 if role not in room['done']:
                     audit('peer_reported_connected', **ws.context, evidence='client_report_only')
@@ -176,6 +217,7 @@ async def exchange(ws):
             peer = room['receiver'] if role == 'sender' else room['sender']
             if peer: await peer.send(obj)
     finally:
+        if room['approval_timeout']: room['approval_timeout'].cancel()
         if ROOMS.get(key) is room:
             ROOMS.pop(key, None)
         if not room['finished']:
@@ -199,11 +241,11 @@ async def connection(reader, writer):
         method, path, _ = parts[0].split(' ')
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
-        if method == 'GET' and path in ('/', '/receiver.js', '/privacy.html', '/support.html'):
+        if method == 'GET' and path in ('/', '/receiver.js', '/receiver-i18n.js', '/privacy.html', '/support.html'):
             asset = 'receiver.html' if path == '/' else path[1:]
             body = (Path(__file__).parent / 'Web' / asset).read_bytes()
             if len(body) > 65536: raise Rejected()
-            mime = b'application/javascript; charset=utf-8' if path == '/receiver.js' else b'text/html; charset=utf-8'
+            mime = b'application/javascript; charset=utf-8' if path.endswith('.js') else b'text/html; charset=utf-8'
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: '+mime+b'\r\nContent-Length: '+str(len(body)).encode()+
                 b"\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' wss://zhibenwang.com; media-src blob:; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n"+body)
             await writer.drain(); return
@@ -270,6 +312,7 @@ class STUN(asyncio.DatagramProtocol):
 
 async def main():
     audit('service_started', instance_id=uuid.uuid4().hex)
+    maintenance = asyncio.create_task(maintain_audit())
     host = os.environ.get('BIND_HOST', '127.0.0.1')
     server = await asyncio.start_server(connection, host, int(os.environ.get('PORT', '8322')), limit=8192)
     await asyncio.get_running_loop().create_datagram_endpoint(STUN, local_addr=('0.0.0.0', int(os.environ.get('STUN_PORT', '3478'))))

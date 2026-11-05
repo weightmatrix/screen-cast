@@ -224,7 +224,7 @@ final class StreamClient: ObservableObject {
             self.setStatus(.failed("连接或认证超时，请检查地址、端口和匹配码"))
         }
         connectionTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (internetDirect ? 85 : 10), execute: timeout)
         updateIdleTimerDisabled()
     }
 

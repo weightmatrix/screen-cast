@@ -36,10 +36,12 @@ enum DeviceAuditMetadata {
     }()
 }
 
-/// Three bounded, best-effort lifecycle reports. No media and no background retry loop.
+/// Bounded, best-effort lifecycle and sender admission reports. No media and no background retry loop.
 final class DirectConnectionAudit {
     let sessionID: String
     private let role: String
+    private let route: String
+    private var connectedAt: TimeInterval?
     private var events = Set<String>()
     private let eventLock = NSLock()
     private static let slotLock = NSLock()
@@ -49,17 +51,21 @@ final class DirectConnectionAudit {
         guard active < 16 else { return false }; active += 1; return true
     }
     private static func release() { slotLock.lock(); active -= 1; slotLock.unlock() }
-    init(sessionID: String? = nil, sending: Bool) {
+    init(sessionID: String? = nil, sending: Bool, route: String = "internet_ip") {
+        self.route = route
         self.sessionID = sessionID ?? UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         role = sending ? "sender" : "receiver"
         record("attempt")
     }
     func record(_ event: String) {
         eventLock.lock(); defer { eventLock.unlock() }
-        guard ["attempt", "connected", "ended"].contains(event), events.insert(event).inserted else { return }
+        guard ["attempt", "approved", "rejected", "connected", "ended"].contains(event), events.insert(event).inserted else { return }
         guard Self.reserve() else { PerformanceDisk.shared.write("audit.direct report_capacity_reached"); return }
-        let packet: [String: Any] = ["role": "audit", "route": "internet_ip", "session_id": sessionID,
+        if event == "connected" { connectedAt = ProcessInfo.processInfo.systemUptime }
+        var packet: [String: Any] = ["role": "audit", "route": route, "session_id": sessionID,
                                     "peer_role": role, "event": event, "device": DeviceAuditMetadata.value]
+        if event == "ended", let connectedAt { packet["duration_ms"] = Int((ProcessInfo.processInfo.systemUptime - connectedAt) * 1000) }
+        let report = packet
         Task {
             defer { Self.release() }
             let configuration = URLSessionConfiguration.ephemeral
@@ -74,7 +80,7 @@ final class DirectConnectionAudit {
             }
             defer { timeout.cancel(); socket.cancel(with: .normalClosure, reason: nil); session.invalidateAndCancel() }
             do {
-                let data = try JSONSerialization.data(withJSONObject: packet)
+                let data = try JSONSerialization.data(withJSONObject: report)
                 try await socket.send(.string(String(decoding: data, as: UTF8.self)))
                 let message = try await socket.receive()
                 guard case .string(let text) = message,
@@ -152,10 +158,10 @@ enum ConnectionMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .localIP: return "局域 IP 直连"
-        case .localCode: return "局域匹配码"
-        case .internetIP: return "广域网 IP 直连"
-        case .internetCode: return "广域网匹配码"
+        case .localIP: return NSLocalizedString("局域 IP 直连", comment: "Connection mode")
+        case .localCode: return NSLocalizedString("局域匹配码", comment: "Connection mode")
+        case .internetIP: return NSLocalizedString("广域网 IP 直连", comment: "Connection mode")
+        case .internetCode: return NSLocalizedString("广域网匹配码", comment: "Connection mode")
         }
     }
 }

@@ -8,15 +8,40 @@ enum AppPresentation {
     static var title: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "李知本·投屏管理·让画面自由连接·V\(version)（\(build)）"
+        return "李知本·投屏自由·V\(version)（\(build)）"
     }
-    static let receiveWorkbench = "接收工作台"
+    static var receiveWorkbench: String { NSLocalizedString("接收工作台", comment: "Receiver title") }
+}
+
+struct ConnectionLegalNotice: View {
+    var body: some View {
+        Text("请勿利用本工具传播违法信息或侵犯他人合法权益。公网接入须经投送者确认，必要连接日志依法留存。违法使用者依法承担相应责任。")
+            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+struct PendingConnectionsView: View {
+    let requests: [PendingConnection]
+    let respond: (String, Bool) -> Void
+    var body: some View {
+        ForEach(requests) { request in
+            HStack {
+                VStack(alignment: .leading) {
+                    Text("公网接入申请").font(.headline)
+                    Text("\(request.route) · \(request.id.prefix(8))").font(.caption)
+                }
+                Spacer()
+                Button("拒绝", role: .destructive) { respond(request.id, false) }
+                Button("接受") { respond(request.id, true) }
+            }
+        }
+    }
 }
 
 struct ConnectionPrivacyNotice: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("使用公网连接时，服务器记录来源IP、随机应用标识和连接状态；画面与声音不上传到服务器。")
+            Text("公网服务依法留存必要连接日志，包括来源IP、随机应用标识、审批与连接状态；客户端报告的连接时长不代表服务器核验。画面与声音不上传。详情及权利申请方式见隐私政策。")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Link("隐私政策", destination: AppPresentation.privacyURL)
@@ -45,6 +70,7 @@ struct PeerDiagnosticsView: View {
     let disconnect: (String) -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            ConnectionLegalNotice()
             if peers.isEmpty { Text("暂无已连接设备").foregroundStyle(.secondary) }
             ForEach(peers) { peer in
                 HStack(alignment: .top, spacing: 16) {

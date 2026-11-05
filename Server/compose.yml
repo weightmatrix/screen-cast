@@ -11,7 +11,7 @@ services:
       - ${TOUPING_AUDIT_DIR:-../data/audit}:/var/log/touping
       - ./Web:/app/Web:ro
     environment:
-      AUDIT_RETENTION_DAYS: ${TOUPING_AUDIT_RETENTION_DAYS:-90}
+      AUDIT_RETENTION_DAYS: "184"
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     mem_limit: 96m

@@ -9,6 +9,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     private var running = false
     private var lastDiagnosticSnapshot = ""
     private var lastDiagnosticNetwork = ""
+    private var lastPendingSnapshot = ""
     private let lifecycleLock = NSLock()
     private var lifecycle: UUID?
 
@@ -36,13 +37,15 @@ final class SampleHandler: RPBroadcastSampleHandler {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrent(token) else { return }
             self.running = true
-            self.lastDiagnosticSnapshot = ""; self.lastDiagnosticNetwork = ""
+            self.lastDiagnosticSnapshot = ""; self.lastDiagnosticNetwork = ""; self.lastPendingSnapshot = ""
             let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
             server.configureNative(bitrate: bitrate, fps: fps, dimension: requestedResolution)
             server.nativeSource.onResolution = { summary in defaults.set(summary, forKey: "broadcastResolutionStatus") }
             self.server = server
             defaults.set("", forKey: "broadcastKick")
             defaults.set("[]", forKey: "broadcastPeers")
+            defaults.set("[]", forKey: "broadcastPending")
+            defaults.set("", forKey: "broadcastApproval")
             self.observation = server.$lastError.compactMap { $0 }.sink { [weak self] text in self?.fail("网络监听失败：\(text)") }
             PerformanceDisk.shared.relay = { [weak server] line in
                 DispatchQueue.main.async { server?.sendDiagnostics(line) }
@@ -63,6 +66,18 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 self?.nativeCapture.audio.configure(page: defaults.bool(forKey: "broadcastPageAudio"), microphone: defaults.bool(forKey: "broadcastMicAudio"))
                 defaults.set(Date().timeIntervalSince1970, forKey: "broadcastHeartbeat")
                 if let server = self?.server {
+                    if let data = try? JSONEncoder().encode(server.pendingConnections) {
+                        let pendingJSON = String(decoding: data, as: UTF8.self)
+                        if pendingJSON != self?.lastPendingSnapshot {
+                            defaults.set(pendingJSON, forKey: "broadcastPending")
+                            self?.lastPendingSnapshot = pendingJSON
+                        }
+                    }
+                    if let command = defaults.string(forKey: "broadcastApproval"), !command.isEmpty {
+                        defaults.set("", forKey: "broadcastApproval")
+                        let parts = command.split(separator: ":", maxSplits: 1)
+                        if parts.count == 2 { server.respondToRequest(String(parts[1]), accept: parts[0] == "accept") }
+                    }
                     let snapshot = try? JSONEncoder().encode(server.diagnostics)
                     let json = snapshot.flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
                     if json != self?.lastDiagnosticSnapshot {
@@ -119,6 +134,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         observation = nil
         server?.stop(); server = nil
         BroadcastSettings.store.set("[]", forKey: "broadcastPeers")
+        BroadcastSettings.store.set("[]", forKey: "broadcastPending")
+        BroadcastSettings.store.set("", forKey: "broadcastApproval")
         BroadcastSettings.store.set("", forKey: "broadcastKick")
         DiscoveryBroadcaster.shared.stop()
         BroadcastSettings.store.set(false, forKey: "broadcastActive")

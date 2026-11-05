@@ -1,3 +1,9 @@
+## 2026-11-05 当前审计政策（覆盖下方旧版说明）
+
+仅境内腾讯主机留存；已停用境外复制timer/service，不新增第二台、不发邮件。旧境外快照未擅自删除，须另行核对处理。固定184天、日/5MiB分段、200段约1GiB，容量满拒绝配对而非覆盖未到期记录；共享锁协调轮转与ops/cleanup_audit.py。将ops内cleanup.service/timer链接到标准systemd目录并每小时运行，admin-audit目录也受184天清理。不要启用旧复制协议：仅支持40段，目标还必须明确destination_region=CN。
+
+新版公网sender必须approval=1，接收者先waiting_approval，投送者approve后双方才收到approved及随机session_id，随后才交换SDP/ICE。旧sender返回需升级，不能静默放行。公网IP审批发生在主投送设备，审计只作客户端报告，不证明身份或媒体内容。后台接口位于独立schedule-system仓库，使用JWT/is_god，日志只读挂载，管理操作单独留痕。下方90天/200MiB/境外复制为历史实现，不能作为当前部署指南。
+
 # 投屏轻量配对服务
 
 公网入口：https://zhibenwang.com/touping/health

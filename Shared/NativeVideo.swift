@@ -806,6 +806,10 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
 final class NativeVideoRoom: @unchecked Sendable {
     let video: NativeVideoPeer
     var onRegistered: (() -> Void)?
+    var onApprovalRequested: (() -> Void)?
+    private var lifecycleAudit: DirectConnectionAudit?
+    private var approvalPending = false
+    private var roomTimeout: DispatchWorkItem?
     var onConnected: (() -> Void)?
     var onError: ((String) -> Void)?
     private let code: String
@@ -825,6 +829,7 @@ final class NativeVideoRoom: @unchecked Sendable {
         video.onError = { [weak self] in self?.fail($0) }
         video.onConnected = { [weak self] in
             guard let self else { return }; self.connected = true
+            self.lifecycleAudit?.record("connected"); self.roomTimeout?.cancel()
             self.send(["type":"done"]); self.onConnected?()
         }
         let configuration = URLSessionConfiguration.ephemeral
@@ -832,11 +837,24 @@ final class NativeVideoRoom: @unchecked Sendable {
         let session = URLSession(configuration: configuration); self.session = session
         let socket = session.webSocketTask(with: InternetSettings.signalingURL); self.socket = socket
         socket.maximumMessageSize = 16384; socket.resume()
-        send(["role":sending ? "sender" : "receiver", "room":InternetSettings.room(code), "device": DeviceAuditMetadata.value])
+        send(["role":sending ? "sender" : "receiver", "room":InternetSettings.room(code), "device": DeviceAuditMetadata.value, "approval": 1])
+        if !sending { armConnectionTimeout() }
         read(socket)
+    }
+    private func armConnectionTimeout() {
+        roomTimeout?.cancel()
+        let timeout = DispatchWorkItem { [weak self] in self?.fail("接入申请或连接超时，请重试") }
+        roomTimeout = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + 90, execute: timeout)
+    }
+    func respondToApproval(accept: Bool) {
+        guard sending, approvalPending, !closed else { return }
+        approvalPending = false
+        send(["type": accept ? "approve" : "reject"])
     }
     func stop() {
         guard !closed else { return }; closed = true
+        roomTimeout?.cancel(); lifecycleAudit?.record("ended")
         socket?.cancel(with: .normalClosure, reason: nil); socket = nil
         session?.invalidateAndCancel(); session = nil; video.stop()
     }
@@ -862,7 +880,14 @@ final class NativeVideoRoom: @unchecked Sendable {
                     guard self.bytes <= 65536, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { self.fail("配对响应无效"); return }
                     switch object["type"] as? String {
                     case "waiting": self.onRegistered?()
-                    case "peer": if self.sending { self.video.offer() }
+                    case "peer":
+                        if self.sending { self.armConnectionTimeout(); self.approvalPending = true; self.onApprovalRequested?() }
+                    case "waiting_approval": break
+                    case "approved":
+                        if let id = object["session_id"] as? String {
+                            self.lifecycleAudit = DirectConnectionAudit(sessionID: id, sending: self.sending, route: "internet_code")
+                        }
+                        if self.sending { self.video.offer() }
                     case "error": self.fail(object["message"] as? String ?? "配对失败")
                     default: self.video.receive(object)
                     }

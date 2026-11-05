@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        CD6900000000000000000031 = {isa = PBXBuildFile; fileRef = CD6900000000000000000003; };
+        CD6900000000000000000032 = {isa = PBXBuildFile; fileRef = CD6900000000000000000003; };
+        CD6900000000000000000033 = {isa = PBXBuildFile; fileRef = CD6900000000000000000003; };
+        CD6900000000000000000021 = {isa = PBXBuildFile; fileRef = CD6900000000000000000002; };
+        CD6900000000000000000022 = {isa = PBXBuildFile; fileRef = CD6900000000000000000002; };
+        CD6900000000000000000023 = {isa = PBXBuildFile; fileRef = CD6900000000000000000002; };
+        CD6900000000000000000011 = {isa = PBXBuildFile; fileRef = CD6900000000000000000001; };
+        CD6900000000000000000012 = {isa = PBXBuildFile; fileRef = CD6900000000000000000001; };
+        CD6900000000000000000013 = {isa = PBXBuildFile; fileRef = CD6900000000000000000001; };
         CD6300000000000000000011 = {isa = PBXBuildFile; fileRef = CD6300000000000000000001; };
         CD6300000000000000000012 = {isa = PBXBuildFile; fileRef = CD6300000000000000000002; };
         CD5300000000000000000011 = {isa = PBXBuildFile; fileRef = CD5300000000000000000001; };
@@ -103,6 +112,9 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        CD6900000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectionAdmission.swift; path = Shared/ConnectionAdmission.swift; sourceTree = SOURCE_ROOT; };
+        CD6900000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = receiver-i18n.js; path = Server/Web/receiver-i18n.js; sourceTree = SOURCE_ROOT; };
+        CD6900000000000000000001 = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = Localizable.xcstrings; path = Shared/Localizable.xcstrings; sourceTree = SOURCE_ROOT; };
         CD6300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = image.png; path = Skin3DCast.png; sourceTree = "<group>"; };
         CD6300000000000000000002 = {isa = PBXFileReference; lastKnownFileType = image.png; path = Skin3DReceive.png; sourceTree = "<group>"; };
         CD5300000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BonjourDiscovery.swift; sourceTree = "<group>"; };
@@ -372,9 +384,10 @@
 			};
 			buildConfigurationList = AB0000000000000000000009 /* Build configuration list for PBXProject "Touping" */;
 			compatibilityVersion = "Xcode 14.0";
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
+                "zh-Hans", "zh-Hant", es, de, fr, it, ja, ko,
 				Base,
 				en,
 			);
@@ -399,6 +412,8 @@
 			buildActionMask = 2147483647;
 			files = (
                 CD5300000000000000000021,
+                CD6900000000000000000011,
+                CD6900000000000000000021,
                 CD5100000000000000000021,
                 CD5100000000000000000031,
 				AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */,
@@ -410,6 +425,8 @@
 			buildActionMask = 2147483647;
 			files = (
                 CD5300000000000000000022,
+                CD6900000000000000000012,
+                CD6900000000000000000022,
                 CD5100000000000000000022,
                 CD5100000000000000000032,
 			);
@@ -422,6 +439,8 @@
                 CD6300000000000000000011,
                 CD6300000000000000000012,
                 CD5300000000000000000023,
+                CD6900000000000000000013,
+                CD6900000000000000000023,
                 CD5100000000000000000023,
                 CD5100000000000000000033,
 				ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */,
@@ -448,6 +467,7 @@
 				37E2B1702F7D482592AC6FF0 /* StreamFormat.swift in Sources */,
                 EE0000000000000000000005,
                 EE0000000000000000000002,
+                CD6900000000000000000031,
                 CD5100000000000000000011,
                 CD5300000000000000000011,
                 FA0000000000000000000002,
@@ -470,6 +490,7 @@
 				051F8EC410C549609585E599 /* DiscoveryBroadcaster.swift in Sources */,
 				9DA644E696854AC8931ABDDB /* StreamFormat.swift in Sources */,
                 EE0000000000000000000003,
+                CD6900000000000000000032,
                 CD5100000000000000000012,
                 CD5300000000000000000012,
                 FA0000000000000000000003,
@@ -497,6 +518,7 @@
 				AB0000000000000000000204 /* CastingServer.swift in Sources */,
 				0163A58D9EED4007A80DFD15 /* StreamFormat.swift in Sources */,
                 EE0000000000000000000004,
+                CD6900000000000000000033,
                 CD5100000000000000000013,
                 CD5300000000000000000013,
                 FA0000000000000000000004,
@@ -937,7 +959,7 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
-				PRODUCT_NAME = "李知本·投屏";
+				PRODUCT_NAME = "李知本·投屏自由";
                 PRODUCT_MODULE_NAME = MacCaster;
                 EXECUTABLE_NAME = MacCaster;
 				SDKROOT = macosx;
@@ -1020,7 +1042,7 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
-				PRODUCT_NAME = "李知本·投屏";
+				PRODUCT_NAME = "李知本·投屏自由";
                 PRODUCT_MODULE_NAME = MacCaster;
                 EXECUTABLE_NAME = MacCaster;
 				SDKROOT = macosx;

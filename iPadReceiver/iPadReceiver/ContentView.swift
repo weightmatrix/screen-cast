@@ -87,18 +87,15 @@ struct ContentView: View {
                 matchCode = verificationCode
                 connectMode = "ip"
                 client.connect(host: host, port: verifyPort, code: matchCode)
-                drawerOpen = false
             }
             if args.contains("--verify-internet-code") {
                 matchCode = verificationCode
                 connectMode = "wanCode"
-                drawerOpen = false
                 client.connectInternetCode(verificationCode)
             }
             if args.contains("--verify-code") {
                 matchCode = verificationCode
                 connectMode = "code"
-                drawerOpen = false
             }
             #endif
         }
@@ -122,11 +119,12 @@ struct ContentView: View {
                 break
             }
         }
+        .onChange(of: isConnected) { connected in if !connected { openDrawer() } }
         .onDisappear { client.disconnect(); DiscoveryListener.shared.stop() }
     }
 
     private func openDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = true } }
-    private func closeDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = false } }
+    private func closeDrawer() { guard isConnected, client.frameCount > 0 else { return }; withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = false } }
 
     private var isConnected: Bool {
         if case .connected = client.status { return true }
@@ -237,9 +235,9 @@ struct ContentView: View {
 
     private var statusText: String {
         switch client.status {
-        case .idle: client.recoveryMessage.isEmpty ? "未连接" : client.recoveryMessage
-        case .connecting: client.recoveryMessage.isEmpty ? "连接中..." : client.recoveryMessage
-        case .connected: "已连接"
+        case .idle: client.recoveryMessage.isEmpty ? NSLocalizedString("未连接", comment: "Connection status") : client.recoveryMessage
+        case .connecting: client.recoveryMessage.isEmpty ? NSLocalizedString("连接中...", comment: "Connection status") : client.recoveryMessage
+        case .connected: NSLocalizedString("已连接", comment: "Connection status")
         case .failed(let m): client.recoveryMessage.isEmpty ? m : client.recoveryMessage
         }
     }

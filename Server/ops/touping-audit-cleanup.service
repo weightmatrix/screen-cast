@@ -1,0 +1,18 @@
+[Unit]
+Description=Expire domestic Touping audit metadata
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /srv/apps/touping/ops/cleanup_audit.py
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/apps/touping/data/audit /srv/apps/touping/data/admin-audit
+InaccessiblePaths=/srv/apps/touping/secrets /srv/apps/touping/backups
+RestrictAddressFamilies=AF_UNIX
+IPAddressDeny=any
+CPUQuota=5%
+MemoryMax=32M
+TasksMax=8

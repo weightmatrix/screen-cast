@@ -271,6 +271,7 @@ private struct SessionRow: View {
                 Button(action: onStop) { Label("停止", systemImage: "stop.fill").foregroundStyle(.red.opacity(0.85)) }
             }
         }
+        .onReceive(session.server.$pendingConnections) { if !$0.isEmpty { showConnections = true } }
         .onChange(of: codeFocused) { _, focused in if !focused && editingCode { commitCode() } }
         .onChange(of: codeError) { _, invalid in localCodeSuggestion = invalid ? streamer.suggestedLocalCode() : nil }
         .onChange(of: session.internetCodeConflict) { _, conflict in if conflict { requestSuggestion() } }
@@ -765,6 +766,8 @@ private struct SessionDiagnosticsView: View {
     @ObservedObject var server: CastingServer
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
+            ConnectionLegalNotice()
+            PendingConnectionsView(requests: server.pendingConnections) { server.respondToRequest($0, accept: $1) }
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("连接设备").font(.system(size: 24, weight: .bold, design: .rounded))

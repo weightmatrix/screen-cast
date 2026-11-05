@@ -577,7 +577,7 @@ final class MacReceiverClient: ObservableObject {
             self.setStatus(.failed("连接或认证超时，请检查地址、端口和匹配码"))
         }
         connectionTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + (internetDirect ? 85 : 10), execute: timeout)
     }
 
     private func handleDisconnect(_ disconnectedConnection: NWConnection) {
@@ -793,6 +793,7 @@ final class MacReceiverClient: ObservableObject {
         defer { client.disconnect() }
         var ready = false
         for _ in 0..<350 {
+            for request in server.pendingConnections { server.respondToRequest(request.id, accept: true) }
             if case .connected = client.status { ready = true; break }
             if case .failed = client.status { break }
             try? await Task.sleep(nanoseconds: 100_000_000)
@@ -880,6 +881,7 @@ final class MacReceiverClient: ObservableObject {
             if mode == "internetIP" { client.connectInternetIP(host: "127.0.0.1", port: 20318, code: code) }
             if mode == "internetCode" { client.connectInternetCode(code) }
             for _ in 0..<240 {
+                for request in server.pendingConnections { server.respondToRequest(request.id, accept: true) }
                 server.nativeSource.append(pixel)
                 try? await Task.sleep(nanoseconds: 33_333_333)
                 if case .failed = client.status { break }

@@ -25,6 +25,8 @@ final class BrowserReceiverServer {
     let port: UInt16
     var onReady: ((Bool) -> Void)?
     var onChanged: (() -> Void)?
+    var reserveSlot: ((String) -> Bool)?
+    var releaseSlot: ((String) -> Void)?
     private let code: () -> String
     private let addresses: () -> [String]
     private let makePeer: () -> NativeVideoPeer
@@ -56,7 +58,7 @@ final class BrowserReceiverServer {
         cleanup?.cancel(); cleanup = nil
         listener?.cancel(); listener = nil
         let active = Array(clients.values); clients.removeAll()
-        active.forEach { $0.video.stop() }
+        active.forEach { releaseSlot?($0.video.diagnosticID); $0.video.stop() }
         connections.values.forEach { $0.cancel() }; connections.removeAll(); rates.removeAll()
         onReady?(false); onChanged?()
     }
@@ -64,7 +66,7 @@ final class BrowserReceiverServer {
         if let key = clients.first(where: { $0.value.video.diagnosticID == id })?.key { remove(key) }
     }
     private func remove(_ id: String) {
-        clients.removeValue(forKey: id)?.video.stop(); onChanged?()
+        if let client = clients.removeValue(forKey: id) { releaseSlot?(client.video.diagnosticID); client.video.stop() }; onChanged?()
     }
     private func reap() {
         let now = ProcessInfo.processInfo.systemUptime
@@ -114,8 +116,8 @@ final class BrowserReceiverServer {
     private func handle(_ connection: NWConnection, method: String, path: String, headers: [String: String], body: Data) {
         let hosts = Set((addresses().filter(Self.isLocalAddress) + ["127.0.0.1", "localhost"]).map { "\($0):\(port)" })
         guard let host = headers["host"], hosts.contains(host) else { reply(connection, status: 403, object: ["error":"请使用发送端显示的IP地址"]); return }
-        if method == "GET", path == "/" || path == "/receiver.js" {
-            let name = path == "/" ? "receiver.html" : "receiver.js"
+        if method == "GET", path == "/" || path == "/receiver.js" || path == "/receiver-i18n.js" {
+            let name = path == "/" ? "receiver.html" : String(path.dropFirst())
             guard let url = Bundle.main.url(forResource: name, withExtension: nil), let data = try? Data(contentsOf: url), data.count < 65536 else { reply(connection, status: 503, object: ["error":"网页资源不可用"]); return }
             reply(connection, status: 200, data: data, type: path == "/" ? "text/html; charset=utf-8" : "application/javascript; charset=utf-8"); return
         }
@@ -130,9 +132,11 @@ final class BrowserReceiverServer {
             guard rates.count < 128 || rates[remote] != nil, (rates[remote]?.count ?? 0) < 20 else { reply(connection, status: 429, object: ["error":"连接过于频繁，请稍后重试"]); return }
             rates[remote, default: []].append(now)
             guard object.count == 1, let supplied = object["code"] as? String, MatchingCode.isValid(supplied), supplied == code() else { reply(connection, status: 403, object: ["error":"匹配码错误"]); return }
-            guard clients.count < 4 else { reply(connection, status: 409, object: ["error":"局域网页接收已达4台上限"]); return }
+            guard clients.count < 10 else { reply(connection, status: 409, object: ["error":"局域网接收已达10路上限"]); return }
             let id = UUID().uuidString + UUID().uuidString
-            let video = makePeer(), client = Client(video); clients[id] = client
+            let video = makePeer(), client = Client(video)
+            guard reserveSlot?(video.diagnosticID) == true else { video.stop(); reply(connection, status: 409, object: ["error":"所有投屏合计最多10路局域网连接"]); return }
+            clients[id] = client
             video.sendSignal = { [weak self, weak client] packet in
                 guard let self, let client else { return }
                 let size = (try? JSONSerialization.data(withJSONObject: packet).count) ?? 65537
