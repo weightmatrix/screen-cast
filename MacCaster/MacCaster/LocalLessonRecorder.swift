@@ -251,6 +251,15 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
 }
 
 final class RecordingAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        DispatchQueue.main.async {
+            guard let services = NSApp.servicesMenu,
+                  let appMenu = NSApp.mainMenu?.items.first?.submenu,
+                  let item = appMenu.items.first(where: { $0.submenu === services }) else { return }
+            appMenu.removeItem(item)
+        }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         LocalLessonRecorder.prepareForTermination { sender.reply(toApplicationShouldTerminate: true) }
             ? .terminateLater : .terminateNow
