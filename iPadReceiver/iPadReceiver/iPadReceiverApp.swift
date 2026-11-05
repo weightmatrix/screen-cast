@@ -40,7 +40,7 @@ struct RootView: View {
         }
         .sheet(isPresented: $showSettings) {
             NavigationView {
-                Form { Section("语言") { AppLanguagePicker() } }
+                Form { Section("语言") { AppLanguagePicker() }; RoomPreferences(); Section("声音设备与测试") { RoomAudioControls(receiver: appMode == "receive") } }
                     .navigationTitle("设置")
                     .toolbar { ToolbarItem(placement: .confirmationAction) {
                         Button("完成") { showSettings = false }
@@ -48,6 +48,8 @@ struct RootView: View {
             }.navigationViewStyle(.stack)
                 .environment(\.locale, AppLanguage.locale(language))
         }
+        .overlay { RoomChatOverlay() }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in RoomSession.shared.pollBroadcast() }
         .onAppear { StartupTiming.rootVisible() }
         .task {
             #if DEBUG

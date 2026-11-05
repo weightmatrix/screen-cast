@@ -361,6 +361,9 @@ final class NativeScreenSource: @unchecked Sendable {
         factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: ScreenH264DecoderFactory(), audioDevice: device)
         source = factory.videoSource(forScreenCast: true)
     }
+    func factory(audioDevice: NativeAudioDevice) -> RTCPeerConnectionFactory {
+        RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: ScreenH264DecoderFactory(), audioDevice: audioDevice)
+    }
     private lazy var capturer = RTCVideoCapturer(delegate: source)
     private let queue = DispatchQueue(label: "casting.native.capture", qos: .userInteractive)
     private let slot = DispatchSemaphore(value: 1)
@@ -446,12 +449,27 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         set { audioDevice?.onVerificationPCM = newValue }
     }
     #endif
+    #if DEBUG
+    var onVerificationRoomMessage: (([String: Any]) -> Void)?
+    func roomAudioVerificationSummary() -> String { audioDevice?.verificationSummary() ?? "missing audio device" }
+    func configureRoomVerification(microphone: NativeAudioInput? = nil) {
+        audioDevice?.verificationMicrophone = microphone; audioDevice?.verificationMuteHardware = true
+    }
+    func sendRoomVerification(_ packet: [String: Any]) -> Bool {
+        guard let channel = conversation, channel.readyState == .open, channel.bufferedAmount < 32768,
+              let data = try? JSONSerialization.data(withJSONObject: packet), data.count <= 4096 else { return false }
+        return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
+    }
+    #endif
     func receiveAudio(page: Bool, microphone: Bool) { audioDevice?.receive(page: page, microphone: microphone) }
     #if os(macOS)
     func recordPlayback(_ handler: ((UnsafeBufferPointer<Float>, Double) -> Void)?) {
         audioDevice?.recordPlayback(handler)
     }
     #endif
+    private let roomPacketLock = NSLock()
+    private var roomPacketTimes: [Double] = []
+    private var conversation: RTCDataChannel?
     private var diagnostics: RTCDataChannel?
     private var lastRemoteStat = 0.0
     private var remoteTrack: RTCVideoTrack?
@@ -478,22 +496,31 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         config.iceTransportPolicy = .all
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         _ = NativeVideo.initialize
-        let audio = source?.audioDevice ?? NativeAudioDevice(input: nil)
+        let audio = NativeAudioDevice(input: source?.audio, roomPeer: diagnosticID, hosting: source != nil)
         audioDevice = audio
-        let factory = source?.factory ?? RTCPeerConnectionFactory(encoderFactory: ScreenH264EncoderFactory(), decoderFactory: ScreenH264DecoderFactory(), audioDevice: audio)
+        let factory = source?.factory(audioDevice: audio) ?? RTCPeerConnectionFactory(encoderFactory: ScreenH264EncoderFactory(), decoderFactory: ScreenH264DecoderFactory(), audioDevice: audio)
         mediaFactory = factory
         peer = factory.peerConnection(with: config, constraints: constraints, delegate: self)
-        let audioOptions = RTCRtpTransceiverInit(); audioOptions.direction = source == nil ? .recvOnly : .sendOnly
-        if source != nil {
+        let audioOptions = RTCRtpTransceiverInit(); audioOptions.direction = .sendRecv
+        do {
             let constraints = RTCMediaConstraints(mandatoryConstraints: ["googEchoCancellation":"false", "googAutoGainControl":"false", "googNoiseSuppression":"false"], optionalConstraints: nil)
             let track = factory.audioTrack(with: factory.audioSource(with: constraints), trackId: "page-left-mic-right-v1")
-            audioTrack = track; _ = peer?.addTransceiver(with: track, init: audioOptions)
-        } else { _ = peer?.addTransceiver(of: .audio, init: audioOptions) }
+            audioTrack = track
+            if source != nil { _ = peer?.addTransceiver(with: track, init: audioOptions) }
+        }
         let control = RTCDataChannelConfiguration()
         control.isNegotiated = true; control.channelId = 0
         control.isOrdered = false; control.maxRetransmits = 0
         diagnostics = peer?.dataChannel(forLabel: "native-video-stats-v1", configuration: control)
         diagnostics?.delegate = self
+        let chat = RTCDataChannelConfiguration(); chat.isNegotiated = true; chat.channelId = 1; chat.isOrdered = true
+        conversation = peer?.dataChannel(forLabel: "touping-room-text-v1", configuration: chat)
+        conversation?.delegate = self
+        RoomSession.shared.attach(diagnosticID, host: sending) { [weak self] packet in
+            guard let self, !self.closed, let channel = self.conversation, channel.readyState == .open,
+                  channel.bufferedAmount < 32768, let data = try? JSONSerialization.data(withJSONObject: packet), data.count <= 4096 else { return false }
+            return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
+        }
         if let source {
             let track = factory.videoTrack(with: source.source, trackId: UUID().uuidString)
             let options = RTCRtpTransceiverInit(); options.direction = .sendOnly
@@ -579,7 +606,16 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     self.remoteSet = true
                     for candidate in self.candidates { self.peer?.add(candidate, completionHandler: { _ in }) }
                     self.candidates.removeAll()
-                    if offer { self.description(offer: false) }
+                    if offer {
+                        if !self.sending, let track = self.audioTrack,
+                           let transceiver = self.peer?.transceivers.first(where: { $0.mediaType == .audio && $0.mid != nil }) {
+                            transceiver.sender.track = track
+                            var directionError: NSError?
+                            transceiver.setDirection(.sendRecv, error: &directionError)
+                            if directionError != nil { self.fail("无法启用双向音频轨道"); return }
+                        }
+                        self.description(offer: false)
+                    }
                 }
             }
         case "candidate":
@@ -598,6 +634,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         timeout?.cancel(); statsWork?.cancel(); firstFrameWork?.cancel(); disconnectedWork?.cancel()
         renderLock.lock(); renderClosed = true; imageHandler = nil; renderLock.unlock()
         remoteTrack?.remove(self); remoteTrack = nil
+        RoomSession.shared.detach(diagnosticID)
+        conversation?.delegate = nil; conversation?.close(); conversation = nil
         diagnostics?.delegate = nil; diagnostics?.close(); diagnostics = nil
         peer?.delegate = nil; peer?.close(); peer = nil; sender = nil
         candidates.removeAll(); audioTrack = nil; audioDevice = nil; mediaFactory = nil; onImage = nil
@@ -779,9 +817,30 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) { dataChannel.close() }
-    func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {}
+    func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
+        DispatchQueue.main.async { [weak self, weak dataChannel] in
+            guard let self, let dataChannel, self.conversation === dataChannel, dataChannel.readyState == .open else { return }
+            RoomSession.shared.opened(self.diagnosticID)
+        }
+    }
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-        guard !buffer.isBinary, buffer.data.count <= 2048 else { return }
+        guard !buffer.isBinary, buffer.data.count <= 4096 else { return }
+        if conversation === dataChannel {
+            roomPacketLock.lock()
+            let now = ProcessInfo.processInfo.systemUptime
+            roomPacketTimes = roomPacketTimes.filter { now - $0 < 10 }
+            let allowed = roomPacketTimes.count < (sending ? 32 : 160)
+            if allowed { roomPacketTimes.append(now) }; roomPacketLock.unlock()
+            guard allowed else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.closed, let object = try? JSONSerialization.jsonObject(with: buffer.data) as? [String: Any] else { return }
+                #if DEBUG
+                self.onVerificationRoomMessage?(object)
+                #endif
+                RoomSession.shared.receive(object, from: self.diagnosticID)
+            }; return
+        }
+        guard buffer.data.count <= 2048 else { return }
         DispatchQueue.main.async { [weak self, weak dataChannel] in
             guard let self, !self.closed, self.diagnostics === dataChannel,
                   ProcessInfo.processInfo.systemUptime - self.lastRemoteStat >= 1,
@@ -1030,6 +1089,7 @@ final class NativeVideoRoom: @unchecked Sendable {
         let source = NativeScreenSource()
         let sender = NativeVideoPeer(source: source, internet: false)
         let receiver = NativeVideoPeer(internet: false)
+        sender.configureRoomVerification(); receiver.configureRoomVerification()
         sender.sendSignal = { [weak receiver] in receiver?.receive($0) }
         receiver.sendSignal = { [weak sender] in sender?.receive($0) }
         defer { sender.stop(); receiver.stop() }

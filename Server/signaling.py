@@ -272,7 +272,7 @@ async def connection(reader, writer):
         method, path, _ = parts[0].split(' ')
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
-        if method == 'GET' and path in ('/', '/receiver.js', '/receiver-i18n.js', '/receiver-auth.js', '/privacy.html', '/support.html'):
+        if method == 'GET' and path in ('/', '/receiver.js', '/receiver-i18n.js', '/receiver-auth.js', '/receiver-room.js', '/privacy.html', '/support.html'):
             asset = 'receiver.html' if path == '/' else path[1:]
             body = (Path(__file__).parent / 'Web' / asset).read_bytes()
             if len(body) > 65536: raise Rejected()

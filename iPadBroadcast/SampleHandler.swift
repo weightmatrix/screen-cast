@@ -38,6 +38,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrent(token) else { return }
             self.running = true
+            VoiceRoom.shared.setEnabled(defaults.bool(forKey: "room.receiveVoices"))
             self.lastDiagnosticSnapshot = ""; self.lastDiagnosticNetwork = ""; self.lastPendingSnapshot = ""
             let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
             server.connectionPassword = password
@@ -48,6 +49,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             defaults.set("[]", forKey: "broadcastPeers")
             defaults.set("[]", forKey: "broadcastPending")
             defaults.set("", forKey: "broadcastApproval")
+            defaults.set("", forKey: "room.chatOutbox"); defaults.set("[]", forKey: "room.chatHistory"); defaults.set("", forKey: "room.chatError"); defaults.set("", forKey: "room.audioError")
             self.observation = server.$lastError.compactMap { $0 }.sink { [weak self] text in self?.fail("网络监听失败：\(text)") }
             PerformanceDisk.shared.relay = { [weak server] line in
                 DispatchQueue.main.async { server?.sendDiagnostics(line) }
@@ -67,6 +69,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
             self.heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
                 self?.nativeCapture.audio.configure(page: defaults.bool(forKey: "broadcastPageAudio"), microphone: defaults.bool(forKey: "broadcastMicAudio"))
                 defaults.set(Date().timeIntervalSince1970, forKey: "broadcastHeartbeat")
+                RoomAudioSettings.shared.applyBroadcastInput()
+                RoomSession.shared.serviceBroadcast()
                 if let server = self?.server {
                     if let data = try? JSONEncoder().encode(server.pendingConnections) {
                         let pendingJSON = String(decoding: data, as: UTF8.self)
@@ -137,6 +141,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         server?.stop(); server = nil
         BroadcastSettings.store.set("[]", forKey: "broadcastPeers")
         BroadcastSettings.store.set("[]", forKey: "broadcastPending")
+        BroadcastSettings.store.set("", forKey: "room.chatOutbox"); BroadcastSettings.store.set("[]", forKey: "room.chatHistory"); BroadcastSettings.store.set("", forKey: "room.chatError"); BroadcastSettings.store.set("", forKey: "room.audioError")
         BroadcastSettings.store.set("", forKey: "broadcastApproval")
         BroadcastSettings.store.set("", forKey: "broadcastKick")
         DiscoveryBroadcaster.shared.stop()

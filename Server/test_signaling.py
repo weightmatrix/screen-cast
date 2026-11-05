@@ -162,13 +162,19 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         await a.send({'type':'video','id':identity,'data':'forbidden'})
         self.assertEqual((await a.receive())[0],8)
 
+    async def test_signaling_never_relays_room_chat(self):
+        a,b,identity=await self.pair(); await self.approve(a,b,identity)
+        await b.send({'type':'chat','text':'PRIVATE_CHAT_MUST_NOT_USE_SIGNALING'})
+        self.assertEqual((await b.receive())[0],8)
+        with open(self.audit_path) as stream: self.assertNotIn('PRIVATE_CHAT_MUST_NOT_USE_SIGNALING',stream.read())
+
     async def test_device_fields_and_request_shape_are_bounded(self):
         a=await self.client('sender',device={'mac':'00:11:22:33:44:55'})
         self.assertEqual((await a.receive())[0],8)
         self.assertFalse(service.ROOMS)
 
     async def test_static_assets_have_no_store_headers(self):
-        for path in ['/','/receiver.js','/receiver-auth.js','/receiver-i18n.js','/privacy.html']:
+        for path in ['/','/receiver.js','/receiver-auth.js','/receiver-room.js','/receiver-i18n.js','/privacy.html']:
             reader,writer=await asyncio.open_connection('127.0.0.1',self.port)
             writer.write(f'GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n'.encode()); await writer.drain()
             response=await reader.read(); writer.close(); await writer.wait_closed()

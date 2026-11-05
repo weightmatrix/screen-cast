@@ -607,6 +607,7 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func disconnect(userInitiated: Bool = true) {
+        RoomAudioSettings.shared.setMicrophone(false)
         waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
         recorder.endSegment()

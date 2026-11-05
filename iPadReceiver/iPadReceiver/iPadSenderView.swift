@@ -148,6 +148,7 @@ struct iPadSenderView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
+                RoomAudioControls()
                 ConnectionLegalNotice()
                 PendingConnectionsView(requests: pending) { id, accepted in
                     guard pendingSubmission == nil else { return }
@@ -235,6 +236,7 @@ struct iPadSenderView: View {
 
     private func saveConfiguration() {
         guard loadedConfiguration else { return }
+        RoomAudioSettings.shared.prepareBroadcastPreferences()
         guard MatchingCode.isValid(code), AdmissionCredentials.validPassword(connectionPassword), code != connectionPassword else {
             saveGeneration = UUID(); queuedConfiguration = ""
             configurationReady = false

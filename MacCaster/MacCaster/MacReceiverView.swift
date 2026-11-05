@@ -64,7 +64,7 @@ struct MacReceiverView: View {
             client.autoSearch(mode: connectMode, host: host, port: p, code: matchCode)
         }
         .onChange(of: isConnected) { connected in if !connected { openDrawer() } }
-        .onDisappear { client.disconnect(); client.recorder.stop() }
+        .onDisappear { RoomAudioSettings.shared.setMicrophone(false); client.disconnect(); client.recorder.stop() }
     }
 
     private func openDrawer() { withAnimation(.easeInOut(duration: 0.2)) { drawerOpen = true } }
@@ -129,6 +129,7 @@ struct MacReceiverView: View {
             }
 
             }
+            RoomAudioControls(receiver: true)
             VStack(alignment: .leading, spacing: 8) {
                 SecureField("连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
                 TextField("申请文字（必填，最多200字）", text: $applicationText, axis: .vertical)

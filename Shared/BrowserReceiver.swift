@@ -122,7 +122,7 @@ final class BrowserReceiverServer {
     private func handle(_ connection: NWConnection, method: String, path: String, headers: [String: String], body: Data) {
         let hosts = Set((addresses().filter(Self.isLocalAddress) + ["127.0.0.1", "localhost"]).map { "\($0):\(port)" })
         guard let host = headers["host"], hosts.contains(host) else { reply(connection, status: 403, object: ["error":"请使用发送端显示的IP地址"]); return }
-        if method == "GET", path == "/" || path == "/receiver.js" || path == "/receiver-i18n.js" || path == "/receiver-auth.js" {
+        if method == "GET", path == "/" || path == "/receiver.js" || path == "/receiver-i18n.js" || path == "/receiver-auth.js" || path == "/receiver-room.js" {
             let name = path == "/" ? "receiver.html" : String(path.dropFirst())
             guard let url = Bundle.main.url(forResource: name, withExtension: nil), let data = try? Data(contentsOf: url), data.count < 65536 else { reply(connection, status: 503, object: ["error":"网页资源不可用"]); return }
             reply(connection, status: 200, data: data, type: path == "/" ? "text/html; charset=utf-8" : "application/javascript; charset=utf-8"); return

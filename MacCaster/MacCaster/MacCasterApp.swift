@@ -29,6 +29,7 @@ struct MacCasterApp: App {
                 .focusEffectDisabled()
                 .preferredColorScheme(AppAppearance.scheme(appearance))
                 .environmentObject(streamer)
+                .overlay { RoomChatOverlay() }
                 .task {
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-motion") { await NativeRoutesVerification.motion() }
@@ -68,7 +69,7 @@ private struct AppearanceSettingsView: View {
     @AppStorage("appearance.colorScheme") private var appearance = "system"
 
     var body: some View {
-        Form {
+        ScrollView { Form {
             Section("皮肤") {
                 Picker("当前皮肤", selection: $skin) {
                     Text("极简皮肤").tag("minimal")
@@ -91,6 +92,8 @@ private struct AppearanceSettingsView: View {
             Section("语言") {
                 AppLanguagePicker()
             }
+            RoomPreferences()
+            Section("声音设备与测试") { RoomAudioControls() }
             Section("连接密码") {
                 SecureField("连接密码（6–64位）", text: $passwordDraft)
                 Button("设置连接密码") {
@@ -104,7 +107,7 @@ private struct AppearanceSettingsView: View {
         .formStyle(.grouped)
         .font(.system(size: 16))
         .controlSize(.large)
-        .frame(width: 520, height: skin == "icons3d" ? 610 : 520)
+        }.frame(width: 620, height: 720)
         .navigationTitle("设置")
     }
 }

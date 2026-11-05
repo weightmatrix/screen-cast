@@ -169,6 +169,30 @@ ROWS += """
 请先在设置中设置连接密码|請先在設定中設定連線密碼|Set a connection password in Settings first|Configura primero una contraseña en Ajustes|Zuerst ein Passwort in den Einstellungen festlegen|Définissez d’abord un mot de passe dans les réglages|Imposta prima una password nelle impostazioni|先に設定で接続パスワードを設定してください|먼저 설정에서 연결 비밀번호를 지정하세요
 邀请链接不含密码；请另行告知接收者连接密码|邀請連結不含密碼；請另外告知接收者連線密碼|Invitations contain no password. Share the password separately.|La invitación no contiene contraseña. Compártela por separado.|Einladungen enthalten kein Passwort. Passwort separat mitteilen.|L’invitation ne contient aucun mot de passe. Communiquez-le séparément.|L’invito non contiene la password. Comunicala separatamente.|招待リンクにパスワードは含まれません。別途伝えてください。|초대 링크에는 비밀번호가 없습니다. 별도로 알려주세요.
 """
+ROWS += """
+共用聊天室|共用聊天室|Shared chat|Chat compartido|Gemeinsamer Chat|Discussion commune|Chat condivisa|共通チャット|공용 채팅
+昵称（留空自动分配，最多32字）|暱稱（留空自動分配，最多32字）|Nickname (blank for automatic, up to 32 characters)|Apodo (vacío: automático, máximo 32)|Spitzname (leer: automatisch, bis 32 Zeichen)|Pseudo (vide : automatique, 32 caractères max.)|Soprannome (vuoto: automatico, massimo 32)|ニックネーム（空欄で自動、32文字まで）|닉네임(비우면 자동, 최대 32자)
+聊天位置|聊天位置|Chat position|Posición del chat|Chatposition|Position du chat|Posizione chat|チャット位置|채팅 위치
+透明度|透明度|Opacity|Opacidad|Deckkraft|Opacité|Opacità|不透明度|불투명도
+左下角|左下角|Bottom left|Abajo a la izquierda|Unten links|En bas à gauche|In basso a sinistra|左下|왼쪽 아래
+右下角|右下角|Bottom right|Abajo a la derecha|Unten rechts|En bas à droite|In basso a destra|右下|오른쪽 아래
+左上角|左上角|Top left|Arriba a la izquierda|Oben links|En haut à gauche|In alto a sinistra|左上|왼쪽 위
+右上角|右上角|Top right|Arriba a la derecha|Oben rechts|En haut à droite|In alto a destra|右上|오른쪽 위
+声音设备与测试|聲音裝置與測試|Audio devices and tests|Dispositivos y pruebas de audio|Audiogeräte und Tests|Appareils audio et tests|Dispositivi audio e test|音声デバイスとテスト|오디오 기기 및 테스트
+麦克风设备|麥克風裝置|Microphone device|Micrófono|Mikrofon|Microphone|Microfono|マイクデバイス|마이크 기기
+声音输出设备|聲音輸出裝置|Audio output device|Salida de audio|Audioausgabe|Sortie audio|Uscita audio|音声出力デバイス|오디오 출력 기기
+系统默认|系統預設|System default|Predeterminado del sistema|Systemstandard|Valeur système|Predefinito di sistema|システム既定|시스템 기본값
+刷新设备|重新整理裝置|Refresh devices|Actualizar dispositivos|Geräte aktualisieren|Actualiser les appareils|Aggiorna dispositivi|デバイスを更新|기기 새로 고침
+测试喇叭|測試喇叭|Test speakers|Probar altavoces|Lautsprecher testen|Tester les haut-parleurs|Prova altoparlanti|スピーカーをテスト|스피커 테스트
+向所有人发送麦克风|向所有人傳送麥克風|Share microphone with everyone|Compartir micrófono con todos|Mikrofon mit allen teilen|Partager le micro avec tous|Condividi microfono con tutti|全員にマイク音声を送信|모두에게 마이크 전송
+测试麦克风（仅看音量，不发送）|測試麥克風（僅看音量，不傳送）|Test microphone (meter only, no additional transmission)|Probar micrófono (solo nivel, sin envío adicional)|Mikrofon testen (nur Pegel, keine zusätzliche Übertragung)|Tester le micro (niveau seul, sans envoi supplémentaire)|Prova microfono (solo livello, nessun invio aggiuntivo)|マイクをテスト（音量のみ、追加送信なし）|마이크 테스트(음량만, 추가 전송 없음)
+接收接收方麦克风（全员共用）|接收接收者麥克風（全員共用）|Allow receiver microphones for everyone|Permitir micrófonos de receptores para todos|Empfängermikrofone für alle zulassen|Autoriser les micros des récepteurs pour tous|Consenti microfoni dei ricevitori a tutti|受信者のマイクを全員で共有|수신자 마이크를 모두와 공유
+聊天|聊天|Chat|Chat|Chat|Discussion|Chat|チャット|채팅
+收起聊天|收合聊天|Hide chat|Ocultar chat|Chat ausblenden|Masquer le chat|Nascondi chat|チャットを閉じる|채팅 접기
+输入文字，所有人可见|輸入文字，所有人可見|Message everyone|Mensaje para todos|Nachricht an alle|Message pour tous|Messaggio a tutti|全員へのメッセージ|모두에게 메시지
+发送|傳送|Send|Enviar|Senden|Envoyer|Invia|送信|보내기
+昵称|暱稱|Nickname|Apodo|Spitzname|Pseudo|Soprannome|ニックネーム|닉네임
+"""
 strings = {}
 for row in ROWS.strip().splitlines():
     if not row.strip(): continue
@@ -180,6 +204,6 @@ for row in ROWS.strip().splitlines():
 print(f'Generated {len(strings)} entries in {len(LANGUAGES)} languages')
 
 # Browser uses only connection and notice strings; keep each static asset bounded.
-web_keys = ["连接密码", "申请文字（必填，最多200字）", "邀请链接或编号", "匹配码", "开始接收", "断开", "等待连接", "开启声音", "关闭声音", "全屏观看", "诊断", "隐私政策", "连接诊断", "接收工作台", "正在连接发送端…", "接入申请已提交，等待投送者接受…", "已连接 · 设备直接传输", "已断开", "配对成功，正在检查设备直连…", "请输入6至36位数字匹配码", "接入申请已超时", "投送者拒绝申请或连接已达上限", "请更新投送端以启用公网接入审批", "请勿利用本工具传播违法信息或侵犯他人合法权益。公网接入须经投送者确认，必要连接日志依法留存。违法使用者依法承担相应责任。"]
+web_keys = ["昵称", "聊天", "发送", "输入文字，所有人可见", "共用聊天室", "声音设备与测试", "测试喇叭", "刷新设备", "系统默认", "向所有人发送麦克风", "连接密码", "申请文字（必填，最多200字）", "邀请链接或编号", "匹配码", "开始接收", "断开", "等待连接", "开启声音", "关闭声音", "全屏观看", "诊断", "隐私政策", "连接诊断", "接收工作台", "正在连接发送端…", "接入申请已提交，等待投送者接受…", "已连接 · 设备直接传输", "已断开", "配对成功，正在检查设备直连…", "请输入6至36位数字匹配码", "接入申请已超时", "投送者拒绝申请或连接已达上限", "请更新投送端以启用公网接入审批", "请勿利用本工具传播违法信息或侵犯他人合法权益。公网接入须经投送者确认，必要连接日志依法留存。违法使用者依法承担相应责任。"]
 web = {key: [strings[key]['localizations'][lang]['stringUnit']['value'] for lang in LANGUAGES] for key in web_keys}
 (ROOT / 'Server/Web/receiver-i18n.js').write_text("'use strict';window.ToupingI18n=" + json.dumps({'languages':LANGUAGES,'strings':web}, ensure_ascii=False, separators=(',',':')) + ';\n')

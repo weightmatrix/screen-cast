@@ -318,6 +318,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private var activeCapture: SCStream?
     private var lastPixelBuffer: CVPixelBuffer?
     private var lastCaptureAt = Date.distantPast
+    private var audioDeviceObserver: NSObjectProtocol?
     private var keepAliveTimer: DispatchSourceTimer?
 
     init(port: UInt16, filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, annotationEngine: AnnotationEngine, screenOrigin: CGPoint = .zero, code: String = MatchingCode.generate()) {
@@ -332,6 +333,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         self.code = code
         self.server = CastingServer(port: port, accessCode: code)
         super.init()
+        audioDeviceObserver = NotificationCenter.default.addObserver(forName: .roomAudioDevicesChanged, object: nil, queue: .main) { [weak self] _ in self?.updateAudio() }
         server.onInternetStatus = { [weak self] text in
             guard let self else { return }
             self.internetStatus = text
@@ -372,6 +374,8 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     func stop() {
+        if let audioDeviceObserver { NotificationCenter.default.removeObserver(audioDeviceObserver); self.audioDeviceObserver = nil }
+        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: false)
         recorder.stop()
         workQueue.sync {
             recordingAudioTimer?.cancel(); recordingAudioTimer = nil
@@ -512,8 +516,10 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         config.capturesAudio = sendsPageAudio
         config.excludesCurrentProcessAudio = true
         config.sampleRate = 48000; config.channelCount = 1
-        if #available(macOS 15.0, *) { config.captureMicrophone = sendsMicrophone }
+        if #available(macOS 15.0, *) { config.captureMicrophone = false }
         captureConfiguration = config
+        server.nativeSource.audio.useSharedMicrophone(true)
+        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: sendsMicrophone)
         server.nativeSource.audio.configure(page: sendsPageAudio, microphone: sendsMicrophone)
         config.pixelFormat = annotationEngine.isActive ? kCVPixelFormatType_32BGRA : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
         encWidth = config.width
@@ -559,7 +565,6 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
 
     private func updateAudio() {
         if sendsMicrophone {
-            if #unavailable(macOS 15.0) { sendsMicrophone = false; return }
             if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
                 AVCaptureDevice.requestAccess(for: .audio) { [weak self] allowed in
                     DispatchQueue.main.async { if !allowed { self?.sendsMicrophone = false } else { self?.updateAudio() } }
@@ -567,10 +572,12 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
             }
             if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized { sendsMicrophone = false; return }
         }
+        server.nativeSource.audio.useSharedMicrophone(true)
+        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: sendsMicrophone)
         server.nativeSource.audio.configure(page: sendsPageAudio, microphone: sendsMicrophone)
         guard let config = captureConfiguration, let stream else { return }
         config.capturesAudio = sendsPageAudio
-        if #available(macOS 15.0, *) { config.captureMicrophone = sendsMicrophone }
+        if #available(macOS 15.0, *) { config.captureMicrophone = false }
         Task { do { try await stream.updateConfiguration(config) }
             catch { PerformanceDisk.shared.write("audio.capture updateError=\(error)") }
         }

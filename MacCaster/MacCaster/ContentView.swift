@@ -238,6 +238,7 @@ private struct SessionRow: View {
                         ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             Text("投屏设置").font(.headline)
+                            RoomAudioControls()
                             Toggle("显示光标", isOn: $session.showsCursor)
                             Toggle("页面声音", isOn: $session.sendsPageAudio)
                             Toggle("话筒声音", isOn: $session.sendsMicrophone)

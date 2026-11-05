@@ -1,3 +1,7 @@
+## 2026-11-05 · 72版共用语音/聊天资源
+
+新增receiver-room.js白名单与原生打包资源。所有语音均通过设备WebRTC Opus轨道，聊天为经过接入审批的设备间有界SCTP文字；主投送设备跨所有任务分发，服务器仍不转发媒体或聊天，收到type=chat配对消息直接拒绝且不保存正文。浏览器仅在用户主动开启麦克风/测试后申请音频权限，HTTP安全限制/setSinkId能力不绕过。发布必须同时包含receiver.html、receiver.js、receiver-auth.js、receiver-room.js、receiver-i18n.js及更新的隐私/支持页；旧App不具备完整共用语音功能，双方需72版。
+
 ## 2026-11-05 · 71版接入协议（覆盖下方旧配对说明）
 
 主控独立设置连接密码，邀请#invite仅定位投屏。protocol=2的sender通过WSS登记room摘要及内存verifier；receiver收到一次性nonce后发送HMAC proof与1–200字application。错密码不通知主控；正确后转发request{id,ip,application}，主控按id批准/拒绝，批准前禁止媒体协商。一个sender可同时持有64个有界请求，全服务256连接/32登记位及IP限流；已批准媒体仍由客户端进程统一限制公网5/局域10，待批不占位。receiver发来的id不能改变所属会话。申请正文、密码、proof、verifier不写审计，审计仅记录长度及状态。新增receiver-auth.js需随网页发布且打包进原生应用，可信LAN HTTP使用它计算证明；不能抵御主动篡改HTTP页面。旧App/网页协议必须升级，不回退免密。主控收到的是服务观察到的来源IP，不是实名或绕过代理的真实IP。

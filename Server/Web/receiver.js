@@ -27,7 +27,7 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：71\n阶段：${s.closed?'已结束':s.connected?'已直连':s.paired?'配对完成，直连检查':'等待配对'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}`;
+    $('diagnostics').textContent=`网页版本：72\n阶段：${s.closed?'已结束':s.connected?'已直连':s.paired?'配对完成，直连检查':'等待配对'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}`;
   }
   function send(s, object) {
     if (current !== s || s.closed) return;
@@ -47,6 +47,7 @@
   function stop(s, text) {
     if (!s || s.closed) return;
     if(s.connected) report(s, 'ended');
+    window.ToupingRoom?.stop(s);
     s.closed = true; clearTimeout(s.timeout); clearTimeout(s.disconnected); clearTimeout(s.retry); clearInterval(s.clock);
     if (local && s.id) fetch('./leave', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:s.id}),keepalive:true}).catch(()=>{});
     s.abort.abort(); if(s.ws) s.ws.close(); s.pc.close(); diagnostics(s);
@@ -73,6 +74,7 @@
       for(const candidate of packet.sdp.match(/^a=candidate:.*$/gm) || []) tally(s.remoteCandidates,candidate.slice(2));
       diagnostics(s);
       await s.pc.setRemoteDescription({type:'offer',sdp:packet.sdp});
+      window.ToupingRoom?.prepare(s);
       for(const ice of s.ice.splice(0)) await s.pc.addIceCandidate(ice);
       await s.pc.setLocalDescription(await s.pc.createAnswer());
       // Native endpoints require this session marker for their split stereo audio.
@@ -92,7 +94,7 @@
       id=Array.from(crypto.getRandomValues(new Uint8Array(16)), x=>x.toString(16).padStart(2,'0')).join('');
       try { localStorage.setItem('touping-browser-id',id); } catch(_) {}
     }
-    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'71-web'};
+    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'72-web'};
   }
   function report(s, event) {
     if(local || !/^[a-f0-9]{32}$/.test(s.auditSession || '')) return;
@@ -141,10 +143,11 @@
     const counters=()=>({seen:new Set(),v4:0,v6:0,mdns:0});
     const s={pc,verifier:ToupingAuth.verifier(password,code),application,paired:false,localCandidates:counters(),remoteCandidates:counters(),stunErrors:0,
       abort:new AbortController(),chain:Promise.resolve(),pending:[],ice:[],messages:0,bytes:0,received:0,closed:false,connected:false};
+    window.ToupingRoom?.attach(s);
     current=s; $('start').disabled=true; $('stop').disabled=false; status('正在连接发送端…');
     const stream=new MediaStream(); $('video').srcObject=stream;
     s.pc.createDataChannel('native-video-stats-v1',{negotiated:true,id:0,ordered:false,maxRetransmits:0});
-    s.pc.ontrack=event=>{if(current!==s) return; stream.addTrack(event.track); $('video').play().catch(()=>{if(current===s && !s.closed) status('已收到媒体轨道，请点击播放器播放');});};
+    s.pc.ontrack=event=>{if(current!==s) return; stream.addTrack(event.track); window.ToupingRoom?.track(s,stream); $('video').play().catch(()=>{if(current===s && !s.closed) status('已收到媒体轨道，请点击播放器播放');});};
     s.pc.onicecandidate=event=>{if(event.candidate) try {tally(s.localCandidates,event.candidate.candidate); diagnostics(s); send(s,{type:'candidate',candidate:event.candidate.candidate,mid:event.candidate.sdpMid,line:event.candidate.sdpMLineIndex});} catch(error){fail(s,error);}};
     s.pc.onicecandidateerror=event=>{s.stunErrors++; s.stunCode=event.errorCode; if(current===s) diagnostics(s);};
     s.pc.onicegatheringstatechange=()=>{if(current===s) diagnostics(s);};
