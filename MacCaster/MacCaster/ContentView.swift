@@ -106,11 +106,19 @@ private struct BrowserSenderAddresses: View {
     @State private var copied = ""
     var body: some View {
         HStack(spacing: 12) {
-            if let port = server.browserListeningPort {
-                if let ip = CastingServer.localIPs.first(where: BrowserReceiverServer.isLocalAddress) {
+            TimelineView(.periodic(from: .now, by: 3)) { _ in
+                if let port = server.browserListeningPort,
+                   let ip = CastingServer.localIPs.first(where: BrowserReceiverServer.isLocalAddress) {
                     address("局域网", InternetSettings.localBrowserAddress(ip: ip, port: port, code: code))
+                } else {
+                    Button {} label: {
+                        Label("复制局域网地址", systemImage: "wifi")
+                    }
+                    .controlSize(.large)
+                    .disabled(true)
+                    .help(server.browserListeningPort == nil ? "局域网接收服务准备中，请稍候" : "未检测到局域网地址，请连接 Wi-Fi 或有线网络")
                 }
-            } else { Text("局域网准备中…").font(.caption).foregroundStyle(.secondary) }
+            }
             if internet { address("公网", InternetSettings.browserAddress(code: code)) }
         }
     }
