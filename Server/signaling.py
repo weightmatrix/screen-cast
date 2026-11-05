@@ -1,5 +1,5 @@
 """Bounded pairing and STUN only. No media, TURN, database, or external dependencies."""
-import asyncio, base64, collections, hashlib, ipaddress, json, os, re, secrets, struct, time, uuid
+import asyncio, base64, collections, hashlib, hmac, ipaddress, json, os, re, secrets, struct, time, unicodedata, uuid
 from pathlib import Path
 from audit import AuditLog, AuditUnavailable
 MAX_FRAME = 16384
@@ -47,6 +47,7 @@ class Socket:
         self.bytes = self.messages = 0
         self.context = context or {}
         self.audit_only = False
+        self.host = False
     async def frame(self, opcode, data=b''):
         if len(data) > MAX_FRAME: raise Rejected()
         header = bytes([0x80 | opcode])
@@ -69,7 +70,7 @@ class Socket:
             data = bytes(n ^ mask[i % 4] for i, n in enumerate(raw))
             self.bytes += size + 6
             self.messages += 1
-            if self.bytes > MAX_TOTAL or self.messages > 96: raise Rejected()
+            if self.bytes > (2 * 1024 * 1024 if self.host else MAX_TOTAL) or self.messages > (4096 if self.host else 96): raise Rejected()
             if opcode == 8: raise EOFError()
             if opcode == 9: await self.frame(10, data); continue
             if opcode == 10: continue
@@ -100,18 +101,19 @@ def device_metadata(value):
     if any(not isinstance(value[key], str) or not re.fullmatch(pattern, value[key]) for key, pattern in patterns.items()): raise Rejected()
     return value
 
-async def expire_approval(room):
-    await asyncio.sleep(60)
-    if room['approved']: return
-    try: audit('admission_expired', pair_id=room['id'])
+def valid_application(value):
+    return isinstance(value, str) and bool(value.strip()) and len(value) <= 200 and len(value.encode('utf-8')) <= 800 and all(unicodedata.category(c) != 'Cc' or c in '\n\r' for c in value)
+
+async def expire_approval(room, identity):
+    await asyncio.sleep(300)
+    state = room['receivers'].get(identity)
+    if not state or state['approved']: return
+    try: audit('admission_expired', pair_id=identity)
     except AuditUnavailable: print('Connection audit unavailable during admission expiry', flush=True)
-    for peer in (room['sender'], room['receiver']):
-        if peer:
-            try:
-                await peer.send({'type':'error','message':'接入申请已超时'})
-                await peer.frame(8, struct.pack('!H', 1000))
-                peer.writer.close()
-            except (OSError, ConnectionError): pass
+    try:
+        await state['ws'].send({'type':'error','message':'接入申请已超时'})
+        state['ws'].writer.close()
+    except Exception: pass
 
 async def exchange(ws):
     hello = await asyncio.wait_for(ws.receive(), 10)
@@ -150,83 +152,112 @@ async def exchange(ws):
     device = device_metadata(hello.get('device'))
     audit('device_reported', **ws.context, device=device, evidence='client_report_only',
           device_metadata_available=device is not None, mac_address_available=False)
+    if hello.get('protocol') != 2:
+        await ws.send({'type':'error','message':'请升级到密码与申请文字版本'}); return
+    identity = None
     if role == 'sender':
-        if hello.get('approval') != 1:
-            await ws.send({'type':'error','message':'请更新投送端以启用公网接入审批'}); return
+        verifier = hello.get('verifier')
+        if not isinstance(verifier, str) or not re.fullmatch('[a-f0-9]{64}', verifier): raise Rejected()
         if key in ROOMS:
             audit('pairing_rejected', **ws.context, reason='room_unavailable')
-            await ws.send({'type':'error','code':'code_in_use','message':'匹配码已使用，请修改匹配码'}); return
+            await ws.send({'type':'error','code':'code_in_use','message':'邀请编号已占用，请修改邀请编号'}); return
         if len(ROOMS) >= 32:
-            audit('pairing_rejected', **ws.context, reason='server_busy')
-            await ws.send({'type':'error','code':'server_busy','message':'配对服务繁忙，请稍后重试'}); return
-        room = {'sender': ws, 'receiver': None, 'finished': False, 'approved': False, 'approval_timeout': None, 'done': set(), 'bytes': 0, 'id': uuid.uuid4().hex}
+            await ws.send({'type':'error','message':'配对服务繁忙，请稍后重试'}); return
+        room = {'sender':ws, 'receivers':{}, 'verifier':verifier}
         ROOMS[key] = room
+        ws.host = True
     else:
         room = ROOMS.get(key)
-        if not room or room['receiver']:
-            audit('pairing_rejected', **ws.context, reason='sender_not_found_or_busy')
-            await ws.send({'type':'error','message':'未找到可连接的广域网投屏'}); return
-        room['receiver'] = ws
+        if not room:
+            await ws.send({'type':'error','message':'未找到投屏，请检查邀请链接'}); return
+        if len(room['receivers']) >= 64:
+            await ws.send({'type':'error','message':'申请队列已满，请稍后重试'}); return
+        nonce = secrets.token_hex(16)
+        await ws.send({'type':'challenge','nonce':nonce})
+        application = await asyncio.wait_for(ws.receive(), 15)
+        supplied = application.get('proof')
+        expected = hmac.new(room['verifier'].encode(), nonce.encode(), hashlib.sha256).hexdigest()
+        if not isinstance(supplied, str) or not hmac.compare_digest(expected, supplied):
+            audit('admission_password_rejected', **ws.context)
+            await ws.send({'type':'error','message':'连接密码错误'}); return
+        text = application.get('application')
+        if set(application) != {'type','proof','application'} or application['type'] != 'apply' or not valid_application(text):
+            await ws.send({'type':'error','message':'请填写1至200字申请文字'}); return
+        if ROOMS.get(key) is not room or len(room['receivers']) >= 64:
+            await ws.send({'type':'error','message':'投屏已结束或申请队列已满'}); return
+        identity = uuid.uuid4().hex
+        ws.context['pair_id'] = identity
+        room['receivers'][identity] = {'ws':ws,'approved':False,'done':set(),'bytes':0,'timeout':None,'finished':False}
     try:
-        ws.context['pair_id'] = room['id']
-        audit('sender_waiting' if role == 'sender' else 'receiver_joined', **ws.context)
-        if role == 'sender': await ws.send({'type':'waiting'})
+        if role == 'sender':
+            audit('sender_waiting', **ws.context)
+            await ws.send({'type':'waiting'})
         else:
+            audit('admission_requested', **ws.context, application_length=len(text.strip()))
             await ws.send({'type':'waiting_approval'})
-            await room['sender'].send({'type':'peer'})
-            room['approval_timeout'] = asyncio.create_task(expire_approval(room))
+            await room['sender'].send({'type':'request','id':identity,'ip':ws.context['ip'],'application':text.strip()})
+            room['receivers'][identity]['timeout'] = asyncio.create_task(expire_approval(room, identity))
         while True:
             obj = await ws.receive()
             kind = obj.get('type')
-            room['bytes'] += len(json.dumps(obj, separators=(',', ':')).encode())
-            if room['bytes'] > MAX_TOTAL: raise Rejected()
-            if kind in ('approve', 'reject'):
-                if role != 'sender' or not room['receiver'] or room['approved'] or set(obj) != {'type'}: raise Rejected()
-                audit('admission_approved' if kind == 'approve' else 'admission_rejected', **ws.context)
+            pair_id = obj.get('id') if role == 'sender' else identity
+            state = room['receivers'].get(pair_id) if isinstance(pair_id, str) else None
+            if state is None:
+                # A late host reply/candidate to a departed applicant is harmless.
+                if role == 'sender' and isinstance(pair_id, str): continue
+                raise Rejected()
+            if kind in ('approve','reject'):
+                if role != 'sender' or state['approved'] or set(obj) != {'type','id'}: raise Rejected()
+                audit('admission_approved' if kind == 'approve' else 'admission_rejected', **ws.context, pair_id=pair_id)
                 if kind == 'reject':
-                    await room['receiver'].send({'type':'error','message':'投送者拒绝申请或连接已达上限'})
-                    return
-                room['approved'] = True
-                if room['approval_timeout']: room['approval_timeout'].cancel()
-                for peer in (room['sender'], room['receiver']):
-                    await peer.send({'type':'approved', 'session_id':room['id']})
+                    await state['ws'].send({'type':'error','message':'投送者拒绝申请或连接已达上限'})
+                    state['ws'].writer.close()
+                    continue
+                state['approved'] = True
+                if state['timeout']: state['timeout'].cancel()
+                await ws.send({'type':'approved','id':pair_id})
+                await state['ws'].send({'type':'approved','session_id':pair_id})
                 continue
-            if not room['approved']: raise Rejected()
+            if kind == 'leave' and role == 'sender':
+                await state['ws'].send({'type':'error','message':'投送者已断开连接'})
+                state['ws'].writer.close(); continue
+            if not state['approved']: raise Rejected()
+            packet = {name:value for name,value in obj.items() if name != 'id'}
+            state['bytes'] += len(json.dumps(packet, separators=(',', ':')).encode())
+            if state['bytes'] > MAX_TOTAL: raise Rejected()
             if kind == 'done':
-                if role not in room['done']:
-                    audit('peer_reported_connected', **ws.context, evidence='client_report_only')
-                room['done'].add(role)
-                if len(room['done']) == 2:
-                    audit('pairing_completed', pair_id=room['id'], sender_connection_id=room['sender'].context.get('connection_id'),
-                          receiver_connection_id=room['receiver'].context.get('connection_id'), evidence='both_clients_reported', media_end_observed=False)
-                    room['finished'] = True
-                    for peer in (room['sender'], room['receiver']):
-                        if peer: await peer.frame(8, struct.pack('!H', 1000))
-                    return
+                if role not in state['done']: audit('peer_reported_connected', **{**ws.context,'pair_id':pair_id}, evidence='client_report_only')
+                state['done'].add(role)
+                if len(state['done']) == 2:
+                    audit('pairing_completed', pair_id=pair_id, evidence='both_clients_reported', media_end_observed=False)
+                    state['finished'] = True
+                    await state['ws'].frame(8, struct.pack('!H', 1000))
+                    state['ws'].writer.close()
                 continue
             if kind in ('offer','answer'):
                 if (kind == 'offer') != (role == 'sender'): raise Rejected()
-                if set(obj) != {'type','sdp'} or not isinstance(obj['sdp'], str) or not obj['sdp'].startswith('v=0\r\n'): raise Rejected()
-                if len(obj['sdp']) > 12288: raise Rejected()
+                if set(packet) != {'type','sdp'} or not isinstance(packet['sdp'], str) or not packet['sdp'].startswith('v=0\r\n') or len(packet['sdp']) > 12288: raise Rejected()
             elif kind == 'candidate':
-                if set(obj) != {'type','candidate','mid','line'}: raise Rejected()
-                if not isinstance(obj['candidate'], str) or not obj['candidate'].startswith('candidate:') or len(obj['candidate']) > 2048: raise Rejected()
-                if not isinstance(obj['line'], int) or not 0 <= obj['line'] <= 16: raise Rejected()
-                if obj['mid'] is not None and (not isinstance(obj['mid'], str) or len(obj['mid']) > 64): raise Rejected()
+                if set(packet) != {'type','candidate','mid','line'}: raise Rejected()
+                if not isinstance(packet['candidate'], str) or not packet['candidate'].startswith('candidate:') or len(packet['candidate']) > 2048: raise Rejected()
+                if type(packet['line']) is not int or not 0 <= packet['line'] <= 16: raise Rejected()
+                if packet['mid'] is not None and (not isinstance(packet['mid'], str) or len(packet['mid']) > 64): raise Rejected()
             else: raise Rejected()
-            peer = room['receiver'] if role == 'sender' else room['sender']
-            if peer: await peer.send(obj)
+            if role == 'sender': await state['ws'].send(packet)
+            else: await room['sender'].send({**packet,'id':pair_id})
     finally:
-        if room['approval_timeout']: room['approval_timeout'].cancel()
-        if ROOMS.get(key) is room:
-            ROOMS.pop(key, None)
-        if not room['finished']:
-            other = room['receiver'] if role == 'sender' else room['sender']
-            if other:
-                try:
-                    await other.send({'type':'error','message':'配对已结束，请重试'})
-                    await other.frame(8, struct.pack('!H', 1000))
-                except Exception: pass
+        if role == 'sender':
+            if ROOMS.get(key) is room: ROOMS.pop(key, None)
+            for state in list(room['receivers'].values()):
+                if state['timeout']: state['timeout'].cancel()
+                state['ws'].writer.close()
+        else:
+            state = room['receivers'].pop(identity, None)
+            if state:
+                if state['timeout']: state['timeout'].cancel()
+                if not state['finished']:
+                    try: await room['sender'].send({'type':'left','id':identity})
+                    except Exception: pass
 
 async def connection(reader, writer):
     global ACTIVE
@@ -241,7 +272,7 @@ async def connection(reader, writer):
         method, path, _ = parts[0].split(' ')
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
-        if method == 'GET' and path in ('/', '/receiver.js', '/receiver-i18n.js', '/privacy.html', '/support.html'):
+        if method == 'GET' and path in ('/', '/receiver.js', '/receiver-i18n.js', '/receiver-auth.js', '/privacy.html', '/support.html'):
             asset = 'receiver.html' if path == '/' else path[1:]
             body = (Path(__file__).parent / 'Web' / asset).read_bytes()
             if len(body) > 65536: raise Rejected()
@@ -256,7 +287,7 @@ async def connection(reader, writer):
         ip = source_ip(peer[0], headers)
         context['ip'] = ip
         audit('connection_received', **context); observed = True
-        if method != 'GET' or path not in ('/signal', '/audit') or ACTIVE >= 64: raise Rejected()
+        if method != 'GET' or path not in ('/signal', '/audit') or ACTIVE >= 256: raise Rejected()
         if not allowance(ip, 'audit' if path == '/audit' else 'ws', 60 if path == '/audit' else 20): raise Rejected()
         if headers.get('upgrade', '').lower() != 'websocket' or headers.get('sec-websocket-version') != '13': raise Rejected()
         key = headers.get('sec-websocket-key', '')

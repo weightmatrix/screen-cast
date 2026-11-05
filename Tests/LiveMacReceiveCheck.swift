@@ -7,11 +7,13 @@ final class DiagLog { static func log(_ tag: String, _ text: String) {} }
 @main enum LiveMacReceiveCheck {
     @MainActor static func main() async {
         let args = ProcessInfo.processInfo.arguments
-        guard args.count == 2, MatchingCode.isValid(args[1]) else { exit(2) }
+        guard args.count == 2, MatchingCode.isValid(args[1]),
+              let password = ProcessInfo.processInfo.environment["TOUPING_CHECK_PASSWORD"], AdmissionCredentials.validPassword(password) else { exit(2) }
         var failures = 0
         var referenceRatio: CGFloat?
         for mode in ["localIP", "internetCode"] {
             let client = MacReceiverClient()
+            client.connectionPassword = password; client.applicationText = "本机接收验收申请，请主控手动确认"
             if mode == "localIP" { client.connect(host: "127.0.0.1", port: 8318, code: args[1]) }
             else { client.connectInternetCode(args[1]) }
             for _ in 0..<300 {

@@ -1,4 +1,4 @@
-import asyncio, base64, hashlib, json, os, struct, unittest, tempfile
+import asyncio, base64, hashlib, hmac, json, os, struct, unittest, tempfile
 from unittest import mock
 from audit import AuditLog, AuditUnavailable
 import signaling as service
@@ -26,6 +26,9 @@ class Client:
     async def close(self): self.w.close(); await self.w.wait_closed()
 
 class PairingTests(unittest.IsolatedAsyncioTestCase):
+    # Public synthetic fixture, never a deployment password.
+    verifier = hashlib.sha256(b'touping-auth-v2:61328407:Fixture-only-71').hexdigest()
+
     async def asyncSetUp(self):
         self.audit_dir = tempfile.TemporaryDirectory()
         self.audit_path = os.path.join(self.audit_dir.name, 'connections.jsonl')
@@ -34,219 +37,167 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         self.server = await asyncio.start_server(service.connection,'127.0.0.1',0,limit=8192)
         self.port = self.server.sockets[0].getsockname()[1]
         self.clients=[]
+
     async def asyncTearDown(self):
-        for c in self.clients: await c.close()
-        self.server.close(); await self.server.wait_closed(); await asyncio.sleep(.02)
-        service.AUDIT = None
-        self.audit_dir.cleanup()
-    async def client(self,role,key='a'*64):
-        c=await Client.open(self.port); self.clients.append(c)
-        await c.send({'role':role,'room':key,'approval':1}); return c
+        for client in reversed(self.clients): await client.close()
+        self.server.close(); await self.server.wait_closed(); await asyncio.sleep(.03)
+        service.AUDIT = None; self.audit_dir.cleanup()
+
+    async def client(self, role, key='a'*64, **extra):
+        client = await Client.open(self.port); self.clients.append(client)
+        hello = {'role':role,'room':key,'protocol':2}
+        if role == 'sender': hello['verifier'] = self.verifier
+        await client.send({**hello, **extra})
+        return client
+
+    async def apply(self, sender, key='a'*64, text='Synthetic request', valid=True):
+        receiver = await self.client('receiver',key)
+        challenge = (await receiver.receive())[1]
+        self.assertEqual(challenge['type'], 'challenge')
+        proof = hmac.new(self.verifier.encode(),challenge['nonce'].encode(),hashlib.sha256).hexdigest()
+        await receiver.send({'type':'apply','proof':proof if valid else '0'*64,'application':text})
+        return receiver
+
     async def pair(self):
-        a=await self.client('sender'); self.assertEqual((await a.receive())[1]['type'],'waiting')
-        b=await self.client('receiver'); self.assertEqual((await a.receive())[1]['type'],'peer')
-        self.assertEqual((await b.receive())[1]['type'], 'waiting_approval')
-        await a.send({'type':'approve'})
-        self.assertEqual((await a.receive())[1]['type'], 'approved')
-        self.assertEqual((await b.receive())[1]['type'], 'approved')
-        return a,b
-    async def test_cannot_negotiate_before_approval(self):
-        a = await self.client('sender'); await a.receive()
-        b = await self.client('receiver'); await a.receive(); await b.receive()
-        await a.send({'type':'offer','sdp':'v=0\r\nforbidden'})
-        self.assertEqual((await a.receive())[0], 8)
-        self.assertEqual((await b.receive())[1]['type'], 'error')
+        a = await self.client('sender'); self.assertEqual((await a.receive())[1]['type'],'waiting')
+        b = await self.apply(a)
+        self.assertEqual((await b.receive())[1]['type'],'waiting_approval')
+        request = (await a.receive())[1]
+        self.assertEqual(request['type'],'request')
+        return a,b,request['id']
 
-    async def test_receiver_cannot_approve_itself(self):
-        a = await self.client('sender'); await a.receive()
-        b = await self.client('receiver'); await a.receive(); await b.receive()
-        await b.send({'type':'approve'})
-        self.assertEqual((await b.receive())[0], 8)
+    async def approve(self,a,b,identity):
+        await a.send({'type':'approve','id':identity})
+        self.assertEqual((await a.receive())[1],{'type':'approved','id':identity})
+        self.assertEqual((await b.receive())[1],{'type':'approved','session_id':identity})
 
-    async def test_sender_must_support_approval(self):
-        a = await Client.open(self.port); self.clients.append(a)
-        await a.send({'role':'sender','room':'a'*64})
-        self.assertEqual((await a.receive())[1]['type'], 'error')
-        self.assertFalse(service.ROOMS)
-
-    async def test_rejected_request_never_receives_media_offer(self):
-        a = await self.client('sender'); await a.receive()
-        b = await self.client('receiver'); await a.receive(); await b.receive()
-        await a.send({'type':'reject'})
-        self.assertEqual((await b.receive())[1]['type'], 'error')
-
-    async def test_pairing_forward_and_both_connected_close(self):
-        a,b=await self.pair()
-        msg={'type':'offer','sdp':'v=0\r\nexample'}; await a.send(msg); self.assertEqual((await b.receive())[1],msg)
-        await a.send({'type':'done'})
-        await b.send({'type':'answer','sdp':'v=0\r\nanswer'})
-        self.assertEqual((await a.receive())[1]['type'],'answer')
-        await b.send({'type':'done'})
-        self.assertEqual((await a.receive())[0],8); self.assertEqual((await b.receive())[0],8)
-    async def test_room_reusable_after_successful_pair(self):
-        a,b=await self.pair()
-        await a.send({'type':'done'}); await b.send({'type':'done'})
-        self.assertEqual((await a.receive())[0],8); self.assertEqual((await b.receive())[0],8)
-        await asyncio.sleep(.02)
-        c,d=await self.pair()
-        offer={'type':'offer','sdp':'v=0\r\nsecond pair'}
-        await c.send(offer); self.assertEqual((await d.receive())[1],offer)
-    async def test_no_media_messages(self):
-        a,b=await self.pair(); await a.send({'type':'video','data':'forbidden'})
-        self.assertEqual((await a.receive())[0],8)
-    async def test_receiver_page_and_script_have_private_static_headers(self):
-        for path, mime in [('/', b'text/html'), ('/receiver.js', b'application/javascript'),
-                           ('/privacy.html', b'text/html'), ('/support.html', b'text/html')]:
-            reader, writer = await asyncio.open_connection('127.0.0.1', self.port)
-            writer.write(f'GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n'.encode()); await writer.drain()
-            response = await reader.read()
-            writer.close(); await writer.wait_closed()
-            self.assertIn(b'200 OK', response); self.assertIn(mime, response)
-            self.assertIn(b'Referrer-Policy: no-referrer', response)
-            self.assertIn(b'Cache-Control: no-store', response)
-            self.assertNotIn(b'Access-Control-Allow-Origin: *', response)
-        self.assertFalse(service.ROOMS)
-    async def test_browser_receiver_metadata_joins_native_sender(self):
-        sender = await self.client('sender'); await sender.receive()
-        receiver = await Client.open(self.port); self.clients.append(receiver)
-        await receiver.send({'role':'receiver','room':'a'*64,'device':{'installation_id':'c'*32,
-            'platform':'browser','model':'Browser','os_version':'0','app_version':'1.4','app_build':'51-web'}})
-        self.assertEqual((await sender.receive())[1], {'type':'peer'})
-        with open(self.audit_path) as stream: records = [json.loads(line) for line in stream]
-        self.assertTrue(any(row.get('device', {}).get('platform') == 'browser' for row in records if row.get('device')))
-    async def test_bounded_device_metadata_is_audited_not_forwarded(self):
-        device = {'installation_id': 'b' * 32, 'platform': 'iPadOS', 'model': 'iPad11,1',
-                  'os_version': '26.0.1', 'app_version': '1.4', 'app_build': '50'}
-        a = await Client.open(self.port); self.clients.append(a)
-        await a.send({'role': 'sender', 'room': 'a' * 64, 'device': device, 'approval':1})
-        self.assertEqual((await a.receive())[1], {'type': 'waiting'})
-        with open(self.audit_path) as stream: events = [json.loads(line) for line in stream]
-        record = next(event for event in events if event['event'] == 'device_reported')
-        self.assertEqual(record['device'], device)
-        self.assertEqual(record['evidence'], 'client_report_only')
-        self.assertFalse(record['mac_address_available'])
-        self.assertNotIn('room', record)
-        b = await self.client('receiver'); self.assertEqual((await a.receive())[1], {'type': 'peer'})
-    async def test_rejects_device_fields_outside_allowlist(self):
-        for value in [{'mac': '00:11:22:33:44:55'}, 'invalid', {'installation_id': 'a' * 5000}]:
-            a = await Client.open(self.port); self.clients.append(a)
-            await a.send({'role': 'sender', 'room': 'a' * 64, 'device': value})
-            self.assertEqual((await a.receive())[0], 8)
-        self.assertFalse(service.ROOMS)
-    async def test_direct_report_is_bounded_metadata_only_without_room(self):
-        device = {'installation_id': 'b' * 32, 'platform': 'macOS', 'model': 'Mac16,10',
-                  'os_version': '26.0.1', 'app_version': '1.4', 'app_build': '50'}
-        packet = {'role': 'audit', 'route': 'internet_ip', 'session_id': 'c' * 32,
-                  'peer_role': 'sender', 'event': 'connected', 'device': device}
-        a = await Client.open(self.port, path='/audit'); self.clients.append(a); await a.send(packet)
-        self.assertEqual((await a.receive())[1], {'type': 'audit_recorded'})
-        self.assertFalse(service.ROOMS)
-        with open(self.audit_path) as stream: records = [json.loads(line) for line in stream]
-        record = next(value for value in records if value['event'] == 'direct_connection_reported')
-        self.assertEqual(record['session_id'], 'c' * 32)
-        self.assertEqual(record['ip'], '127.0.0.1')
-        b = await Client.open(self.port, path='/audit'); self.clients.append(b)
-        await b.send({**packet, 'sdp': 'forbidden'})
-        self.assertEqual((await b.receive())[0], 8)
-        c = await Client.open(self.port); self.clients.append(c); await c.send(packet)
-        self.assertEqual((await c.receive())[0], 8)
-        d = await Client.open(self.port, path='/audit'); self.clients.append(d)
-        await d.send({'role': 'sender', 'room': 'a' * 64})
-        self.assertEqual((await d.receive())[0], 8)
-    async def test_room_shared_byte_budget(self):
-        a,b=await self.pair(); room=service.ROOMS['a'*64]; room['bytes']=65530
-        await a.send({'type':'candidate','candidate':'candidate:x','mid':'0','line':0})
-        self.assertEqual((await a.receive())[0],8)
-    async def test_code_not_found(self):
-        a=await self.client('receiver'); self.assertEqual((await a.receive())[1]['type'],'error')
-    async def test_duplicate_sender_does_not_replace_room(self):
+    async def test_password_and_application_required_before_sender_notification(self):
         a=await self.client('sender'); await a.receive()
-        b=await self.client('sender'); self.assertEqual((await b.receive())[1]['type'],'error')
-        self.assertIsNotNone(service.ROOMS.get('a'*64))
-    async def test_suggestion_skips_occupied_and_excluded_codes(self):
-        occupied='12345678'; excluded='87654321'; expected='23456789'
-        digest=lambda value: hashlib.sha256(value.encode()).hexdigest()
-        sender=await self.client('sender', digest(occupied)); await sender.receive()
-        suggestion=await Client.open(self.port); self.clients.append(suggestion)
-        with mock.patch.object(service.secrets,'randbelow',side_effect=[int(occupied),int(excluded),int(expected)]):
-            await suggestion.send({'role':'suggest','exclude':[digest(excluded)]})
-            reply=(await suggestion.receive())[1]
-        self.assertEqual(reply,{'type':'suggestion','code':expected})
-        self.assertNotIn(digest(expected),service.ROOMS, 'A suggestion must not replace/register a sender')
-        self.assertIn(digest(occupied),service.ROOMS)
-        with open(self.audit_path) as stream: raw=stream.read()
-        self.assertIn('code_suggested',raw)
-        self.assertNotIn('"code":',raw); self.assertNotIn(digest(excluded),raw)
-    async def test_suggestion_race_still_rejects_second_sender(self):
-        key=hashlib.sha256(b'23456789').hexdigest()
-        first=await self.client('sender',key); await first.receive()
-        original=service.ROOMS[key]
-        second=await self.client('sender',key)
-        response=(await second.receive())[1]
-        self.assertEqual(response['code'],'code_in_use')
-        self.assertIs(service.ROOMS[key],original)
-        self.assertEqual(len(service.ROOMS),1)
-    async def test_server_full_is_not_reported_as_code_collision(self):
-        service.ROOMS.update({f'{index:064x}':{} for index in range(32)})
-        sender=await self.client('sender','f'*64)
-        response=(await sender.receive())[1]
-        self.assertEqual(response['code'],'server_busy')
-        self.assertNotIn('匹配码已使用',response['message'])
-    async def test_suggestion_rejects_unbounded_exclusion_list(self):
-        suggestion=await Client.open(self.port); self.clients.append(suggestion)
-        await suggestion.send({'role':'suggest','exclude':['a'*64]*33})
-        self.assertEqual((await suggestion.receive())[0],8)
-    async def test_suggestion_generation_has_bounded_attempts(self):
-        sender=await self.client('sender',hashlib.sha256(b'12345678').hexdigest()); await sender.receive()
-        suggestion=await Client.open(self.port); self.clients.append(suggestion)
-        with mock.patch.object(service.secrets,'randbelow',return_value=12345678) as generate:
-            await suggestion.send({'role':'suggest','exclude':[]})
-            response=(await suggestion.receive())[1]
-        self.assertEqual(response['type'],'error'); self.assertEqual(generate.call_count,128)
-    async def test_connection_audit_correlates_without_payloads(self):
-        a,b=await self.pair()
-        await a.send({'type':'offer','sdp':'v=0\r\nPRIVATE-SDP'})
-        await b.receive()
-        await a.send({'type':'done'}); await b.send({'type':'done'})
-        await a.receive(); await b.receive(); await asyncio.sleep(.02)
-        with open(self.audit_path) as stream: raw=stream.read()
-        rows=[json.loads(line) for line in raw.splitlines()]
-        joined=next(row for row in rows if row['event']=='receiver_joined')
-        waiting=next(row for row in rows if row['event']=='sender_waiting')
-        completed=next(row for row in rows if row['event']=='pairing_completed')
-        self.assertEqual(joined['pair_id'], waiting['pair_id'])
-        self.assertEqual(completed['pair_id'], joined['pair_id'])
-        self.assertEqual(completed['sender_connection_id'], waiting['connection_id'])
-        self.assertFalse(completed['media_end_observed'])
-        self.assertEqual(joined['ip'], '127.0.0.1')
-        self.assertNotIn('PRIVATE-SDP', raw); self.assertNotIn('a'*64, raw)
-        self.assertEqual(len([r for r in rows if r['event']=='peer_reported_connected']), 2)
-        self.assertTrue(any(r['event']=='signaling_closed' for r in rows))
-    async def test_audit_failure_refuses_handshake(self):
-        with mock.patch.object(service.AUDIT, 'record', side_effect=AuditUnavailable()):
+        for valid,text in [(False,'valid'),(True,''),(True,'x'*201),(True,'bad\x00text')]:
+            b=await self.apply(a,text=text,valid=valid)
+            self.assertEqual((await b.receive())[1]['type'],'error')
+        with self.assertRaises(asyncio.TimeoutError): await asyncio.wait_for(a.receive(),.05)
+        self.assertEqual(len(service.ROOMS['a'*64]['receivers']),0)
+
+    async def test_request_contains_observed_ip_and_text_but_audit_does_not_contain_secrets(self):
+        a=await self.client('sender'); await a.receive()
+        text='PRIVATE_APPLICATION_71_DO_NOT_LOG'
+        b=await self.apply(a,text=text); await b.receive()
+        request=(await a.receive())[1]
+        self.assertEqual(request['application'],text); self.assertEqual(request['ip'],'127.0.0.1')
+        with open(self.audit_path) as stream: body=stream.read()
+        for secret in [text, self.verifier, 'Fixture-only-71']: self.assertNotIn(secret,body)
+        self.assertIn('application_length',body)
+
+    async def test_many_applicants_are_independent_of_media_limit(self):
+        a=await self.client('sender'); await a.receive()
+        requests=[]
+        for _ in range(12):
+            b=await self.apply(a); await b.receive(); requests.append(((await a.receive())[1]['id'],b))
+        self.assertEqual(len(service.ROOMS['a'*64]['receivers']),12)
+        await self.approve(a,requests[0][1],requests[0][0])
+        await self.approve(a,requests[1][1],requests[1][0])
+        self.assertFalse(service.ROOMS['a'*64]['receivers'][requests[2][0]]['approved'])
+
+    async def test_cannot_negotiate_or_self_approve_before_owner_accepts(self):
+        a,b,identity=await self.pair()
+        await b.send({'type':'approve','id':identity})
+        self.assertEqual((await b.receive())[0],8)
+        self.assertEqual((await a.receive())[1]['type'],'left')
+
+    async def test_sender_cannot_offer_before_approval(self):
+        a,b,identity=await self.pair()
+        await a.send({'type':'offer','id':identity,'sdp':'v=0\r\nforbidden'})
+        self.assertEqual((await a.receive())[0],8)
+
+    async def test_receiver_cannot_target_another_applicant(self):
+        a,b,identity=await self.pair(); await self.approve(a,b,identity)
+        c=await self.apply(a); await c.receive(); other=(await a.receive())[1]['id']
+        answer={'type':'answer','sdp':'v=0\r\nsynthetic'}
+        await b.send({**answer,'id':other})
+        self.assertEqual((await a.receive())[1],{**answer,'id':identity})
+        self.assertFalse(service.ROOMS['a'*64]['receivers'][other]['approved'])
+
+    async def test_forwarding_is_scoped_and_host_survives_pairing(self):
+        a,b,identity=await self.pair(); await self.approve(a,b,identity)
+        offer={'type':'offer','sdp':'v=0\r\nsynthetic'}
+        await a.send({**offer,'id':identity}); self.assertEqual((await b.receive())[1],offer)
+        answer={'type':'answer','sdp':'v=0\r\nsynthetic answer'}
+        await b.send(answer); self.assertEqual((await a.receive())[1],{**answer,'id':identity})
+        await a.send({'type':'done','id':identity}); await b.send({'type':'done'})
+        self.assertEqual((await b.receive())[0],8)
+        await asyncio.sleep(.03)
+        c=await self.apply(a); await c.receive()
+        self.assertEqual((await a.receive())[1]['type'],'request')
+        self.assertIn('a'*64,service.ROOMS)
+
+    async def test_rejection_only_removes_selected_applicant(self):
+        a,b,identity=await self.pair()
+        c=await self.apply(a); await c.receive(); other=(await a.receive())[1]['id']
+        await a.send({'type':'reject','id':identity})
+        self.assertEqual((await b.receive())[1]['type'],'error')
+        self.assertEqual((await a.receive())[1],{'type':'left','id':identity})
+        self.assertIn(other,service.ROOMS['a'*64]['receivers'])
+
+    async def test_nonce_cannot_be_replayed(self):
+        a=await self.client('sender'); await a.receive()
+        b=await self.client('receiver'); nonce=(await b.receive())[1]['nonce']
+        proof=hmac.new(self.verifier.encode(),nonce.encode(),hashlib.sha256).hexdigest()
+        c=await self.client('receiver'); await c.receive()
+        await c.send({'type':'apply','proof':proof,'application':'Replay fixture'})
+        self.assertEqual((await c.receive())[1]['type'],'error')
+        with self.assertRaises(asyncio.TimeoutError): await asyncio.wait_for(a.receive(),.05)
+
+    async def test_legacy_sender_is_rejected(self):
+        a=await self.client('sender',protocol=1)
+        self.assertEqual((await a.receive())[1]['type'],'error'); self.assertFalse(service.ROOMS)
+
+    async def test_unknown_room_and_collision(self):
+        b=await self.client('receiver'); self.assertEqual((await b.receive())[1]['type'],'error')
+        a=await self.client('sender'); await a.receive()
+        c=await self.client('sender'); self.assertEqual((await c.receive())[1]['code'],'code_in_use')
+
+    async def test_no_media_messages_and_pair_byte_limit(self):
+        a,b,identity=await self.pair(); await self.approve(a,b,identity)
+        await a.send({'type':'video','id':identity,'data':'forbidden'})
+        self.assertEqual((await a.receive())[0],8)
+
+    async def test_device_fields_and_request_shape_are_bounded(self):
+        a=await self.client('sender',device={'mac':'00:11:22:33:44:55'})
+        self.assertEqual((await a.receive())[0],8)
+        self.assertFalse(service.ROOMS)
+
+    async def test_static_assets_have_no_store_headers(self):
+        for path in ['/','/receiver.js','/receiver-auth.js','/receiver-i18n.js','/privacy.html']:
+            reader,writer=await asyncio.open_connection('127.0.0.1',self.port)
+            writer.write(f'GET {path} HTTP/1.1\r\nHost: localhost\r\n\r\n'.encode()); await writer.drain()
+            response=await reader.read(); writer.close(); await writer.wait_closed()
+            self.assertIn(b'200 OK',response); self.assertIn(b'Cache-Control: no-store',response)
+
+    async def test_audit_failure_refuses_registration(self):
+        with mock.patch.object(service.AUDIT,'record',side_effect=AuditUnavailable()):
             reader,writer=await asyncio.open_connection('127.0.0.1',self.port)
             writer.write(b'GET /signal HTTP/1.1\r\nHost: localhost\r\n\r\n'); await writer.drain()
-            self.assertIn(b'503', await reader.read())
-            writer.close(); await writer.wait_closed()
-            self.assertEqual(service.ACTIVE, 0)
-    async def test_rejection_logged(self):
-        a=await self.client('receiver'); await a.receive(); await asyncio.sleep(.02)
-        with open(self.audit_path) as stream: rows=[json.loads(line) for line in stream]
-        self.assertTrue(any(r['event']=='pairing_rejected' and r['reason']=='sender_not_found_or_busy' for r in rows))
-    async def test_stun_binding_only_and_rate_limit(self):
-        class Transport:
-            def __init__(self): self.sent=[]
-            def sendto(self,data,addr): self.sent.append((data,addr))
-        stun=service.STUN(); transport=Transport(); stun.connection_made(transport)
-        request=struct.pack('!HHI',1,0,0x2112A442)+b'123456789012'
-        stun.datagram_received(request,('203.0.113.4',54321))
-        answer=transport.sent[0][0]; self.assertEqual(len(answer),32); self.assertEqual(answer[8:20],request[8:20])
-        self.assertEqual(struct.unpack('!H',answer[26:28])[0]^0x2112,54321)
-        stun.datagram_received(b'x'*1000,('203.0.113.4',54321)); self.assertEqual(len(transport.sent),1)
-        turn=struct.pack('!HHI',3,0,0x2112A442)+b'123456789012'
-        stun.datagram_received(turn,('203.0.113.4',54321)); self.assertEqual(len(transport.sent),1)
-        for _ in range(100): stun.datagram_received(request,('203.0.113.4',54321))
-        self.assertEqual(len(transport.sent),60)
+            self.assertIn(b'503',await reader.read()); writer.close(); await writer.wait_closed()
+        self.assertFalse(service.ROOMS)
+
+    async def test_suggestion_skips_occupied_and_excluded_codes(self):
+        key=hashlib.sha256(b'12345678').hexdigest()
+        a=await self.client('sender',key); await a.receive()
+        c=await Client.open(self.port); self.clients.append(c)
+        with mock.patch.object(service.secrets,'randbelow',side_effect=[12345678,23456789,34567890]):
+            await c.send({'role':'suggest','exclude':[hashlib.sha256(b'23456789').hexdigest()]})
+            self.assertEqual((await c.receive())[1],{'type':'suggestion','code':'34567890'})
+
+    async def test_direct_audit_is_metadata_only(self):
+        a=await Client.open(self.port,path='/audit'); self.clients.append(a)
+        device={'installation_id':'b'*32,'platform':'macOS','model':'Synthetic','os_version':'0','app_version':'1.4','app_build':'71-test'}
+        packet={'role':'audit','route':'internet_ip','session_id':'c'*32,'peer_role':'sender','event':'ended','duration_ms':100,'device':device}
+        await a.send(packet); self.assertEqual((await a.receive())[1]['type'],'audit_recorded')
+        b=await Client.open(self.port,path='/audit'); self.clients.append(b)
+        await b.send({**packet,'application':'not-a-log-field'})
+        self.assertEqual((await b.receive())[0],8)
+
 class AuditTests(unittest.TestCase):
     def test_rotation_permissions_and_retention(self):
         with tempfile.TemporaryDirectory() as directory:

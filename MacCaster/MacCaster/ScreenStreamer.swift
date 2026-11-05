@@ -12,6 +12,13 @@ import AVFoundation
 
 final class ScreenStreamer: NSObject, ObservableObject {
     let annotation = AnnotationEngine()
+    @Published private(set) var connectionPassword = ConnectionPasswordStore.read()
+    func updateConnectionPassword(_ value: String) -> Bool {
+        guard AdmissionCredentials.validPassword(value), !sessions.contains(where: { $0.code == value }), ConnectionPasswordStore.save(value) else { return false }
+        connectionPassword = value
+        sessions.forEach { $0.server.connectionPassword = value }
+        return true
+    }
     struct AppGroup: Identifiable {
         var id = UUID()
         let application: SCRunningApplication
@@ -126,6 +133,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
         sortAppGroups()
         let session = StreamSession(port: port, filter: filter, name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin, code: finalCode)
         DiagLog.log("Stream", "addSession port=\(port) code=\(finalCode) name=\(name)")
+        session.server.connectionPassword = connectionPassword
         session.start()
         sessions.append(session)
         refreshBroadcast()
@@ -186,7 +194,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
     private func uniqueCode(for requested: String) -> String {
         let used = Set(sessions.map { $0.code })
         var candidate = MatchingCode.isValid(requested) ? requested : MatchingCode.generate()
-        while used.contains(candidate) { candidate = MatchingCode.generate() }
+        while used.contains(candidate) || candidate == connectionPassword { candidate = MatchingCode.generate() }
         return candidate
     }
 
@@ -194,7 +202,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
 
     func canChangeCode(_ session: StreamSession, to newCode: String) -> Bool {
         let used = Set(sessions.filter { $0.id != session.id }.map { $0.code })
-        return MatchingCode.isValid(newCode) && !used.contains(newCode)
+        return MatchingCode.isValid(newCode) && newCode != connectionPassword && !used.contains(newCode)
     }
 
     func removeSession(_ session: StreamSession) {
@@ -259,7 +267,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var internetMatchingEnabled = true { didSet { server.setInternetMatchingEnabled(internetMatchingEnabled) } }
     @Published var internetEnabled = false { didSet { server.setInternetEnabled(internetEnabled) } }
     @Published var internetStatus = "广域网已关闭"
-    var internetCodeConflict: Bool { internetStatus.contains("匹配码已使用") }
+    var internetCodeConflict: Bool { internetStatus.contains("邀请编号已占用") }
     @Published var sendsPageAudio = false { didSet { updateAudio() } }
     @Published var sendsMicrophone = false { didSet { updateAudio() } }
     private var captureConfiguration: SCStreamConfiguration?

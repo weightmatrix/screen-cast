@@ -64,8 +64,10 @@ struct PendingConnectionsView: View {
     var body: some View {
         ForEach(requests) { request in
             HStack {
-                VStack(alignment: .leading) {
-                    Text("公网接入申请").font(.headline)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("接入申请").font(.headline)
+                    Text("来源 IP：\(request.ip)").font(.caption.monospaced()).textSelection(.enabled)
+                    Text(verbatim: request.application).font(.body).fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
                     Text("\(request.route) · \(request.id.prefix(8))").font(.caption)
                 }
                 Spacer()

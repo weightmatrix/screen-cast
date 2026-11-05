@@ -803,28 +803,150 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
 }
 
 /// Signaling only: no byte tunnel, loopback listener, or video data channel.
+/// One lightweight registration, many independent applicants and native media peers.
+final class NativeVideoHost: @unchecked Sendable {
+    var onRegistered: (() -> Void)?
+    var onRequest: ((String, String, String) -> Void)?
+    var onPeerCreated: ((String, NativeVideoPeer) -> Void)?
+    var onChanged: (() -> Void)?
+    var onEnded: ((String) -> Void)?
+    var onError: ((String) -> Void)?
+    private let code: String
+    private let password: String
+    private let makePeer: () -> NativeVideoPeer
+    private var peers: [String: NativeVideoPeer] = [:]
+    private var connected = Set<String>()
+    private var pending = Set<String>()
+    private var accepted = Set<String>()
+    private var audits: [String: DirectConnectionAudit] = [:]
+    private var socket: URLSessionWebSocketTask?
+    private var session: URLSession?
+    private var retry: DispatchWorkItem?
+    private var stopped = false
+    private var bytes = 0
+    var videos: [NativeVideoPeer] { Array(peers.values) }
+    var connectedCount: Int { connected.count }
+    init(code: String, password: String, makePeer: @escaping () -> NativeVideoPeer) {
+        self.code = code; self.password = password; self.makePeer = makePeer
+    }
+    func start() {
+        guard !stopped, socket == nil, AdmissionCredentials.validPassword(password) else { return }
+        bytes = 0
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 610; configuration.urlCache = nil
+        let session = URLSession(configuration: configuration); self.session = session
+        let socket = session.webSocketTask(with: InternetSettings.signalingURL); self.socket = socket
+        socket.maximumMessageSize = 16384; socket.resume()
+        send(["role":"sender", "protocol":2, "room":InternetSettings.room(code),
+              "verifier":AdmissionCredentials.verifier(password: password, invitation: code), "device":DeviceAuditMetadata.value])
+        read(socket)
+    }
+    func respond(_ id: String, accept: Bool) {
+        guard pending.contains(id), !accepted.contains(id) else { return }
+        if accept { accepted.insert(id) }
+        else { pending.remove(id); onEnded?(id) }
+        send(["type":accept ? "approve" : "reject", "id":id])
+    }
+    func disconnect(_ diagnosticID: String) {
+        guard let id = peers.first(where: { $0.value.diagnosticID == diagnosticID })?.key else { return }
+        send(["type":"leave", "id":id]); remove(id)
+    }
+    private func remove(_ id: String) {
+        pending.remove(id); accepted.remove(id); connected.remove(id)
+        peers.removeValue(forKey: id)?.stop(); audits.removeValue(forKey: id)?.record("ended")
+        onEnded?(id); onChanged?()
+    }
+    func stop() {
+        stopped = true; retry?.cancel()
+        socket?.cancel(with: .normalClosure, reason: nil); socket = nil
+        session?.invalidateAndCancel(); session = nil
+        for id in Set(peers.keys).union(pending).union(accepted) { remove(id) }
+    }
+    private func lost(_ old: URLSessionWebSocketTask) {
+        guard socket === old, !stopped else { return }
+        socket = nil; session?.invalidateAndCancel(); session = nil
+        for id in Set(peers.keys).union(pending).union(accepted) where !connected.contains(id) { remove(id) }
+        onError?("公网邀请暂时断开，正在重新登记；已连接画面保持直传")
+        let work = DispatchWorkItem { [weak self] in self?.start() }; retry = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+    private func send(_ packet: [String: Any]) {
+        guard !stopped, let socket, let data = NativeVideo.packet(packet) else { return }
+        bytes += data.count
+        guard bytes <= 2 * 1024 * 1024 else { lost(socket); return }
+        Task { [weak self] in
+            do { try await socket.send(.string(String(decoding: data, as: UTF8.self))) }
+            catch { DispatchQueue.main.async { self?.lost(socket) } }
+        }
+    }
+    private func read(_ socket: URLSessionWebSocketTask) {
+        Task { [weak self] in
+            do {
+                let message = try await socket.receive()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.socket === socket, !self.stopped else { return }
+                    let data: Data
+                    switch message { case .string(let text): data = Data(text.utf8); case .data(let value): data = value; @unknown default: self.lost(socket); return }
+                    self.bytes += data.count
+                    guard self.bytes <= 2 * 1024 * 1024, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { self.lost(socket); return }
+                    let id = object["id"] as? String ?? ""
+                    switch object["type"] as? String {
+                    case "waiting": self.onRegistered?()
+                    case "request":
+                        guard id.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil,
+                              let text = object["application"] as? String, let application = AdmissionCredentials.application(text),
+                              let ip = object["ip"] as? String, ip.utf8.count <= 64, self.pending.count < 64 else { self.send(["type":"reject","id":id]); break }
+                        self.pending.insert(id); self.onRequest?(id, application, ip)
+                    case "approved":
+                        guard self.accepted.contains(id), self.peers[id] == nil else { break }
+                        self.pending.remove(id)
+                        let peer = self.makePeer(); self.peers[id] = peer
+                        self.audits[id] = DirectConnectionAudit(sessionID: id, sending: true, route: "internet_code")
+                        peer.sendSignal = { [weak self] packet in var object = packet; object["id"] = id; self?.send(object) }
+                        peer.onConnected = { [weak self, weak peer] in
+                            guard let self, let peer, self.peers[id] === peer else { return }
+                            self.connected.insert(id); self.audits[id]?.record("connected")
+                            self.send(["type":"done", "id":id]); self.onChanged?()
+                        }
+                        peer.onError = { [weak self] _ in self?.remove(id) }
+                        self.onPeerCreated?(id, peer); peer.offer()
+                    case "left": if !self.connected.contains(id) { self.remove(id) }
+                    case "error":
+                        self.onError?(object["message"] as? String ?? "公网邀请失败")
+                    default: self.peers[id]?.receive(object)
+                    }
+                    if self.socket === socket { self.read(socket) }
+                }
+            } catch { DispatchQueue.main.async { [weak self] in self?.lost(socket) } }
+        }
+    }
+}
+
 final class NativeVideoRoom: @unchecked Sendable {
     let video: NativeVideoPeer
+    var onWaitingApproval: (() -> Void)?
+    var onApproved: (() -> Void)?
     var onRegistered: (() -> Void)?
-    var onApprovalRequested: (() -> Void)?
     private var lifecycleAudit: DirectConnectionAudit?
-    private var approvalPending = false
     private var roomTimeout: DispatchWorkItem?
     var onConnected: (() -> Void)?
     var onError: ((String) -> Void)?
     private let code: String
     private let sending: Bool
+    private let password: String
+    private let application: String
     private var socket: URLSessionWebSocketTask?
     private var session: URLSession?
     private var bytes = 0
     private var closed = false
     private var connected = false
-    init(code: String, source: NativeScreenSource? = nil, bitrate: Int = 100_000_000, fps: Int = 60) {
+    init(code: String, password: String = "", application: String = "", source: NativeScreenSource? = nil, bitrate: Int = 100_000_000, fps: Int = 60) {
+        self.password = password; self.application = application
         self.code = code; sending = source != nil
         video = NativeVideoPeer(source: source, internet: true, bitrate: bitrate, fps: fps)
     }
     func start() {
-        guard MatchingCode.isValid(code) else { fail("匹配码格式错误"); return }
+        guard !sending, MatchingCode.isValid(code), AdmissionCredentials.validPassword(password), AdmissionCredentials.application(application) != nil else { fail("请填写连接密码和1至200字申请文字"); return }
         video.sendSignal = { [weak self] in self?.send($0) }
         video.onError = { [weak self] in self?.fail($0) }
         video.onConnected = { [weak self] in
@@ -837,7 +959,7 @@ final class NativeVideoRoom: @unchecked Sendable {
         let session = URLSession(configuration: configuration); self.session = session
         let socket = session.webSocketTask(with: InternetSettings.signalingURL); self.socket = socket
         socket.maximumMessageSize = 16384; socket.resume()
-        send(["role":sending ? "sender" : "receiver", "room":InternetSettings.room(code), "device": DeviceAuditMetadata.value, "approval": 1])
+        send(["role":sending ? "sender" : "receiver", "room":InternetSettings.room(code), "device": DeviceAuditMetadata.value, "protocol": 2])
         if !sending { armConnectionTimeout() }
         read(socket)
     }
@@ -845,12 +967,7 @@ final class NativeVideoRoom: @unchecked Sendable {
         roomTimeout?.cancel()
         let timeout = DispatchWorkItem { [weak self] in self?.fail("接入申请或连接超时，请重试") }
         roomTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + 90, execute: timeout)
-    }
-    func respondToApproval(accept: Bool) {
-        guard sending, approvalPending, !closed else { return }
-        approvalPending = false
-        send(["type": accept ? "approve" : "reject"])
+        DispatchQueue.main.asyncAfter(deadline: .now() + 340, execute: timeout)
     }
     func stop() {
         guard !closed else { return }; closed = true
@@ -879,11 +996,13 @@ final class NativeVideoRoom: @unchecked Sendable {
                     self.bytes += data.count
                     guard self.bytes <= 65536, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { self.fail("配对响应无效"); return }
                     switch object["type"] as? String {
+                    case "challenge":
+                        guard let nonce = object["nonce"] as? String, nonce.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil else { self.fail("无效连接验证"); return }
+                        self.send(["type":"apply", "proof":AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: self.password, invitation: self.code), nonce: nonce), "application":self.application])
                     case "waiting": self.onRegistered?()
-                    case "peer":
-                        if self.sending { self.armConnectionTimeout(); self.approvalPending = true; self.onApprovalRequested?() }
-                    case "waiting_approval": break
+                    case "waiting_approval": self.onWaitingApproval?()
                     case "approved":
+                        self.onApproved?()
                         if let id = object["session_id"] as? String {
                             self.lifecycleAudit = DirectConnectionAudit(sessionID: id, sending: self.sending, route: "internet_code")
                         }

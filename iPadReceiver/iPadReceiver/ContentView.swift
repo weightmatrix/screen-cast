@@ -15,6 +15,8 @@ struct ContentView: View {
     @AppStorage("internetIP") private var internetHost = ""
     @AppStorage("internetPort") private var internetPortText = "9318"
     @AppStorage("matchCode") private var matchCode = ""
+    @State private var connectionPassword = ""
+    @State private var applicationText = ""
     @State private var drawerOpen = true
     @State private var autoSearchTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
     @ObservedObject private var diag = ConnectionDiag.shared
@@ -180,9 +182,10 @@ struct ContentView: View {
                             .keyboardType(.default).frame(width: 130)
                     }.padding(16).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16))
                 }
+            if connectMode == "code" || connectMode == "wanCode" {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("匹配码").foregroundStyle(.secondary)
-                    TextField("6–36 位数字", text: $matchCode)
+                    Text("邀请链接或编号").foregroundStyle(.secondary)
+                    TextField("邀请链接或编号", text: $matchCode)
                         .textInputAutocapitalization(.never).autocorrectionDisabled()
                         .font(.system(size: 38, weight: .medium, design: .monospaced))
                         .keyboardType(.default)
@@ -190,6 +193,12 @@ struct ContentView: View {
                         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
                         .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
                 }
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                SecureField("连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
+                Text("申请文字（必填，最多200字）").font(.caption)
+                TextEditor(text: $applicationText).frame(height: 90).overlay(RoundedRectangle(cornerRadius: 6).stroke(.secondary))
+            }
                 VStack(alignment: .leading, spacing: 12) {
                     Toggle("接收页面声音", isOn: $client.receivesPageAudio)
                     Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
@@ -244,25 +253,22 @@ struct ContentView: View {
 
     private func toggleConnection() {
         if isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty {
-            client.disconnect()
-        } else if connectMode == "wanCode" {
-            client.connectInternetCode(matchCode)
-        } else if connectMode == "wanIP" {
-            guard MatchingCode.isValid(matchCode), let port = UInt16(internetPortText), port > 0 else {
-                client.setStatus("请输入有效公网端口和 6–36 位匹配码")
-                return
-            }
-            client.connectInternetIP(host: internetHost.trimmingCharacters(in: .whitespacesAndNewlines), port: port, code: matchCode)
-        } else if connectMode == "code" {
-            guard MatchingCode.isValid(matchCode) else { client.setStatus("请输入发送端的 6–36 位数字匹配码"); return }
-            client.connectWithCode(matchCode)
+            client.disconnect(); return
+        }
+        guard AdmissionCredentials.validPassword(connectionPassword), let text = AdmissionCredentials.application(applicationText) else {
+            client.setStatus("请填写连接密码和1至200字申请文字"); return
+        }
+        client.connectionPassword = connectionPassword; client.applicationText = text
+        let invitation = AdmissionCredentials.invitation(matchCode)
+        if connectMode == "wanCode" || connectMode == "code" {
+            guard MatchingCode.isValid(invitation) else { client.setStatus("请输入有效邀请链接或编号"); return }
+            if connectMode == "wanCode" { client.connectInternetCode(invitation) }
+            else { client.connectWithCode(invitation) }
         } else {
-            guard MatchingCode.isValid(matchCode) else { client.setStatus("请输入发送端的 6–36 位数字匹配码"); return }
-            client.connect(
-                host: host.trimmingCharacters(in: .whitespaces),
-                port: UInt16(portText) ?? 8318,
-                code: matchCode
-            )
+            guard let port = UInt16(connectMode == "wanIP" ? internetPortText : portText), port > 0 else { client.setStatus("请输入有效端口"); return }
+            let address = (connectMode == "wanIP" ? internetHost : host).trimmingCharacters(in: .whitespacesAndNewlines)
+            if connectMode == "wanIP" { client.connectInternetIP(host: address, port: port, code: "") }
+            else { client.connect(host: address, port: port, code: "") }
         }
     }
 

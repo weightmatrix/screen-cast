@@ -24,6 +24,7 @@ final class StreamClient: ObservableObject {
             default: return .idle
             }
         }
+        value.waitingForApproval = { [weak self] in self?.waitingForApproval == true }
         value.cancelTransport = { [weak self] in self?.disconnect(userInitiated: false) }
         value.onMessage = { [weak self] text in
             if self?.recoveryMessage != text { self?.recoveryMessage = text }
@@ -31,6 +32,7 @@ final class StreamClient: ObservableObject {
         value.onExhausted = { [weak self] in self?.setStatus(.failed("重连失败，已断开；请点击连接重试")) }
         return value
     }()
+    private var waitingForApproval = false
     private var autoConnectStarted = false
     let decoder = ImageDecoder()
 
@@ -54,6 +56,8 @@ final class StreamClient: ObservableObject {
     private var lastHost: String?
     private var lastPort: UInt16?
     private var lastMatchCode: String?
+    var connectionPassword = ""
+    var applicationText = ""
     private var authenticationCode: String?
     private var isThermalHigh = false
     private var lastKeyFrameRequest = Date.distantPast
@@ -99,6 +103,7 @@ final class StreamClient: ObservableObject {
         video.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         video.onError = { [weak self, weak video] text in
             guard let self, self.nativePeer === video else { return }
+            if self.frameCount == 0 { self.recovery.stop() }
             self.disconnect(userInitiated: false); self.setStatus(.failed(text))
         }
     }
@@ -112,12 +117,15 @@ final class StreamClient: ObservableObject {
         guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
         isDisconnecting = false
         setStatus(.connecting)
-        let room = NativeVideoRoom(code: code)
+        let room = NativeVideoRoom(code: code, password: connectionPassword, application: applicationText)
         nativeRoom = room
+        room.onWaitingApproval = { [weak self] in self?.waitingForApproval = true }
+        room.onApproved = { [weak self] in self?.waitingForApproval = false }
         configureNativePeer(room.video)
         room.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         room.onError = { [weak self, weak room] text in
             guard let self, self.nativeRoom === room else { return }
+            if self.frameCount == 0 { self.recovery.stop() }
             self.disconnect(userInitiated: false); self.setStatus(.failed(text))
         }
         room.start()
@@ -172,7 +180,7 @@ final class StreamClient: ObservableObject {
 
     private func startConnection() {
         guard connection == nil, let host = lastHost, let port = lastPort else { return }
-        guard !host.isEmpty, port > 0, MatchingCode.isValid(authenticationCode) else {
+        guard !host.isEmpty, port > 0, AdmissionCredentials.validPassword(connectionPassword), AdmissionCredentials.application(applicationText) != nil else {
             setStatus(.failed("请填写有效地址、端口和 6–36 位数字匹配码"))
             return
         }
@@ -189,7 +197,7 @@ final class StreamClient: ObservableObject {
         lastDataLock.unlock()
         setStatus(.connecting)
         decoder.reset()
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: internetDirect ? InternetSettings.tlsParameters(code: authenticationCode!) : .tcp)
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: internetDirect ? InternetSettings.tlsParameters(code: connectionPassword) : .tcp)
         self.connection = connection
         ConnectionDiag.shared.relay = { [weak self] entry in
             self?.sendDiagnostic(entry)
@@ -200,8 +208,6 @@ final class StreamClient: ObservableObject {
                 switch state {
                 case .ready:
                     ConnectionDiag.shared.log("connection ready \(host):\(port)")
-                    self.sendAuthentication()
-                    self.sendScreenSize()
                     self.netQueue.async { [weak self] in self?.readLoop(on: connection) }
                 case .failed(let error):
                     ConnectionDiag.shared.log("connection failed \(host):\(port)")
@@ -224,7 +230,7 @@ final class StreamClient: ObservableObject {
             self.setStatus(.failed("连接或认证超时，请检查地址、端口和匹配码"))
         }
         connectionTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + (internetDirect ? 85 : 10), execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 340, execute: timeout)
         updateIdleTimerDisabled()
     }
 
@@ -245,13 +251,14 @@ final class StreamClient: ObservableObject {
     }
 
     func autoSearch(mode: String, host: String, port: UInt16, code: String) {
-        guard !autoConnectStarted, !recovery.isActive,
+        guard AdmissionCredentials.validPassword(connectionPassword), AdmissionCredentials.application(applicationText) != nil, !autoConnectStarted, !recovery.isActive,
               MatchingCode.isValid(code), mode == "code" || (mode == "ip" && !host.isEmpty) else { return }
         autoConnectStarted = true
         if mode == "code" { connectWithCode(code) } else { connect(host: host, port: port, code: code) }
     }
 
     func disconnect(userInitiated: Bool = true) {
+        waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
         receiveTiming = ReceiveTiming()
         nativeRoom?.stop(); nativeRoom = nil
@@ -319,16 +326,12 @@ final class StreamClient: ObservableObject {
         conn.send(content: head + msg, completion: .idempotent)
     }
 
-    private func sendAuthentication() {
-        guard let conn = connection,
-              let code = authenticationCode,
-              MatchingCode.isValid(code) else { return }
-        let payload = Data(code.utf8)
-        var msg = Data()
-        msg.append(uint32: payload.count)
-        msg.append(UInt8(5))
-        msg.append(payload)
-        ConnectionDiag.shared.log("sendAuthentication")
+    private func sendAuthentication(nonce: String, invitation: String) {
+        guard let conn = connection, AdmissionCredentials.validPassword(connectionPassword),
+              let application = AdmissionCredentials.application(applicationText) else { return }
+        let proof = AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: connectionPassword, invitation: invitation), nonce: nonce)
+        guard let payload = NativeVideo.packet(["proof":proof, "application":application]) else { return }
+        var msg = Data(); msg.append(uint32: payload.count); msg.append(UInt8(5)); msg.append(payload)
         conn.send(content: msg, completion: .idempotent)
         let video = NativeVideoPeer(internet: internetDirect, auditDirect: internetDirect)
         configureNativePeer(video)
@@ -336,6 +339,7 @@ final class StreamClient: ObservableObject {
         var hello: [String: Any] = ["type":"hello", "version":3]
         if let auditID = video.directAudit?.sessionID { hello["audit_session"] = auditID }
         NativeVideo.send(hello, over: conn)
+        sendScreenSize()
     }
 
     private func setStatus(_ s: Status) {
@@ -485,7 +489,19 @@ final class StreamClient: ObservableObject {
 
     private func handle(type: UInt8, payload: Data) {
         switch type {
+        case 22:
+            DispatchQueue.main.async { [weak self] in self?.waitingForApproval = true }
+        case 21:
+            guard let source = connection,
+                  let object = try? JSONSerialization.jsonObject(with: payload) as? [String: String],
+                  let nonce = object["nonce"], nonce.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil,
+                  let invitation = object["invite"], MatchingCode.isValid(invitation) else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.connection === source else { return }
+                self.sendAuthentication(nonce: nonce, invitation: invitation)
+            }
         case 20:
+            DispatchQueue.main.async { [weak self] in self?.waitingForApproval = false }
             if let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] { nativePeer?.receive(object) }
         case 0, 1:
             disconnect()
@@ -495,6 +511,7 @@ final class StreamClient: ObservableObject {
                 PerformanceDisk.shared.write("remote \(line)", forward: false)
             }
         case 7:
+            DispatchQueue.main.async { [weak self] in self?.recovery.stop() }
             let message = String(data: payload, encoding: .utf8) ?? "匹配码错误"
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }

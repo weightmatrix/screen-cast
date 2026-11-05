@@ -42,6 +42,18 @@ import Foundation
         recovery.tick()
         precondition(!recovery.isActive && attempts - initial <= 8)
         precondition(cancels > 0)
+        var waiting = false
+        recovery.waitingForApproval = { waiting }
+        begin(); recovery.tick()
+        waiting = true
+        let pendingAttempt = attempts
+        now += 290; recovery.tick()
+        precondition(recovery.isActive && attempts == pendingAttempt, "Owner approval must not be retried at 20 or 120 seconds")
+        waiting = false; recovery.tick()
+        precondition(recovery.isActive && attempts == pendingAttempt)
+        now += 21; recovery.tick(); now += 1; recovery.tick()
+        precondition(attempts == pendingAttempt + 1, "Negotiation timeout resumes after approval")
+        recovery.stop()
         print("PASS retry backoff, attempt/deadline limits, network loss, success reset, manual stop, suspension and hung negotiation")
     }
 }

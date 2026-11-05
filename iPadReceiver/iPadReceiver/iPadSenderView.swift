@@ -6,6 +6,7 @@ import UIKit
 struct iPadSenderView: View {
     @AppStorage("appMode") private var appMode = "cast"
     @State private var code = ""
+    @State private var connectionPassword = ""
     @State private var showDiagnostics = false
     @State private var pendingSubmission: String?
     @State private var pending: [PendingConnection] = []
@@ -51,7 +52,7 @@ struct iPadSenderView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     Label(active ? "正在投屏" : "整屏投屏", systemImage: "rectangle.inset.filled.and.person.filled")
                         .font(.system(size: 23, weight: .semibold))
-                    Text("匹配码").foregroundStyle(.secondary)
+                    Text("邀请编号").foregroundStyle(.secondary)
                     TextField("6–36 位数字", text: $code)
                         .font(.system(size: 42, weight: .medium, design: .monospaced))
                         .keyboardType(.default)
@@ -62,7 +63,7 @@ struct iPadSenderView: View {
                             if !active { internetStatus = "" }
                             saveConfiguration()
                         }
-                    Text("接收设备选择匹配码连接。投屏包含屏幕上的所有可采集内容，请先关闭不想分享的信息。")
+                    Text("接收设备选择邀请编号连接。投屏包含屏幕上的所有可采集内容，请先关闭不想分享的信息。")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 24) {
                         VStack(alignment: .leading, spacing: 10) {
@@ -97,13 +98,16 @@ struct iPadSenderView: View {
                         Text(resolutionStatus).font(.system(size: 18, weight: .medium, design: .monospaced))
                             .foregroundStyle(.secondary)
                     }
+                    SecureField("连接密码（6–64位）", text: $connectionPassword)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(active)
+                    Text("邀请链接不含密码；请另行告知接收者连接密码").font(.caption).foregroundStyle(.secondary)
                     Toggle("允许广域网直连", isOn: $internetEnabled).toggleStyle(.switch).disabled(active)
                     if internetEnabled {
-                        Toggle("允许广域网匹配码", isOn: $internetMatchingEnabled).toggleStyle(.switch).disabled(active)
-                        Text(active ? internetStatus : "公网 IP 使用端口 9318；匹配码仅交换连接信息，视频不经服务器。")
+                        Toggle("允许公网邀请", isOn: $internetMatchingEnabled).toggleStyle(.switch).disabled(active)
+                        Text(active ? internetStatus : "公网 IP 使用端口 9318；邀请编号仅交换连接信息，视频不经服务器。")
                             .foregroundStyle(.secondary)
-                        if internetStatus.contains("匹配码已使用") || codeSuggestion.code != nil || codeSuggestion.isLoading || codeSuggestion.errorText != nil {
-                            Text("该匹配码发生冲突，建议修改。").foregroundStyle(.red)
+                        if internetStatus.contains("邀请编号已占用") || codeSuggestion.code != nil || codeSuggestion.isLoading || codeSuggestion.errorText != nil {
+                            Text("该邀请编号发生冲突，建议修改。").foregroundStyle(.red)
                             if codeSuggestion.isLoading {
                                 ProgressView("正在查找未占用的新码…")
                             } else if let candidate = codeSuggestion.code {
@@ -140,7 +144,7 @@ struct iPadSenderView: View {
                         }
                     } else { Text("开始系统广播后生成局域网地址。").foregroundStyle(.secondary) }
                     if active && internetEnabled && internetMatchingEnabled { browserAddress("公网", InternetSettings.browserAddress(code: code)) }
-                    Text("浏览器打开地址后点击开始接收；公网须开启广域网匹配码，画面不经服务器。")
+                    Text("浏览器打开地址后点击开始接收；公网须开启公网邀请，画面不经服务器。")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
@@ -181,6 +185,7 @@ struct iPadSenderView: View {
             let storedResolution = initial.resolution
             PerformanceDisk.shared.write("resolution.loaded stored=\(storedResolution ?? "missing") screen=\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")
             let savedCode = initial.code
+            connectionPassword = initial.password
             code = MatchingCode.isValid(savedCode) ? savedCode! : MatchingCode.generate()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
@@ -202,6 +207,7 @@ struct iPadSenderView: View {
             saveConfiguration()
             refreshStatus()
         }
+        .onChange(of: connectionPassword) { _ in saveConfiguration() }
         .onChange(of: pageAudio) { _ in saveConfiguration() }
         .onChange(of: micAudio) { _ in saveConfiguration() }
         .onChange(of: bitrate) { _ in saveConfiguration() }
@@ -209,15 +215,15 @@ struct iPadSenderView: View {
         .onChange(of: internetEnabled) { enabled in
             saveConfiguration()
             if !enabled { codeSuggestion.reset() }
-            else if internetStatus.contains("匹配码已使用") { requestSuggestion() }
+            else if internetStatus.contains("邀请编号已占用") { requestSuggestion() }
         }
         .onChange(of: internetMatchingEnabled) { enabled in
             saveConfiguration()
             if !enabled { codeSuggestion.reset() }
-            else if internetStatus.contains("匹配码已使用") { requestSuggestion() }
+            else if internetStatus.contains("邀请编号已占用") { requestSuggestion() }
         }
         .onChange(of: internetStatus) { value in
-            if value.contains("匹配码已使用") { requestSuggestion() }
+            if value.contains("邀请编号已占用") { requestSuggestion() }
         }
         .onDisappear { codeSuggestion.reset() }
     }
@@ -229,18 +235,18 @@ struct iPadSenderView: View {
 
     private func saveConfiguration() {
         guard loadedConfiguration else { return }
-        guard MatchingCode.isValid(code) else {
+        guard MatchingCode.isValid(code), AdmissionCredentials.validPassword(connectionPassword), code != connectionPassword else {
             saveGeneration = UUID(); queuedConfiguration = ""
             configurationReady = false
-            status = "请输入 6–36 位数字匹配码"
+            status = "请设置邀请编号和6至64位连接密码"
             return
         }
         let values: [(String, Any)] = [("broadcastPageAudio", pageAudio), ("broadcastMicAudio", micAudio),
             ("broadcastInternetMode", internetMatchingEnabled ? "both" : "ipOnly"),
-            ("broadcastInternetEnabled", internetEnabled), ("broadcastCode", code),
+            ("broadcastInternetEnabled", internetEnabled), ("broadcastCode", code), ("broadcastPassword", connectionPassword),
             ("broadcastBitrate", bitrate), ("broadcastFPS", fps), ("broadcastResolution", String(resolution)),
             ("broadcastScreenPixels", "\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")]
-        let fingerprint = values.map { "\($0.0)=\($0.1)" }.joined(separator: ";")
+        let fingerprint = values.map { "\($0.0)=\($0.0 == "broadcastPassword" ? AdmissionCredentials.verifier(password: connectionPassword, invitation: code) : String(describing: $0.1))" }.joined(separator: ";")
         guard fingerprint != queuedConfiguration else { return }
         queuedConfiguration = fingerprint
         let generation = UUID(); saveGeneration = generation
@@ -279,6 +285,7 @@ struct iPadSenderView: View {
     }
 
     private struct SenderInitialSettings {
+        let password = BroadcastSettings.store.string(forKey: "broadcastPassword") ?? ""
         let pageAudio = BroadcastSettings.store.bool(forKey: "broadcastPageAudio")
         let micAudio = BroadcastSettings.store.bool(forKey: "broadcastMicAudio")
         let code = BroadcastSettings.store.string(forKey: "broadcastCode")

@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        CD7100000000000000000011 = {isa = PBXBuildFile; fileRef = CD7100000000000000000001; };
+        CD7100000000000000000012 = {isa = PBXBuildFile; fileRef = CD7100000000000000000001; };
+        CD7100000000000000000013 = {isa = PBXBuildFile; fileRef = CD7100000000000000000001; };
         CD6900000000000000000031 = {isa = PBXBuildFile; fileRef = CD6900000000000000000003; };
         CD6900000000000000000032 = {isa = PBXBuildFile; fileRef = CD6900000000000000000003; };
         CD6900000000000000000033 = {isa = PBXBuildFile; fileRef = CD6900000000000000000003; };
@@ -112,6 +115,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        CD7100000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = receiver-auth.js; path = Server/Web/receiver-auth.js; sourceTree = SOURCE_ROOT; };
         CD6900000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConnectionAdmission.swift; path = Shared/ConnectionAdmission.swift; sourceTree = SOURCE_ROOT; };
         CD6900000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = receiver-i18n.js; path = Server/Web/receiver-i18n.js; sourceTree = SOURCE_ROOT; };
         CD6900000000000000000001 = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; name = Localizable.xcstrings; path = Shared/Localizable.xcstrings; sourceTree = SOURCE_ROOT; };
@@ -414,6 +418,7 @@
                 CD5300000000000000000021,
                 CD6900000000000000000011,
                 CD6900000000000000000021,
+                CD7100000000000000000011,
                 CD5100000000000000000021,
                 CD5100000000000000000031,
 				AB225C0319BB1B43E08F987C /* Assets.xcassets in Resources */,
@@ -427,6 +432,7 @@
                 CD5300000000000000000022,
                 CD6900000000000000000012,
                 CD6900000000000000000022,
+                CD7100000000000000000012,
                 CD5100000000000000000022,
                 CD5100000000000000000032,
 			);
@@ -441,6 +447,7 @@
                 CD5300000000000000000023,
                 CD6900000000000000000013,
                 CD6900000000000000000023,
+                CD7100000000000000000013,
                 CD5100000000000000000023,
                 CD5100000000000000000033,
 				ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */,

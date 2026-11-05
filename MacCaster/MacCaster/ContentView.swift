@@ -174,7 +174,7 @@ private struct SessionRow: View {
                 Text(session.internetStatus).font(.system(size: 14))
                     .foregroundStyle(session.internetCodeConflict ? Color.red : Color.secondary)
                 if session.internetCodeConflict {
-                    Text("另一台发送设备正在使用这个匹配码。请停止那台设备的广播，或为本机换码后让接收端输入新码。")
+                    Text("另一台发送设备正在使用这个邀请编号。请停止那台设备的广播，或为本机换码后让接收端输入新码。")
                         .font(.system(size: 14)).foregroundStyle(.red)
                     if codeSuggestion.isLoading {
                         ProgressView("正在查找未占用的新码…")
@@ -194,7 +194,7 @@ private struct SessionRow: View {
             }
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("匹配码 · 邀请设备连接").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                    Text("邀请编号 · 邀请设备连接").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
                     if editingCode {
                         HStack {
                             TextField("6–36 位数字", text: $codeDraft).textFieldStyle(.roundedBorder)
@@ -214,10 +214,10 @@ private struct SessionRow: View {
                             Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
                                 .lineLimit(1).minimumScaleFactor(0.35)
                                 .tracking(3).foregroundStyle(.primary)
-                        }.buttonStyle(AppGlassButtonStyle()).help("修改匹配码")
+                        }.buttonStyle(AppGlassButtonStyle()).help("修改邀请编号")
                     }
                     if codeError {
-                        Text("匹配码已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
+                        Text("邀请编号已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
                         if let candidate = localCodeSuggestion {
                             Button("采用本机未使用的新码 \(candidate)") { codeDraft = candidate; commitCode() }
                                 .font(.system(size: 13))
@@ -228,6 +228,8 @@ private struct SessionRow: View {
                 SharingIllustration(compact: true)
             }
             .padding(.vertical, 8)
+            Text(AdmissionCredentials.validPassword(streamer.connectionPassword) ? "邀请链接不含密码；请另行告知接收者连接密码" : "请先在设置中设置连接密码")
+                .font(.caption).foregroundStyle(.secondary)
             BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
             Divider()
             HStack(spacing: 12) {
@@ -241,7 +243,7 @@ private struct SessionRow: View {
                             Toggle("话筒声音", isOn: $session.sendsMicrophone)
                             Divider()
                             Toggle("允许公网直连", isOn: $session.internetEnabled)
-                            Toggle("允许公网匹配码", isOn: $session.internetMatchingEnabled).disabled(!session.internetEnabled)
+                            Toggle("允许公网邀请", isOn: $session.internetMatchingEnabled).disabled(!session.internetEnabled)
                             Divider()
                             Text("\(session.encWidth) × \(session.encHeight) · \(Int(session.currentFPS)) fps")
                                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -427,7 +429,7 @@ struct AddStreamSheet: View {
                     Toggle("光标", isOn: $showsCursor).toggleStyle(.switch)
                     Spacer()
                     HStack(spacing: 4) {
-                        Text("匹配码").font(.system(size: 15))
+                        Text("邀请编号").font(.system(size: 15))
                         TextField("6–36 位数字", text: $code)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 230)
@@ -767,7 +769,6 @@ private struct SessionDiagnosticsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ConnectionLegalNotice()
-            PendingConnectionsView(requests: server.pendingConnections) { server.respondToRequest($0, accept: $1) }
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("连接设备").font(.system(size: 24, weight: .bold, design: .rounded))
@@ -779,6 +780,7 @@ private struct SessionDiagnosticsView: View {
             Divider()
             ScrollView {
                 LazyVStack(spacing: 12) {
+                    PendingConnectionsView(requests: server.pendingConnections) { server.respondToRequest($0, accept: $1) }
                     if server.diagnostics.isEmpty {
                         VStack(spacing: 14) {
                             Image(systemName: "display.2").font(.system(size: 36, weight: .light)).foregroundStyle(.secondary)

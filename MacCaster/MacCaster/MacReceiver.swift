@@ -408,6 +408,7 @@ final class MacReceiverClient: ObservableObject {
             default: return .idle
             }
         }
+        value.waitingForApproval = { [weak self] in self?.waitingForApproval == true }
         value.cancelTransport = { [weak self] in self?.disconnect(userInitiated: false) }
         value.onMessage = { [weak self] text in
             if self?.recoveryMessage != text { self?.recoveryMessage = text }
@@ -415,6 +416,7 @@ final class MacReceiverClient: ObservableObject {
         value.onExhausted = { [weak self] in self?.setStatus(.failed("重连失败，已断开；请点击连接重试")) }
         return value
     }()
+    private var waitingForApproval = false
     private var autoConnectStarted = false
     private var receivedFrames = 0
     let decoder = MacReceiverDecoder()
@@ -437,6 +439,8 @@ final class MacReceiverClient: ObservableObject {
     private var lastHost: String?
     private var lastPort: UInt16?
     private var lastMatchCode: String?
+    var connectionPassword = ""
+    var applicationText = ""
     private var authenticationCode: String?
     var discoveryLookup: ((String) -> (String, UInt16)?)?
 
@@ -471,6 +475,7 @@ final class MacReceiverClient: ObservableObject {
         video.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         video.onError = { [weak self, weak video] text in
             guard let self, self.nativePeer === video else { return }
+            if self.frameCount == 0 { self.recovery.stop() }
             self.disconnect(userInitiated: false); self.setStatus(.failed(text))
         }
     }
@@ -484,12 +489,15 @@ final class MacReceiverClient: ObservableObject {
         guard MatchingCode.isValid(code) else { setStatus(.failed("请输入 6–36 位数字匹配码")); return }
         isDisconnecting = false
         setStatus(.connecting)
-        let room = NativeVideoRoom(code: code)
+        let room = NativeVideoRoom(code: code, password: connectionPassword, application: applicationText)
         nativeRoom = room
+        room.onWaitingApproval = { [weak self] in self?.waitingForApproval = true }
+        room.onApproved = { [weak self] in self?.waitingForApproval = false }
         configureNativePeer(room.video)
         room.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         room.onError = { [weak self, weak room] text in
             guard let self, self.nativeRoom === room else { return }
+            if self.frameCount == 0 { self.recovery.stop() }
             self.disconnect(userInitiated: false); self.setStatus(.failed(text))
         }
         room.start()
@@ -540,14 +548,14 @@ final class MacReceiverClient: ObservableObject {
 
     private func startConnection() {
         guard connection == nil, let host = lastHost, let port = lastPort else { return }
-        guard !host.isEmpty, port > 0, MatchingCode.isValid(authenticationCode) else {
+        guard !host.isEmpty, port > 0, AdmissionCredentials.validPassword(connectionPassword), AdmissionCredentials.application(applicationText) != nil else {
             setStatus(.failed("请填写有效地址、端口和 6–36 位数字匹配码"))
             return
         }
         lastDataAt = Date()
         setStatus(.connecting)
         decoder.reset()
-        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: internetDirect ? InternetSettings.tlsParameters(code: authenticationCode!) : .tcp)
+        let connection = NWConnection(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!, using: internetDirect ? InternetSettings.tlsParameters(code: connectionPassword) : .tcp)
         self.connection = connection
         connection.stateUpdateHandler = { [weak self, weak connection] state in
             DispatchQueue.main.async {
@@ -555,8 +563,6 @@ final class MacReceiverClient: ObservableObject {
                 switch state {
                 case .ready:
                     DiagLog.log("Receive", "TCP ready \(host):\(port)")
-                    self.sendAuthentication()
-                    self.sendScreenSize()
                     self.netQueue.async { [weak self] in self?.readLoop(on: connection) }
                 case .failed(let error):
                     self.handleDisconnect(connection)
@@ -577,7 +583,7 @@ final class MacReceiverClient: ObservableObject {
             self.setStatus(.failed("连接或认证超时，请检查地址、端口和匹配码"))
         }
         connectionTimeout = timeout
-        DispatchQueue.main.asyncAfter(deadline: .now() + (internetDirect ? 85 : 10), execute: timeout)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 340, execute: timeout)
     }
 
     private func handleDisconnect(_ disconnectedConnection: NWConnection) {
@@ -594,13 +600,14 @@ final class MacReceiverClient: ObservableObject {
     }
 
     func autoSearch(mode: String, host: String, port: UInt16, code: String) {
-        guard !autoConnectStarted, !recovery.isActive,
+        guard AdmissionCredentials.validPassword(connectionPassword), AdmissionCredentials.application(applicationText) != nil, !autoConnectStarted, !recovery.isActive,
               MatchingCode.isValid(code), mode == "code" || (mode == "ip" && !host.isEmpty) else { return }
         autoConnectStarted = true
         if mode == "code" { connectWithCode(code) } else { connect(host: host, port: port, code: code) }
     }
 
     func disconnect(userInitiated: Bool = true) {
+        waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
         recorder.endSegment()
         receiveTiming = ReceiveTiming()
@@ -660,16 +667,12 @@ final class MacReceiverClient: ObservableObject {
         conn.send(content: head + msg, completion: .idempotent)
     }
 
-    private func sendAuthentication() {
-        guard let conn = connection,
-              let code = authenticationCode,
-              MatchingCode.isValid(code) else { return }
-        let payload = Data(code.utf8)
-        var msg = Data()
-        var length = UInt32(payload.count).bigEndian
-        withUnsafeBytes(of: &length) { msg.append(contentsOf: $0) }
-        msg.append(UInt8(5))
-        msg.append(payload)
+    private func sendAuthentication(nonce: String, invitation: String) {
+        guard let conn = connection, AdmissionCredentials.validPassword(connectionPassword),
+              let application = AdmissionCredentials.application(applicationText) else { return }
+        let proof = AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: connectionPassword, invitation: invitation), nonce: nonce)
+        guard let payload = NativeVideo.packet(["proof":proof, "application":application]) else { return }
+        var msg = Data(); msg.append(uint32: payload.count); msg.append(UInt8(5)); msg.append(payload)
         conn.send(content: msg, completion: .idempotent)
         let video = NativeVideoPeer(internet: internetDirect, auditDirect: internetDirect)
         configureNativePeer(video)
@@ -677,6 +680,7 @@ final class MacReceiverClient: ObservableObject {
         var hello: [String: Any] = ["type":"hello", "version":3]
         if let auditID = video.directAudit?.sessionID { hello["audit_session"] = auditID }
         NativeVideo.send(hello, over: conn)
+        sendScreenSize()
     }
 
     private func readLoop(on connection: NWConnection) {
@@ -754,7 +758,19 @@ final class MacReceiverClient: ObservableObject {
 
     private func handle(type: UInt8, payload: Data) {
         switch type {
+        case 22:
+            DispatchQueue.main.async { [weak self] in self?.waitingForApproval = true }
+        case 21:
+            guard let source = connection,
+                  let object = try? JSONSerialization.jsonObject(with: payload) as? [String: String],
+                  let nonce = object["nonce"], nonce.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil,
+                  let invitation = object["invite"], MatchingCode.isValid(invitation) else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.connection === source else { return }
+                self.sendAuthentication(nonce: nonce, invitation: invitation)
+            }
         case 20:
+            DispatchQueue.main.async { [weak self] in self?.waitingForApproval = false }
             if let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] { nativePeer?.receive(object) }
         case 0, 1:
             disconnect()
@@ -764,6 +780,7 @@ final class MacReceiverClient: ObservableObject {
                 PerformanceDisk.shared.write("remote \(line)", forward: false)
             }
         case 7:
+            DispatchQueue.main.async { [weak self] in self?.recovery.stop() }
             let message = String(data: payload, encoding: .utf8) ?? "匹配码错误"
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
@@ -783,13 +800,14 @@ final class MacReceiverClient: ObservableObject {
     static func motion() async {
         let code = MatchingCode.generate()
         let server = CastingServer(port: 19319, accessCode: code)
+        server.connectionPassword = "Fixture-only-71"
         server.configureNative(bitrate: 100_000_000, fps: 60)
         var registered = false
-        server.onInternetStatus = { if $0.contains("匹配就绪") { registered = true } }
+        server.onInternetStatus = { if $0.contains("公网邀请已就绪") { registered = true } }
         server.start(); server.setInternetEnabled(true)
         defer { server.stop() }
         for _ in 0..<100 { if registered { break }; try? await Task.sleep(nanoseconds: 100_000_000) }
-        let client = MacReceiverClient(); client.connectInternetCode(code)
+        let client = MacReceiverClient(); client.connectionPassword = "Fixture-only-71"; client.applicationText = "Synthetic route fixture"; client.connectInternetCode(code)
         defer { client.disconnect() }
         var ready = false
         for _ in 0..<350 {
@@ -856,6 +874,7 @@ final class MacReceiverClient: ObservableObject {
         let fourK = ProcessInfo.processInfo.arguments.contains("--verify-native-4k")
         let code = MatchingCode.generate()
         let server = CastingServer(port: 19318, accessCode: code)
+        server.connectionPassword = "Fixture-only-71"
         server.configureNative(bitrate: 8_000_000, fps: fourK ? 60 : 30)
         server.start()
         defer { server.stop() }
@@ -867,7 +886,7 @@ final class MacReceiverClient: ObservableObject {
         let context = CIContext()
         context.render(CIImage(color: .red).cropped(to: CGRect(x: 0, y: 0, width: width, height: height)), to: pixel)
         var registered = false
-        server.onInternetStatus = { text in if text.contains("匹配就绪") { registered = true } }
+        server.onInternetStatus = { text in if text.contains("公网邀请已就绪") { registered = true } }
         try? await Task.sleep(nanoseconds: 500_000_000)
         for mode in (fourK ? ["localIP"] : ["localIP", "localCode", "internetIP", "internetCode"]) {
             if mode == "internetIP" { server.setInternetMatchingEnabled(false); server.setInternetEnabled(true) }
@@ -876,6 +895,7 @@ final class MacReceiverClient: ObservableObject {
                 for _ in 0..<100 { if registered { break }; try? await Task.sleep(nanoseconds: 100_000_000) }
             }
             let client = MacReceiverClient()
+            client.connectionPassword = "Fixture-only-71"; client.applicationText = "Synthetic route fixture"
             if mode == "localIP" { client.connect(host: "127.0.0.1", port: 19318, code: code) }
             if mode == "localCode" { client.discoveryLookup = { _ in ("127.0.0.1", 19318) }; client.connectWithCode(code) }
             if mode == "internetIP" { client.connectInternetIP(host: "127.0.0.1", port: 20318, code: code) }

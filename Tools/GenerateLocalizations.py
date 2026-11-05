@@ -155,6 +155,20 @@ ROWS += """
 皮肤|佈景|Theme|Tema|Design|Thème|Tema|テーマ|테마
 外观|外觀|Appearance|Apariencia|Darstellung|Apparence|Aspetto|外観|화면 모드
 """
+ROWS += """
+连接密码|連線密碼|Connection password|Contraseña de conexión|Verbindungspasswort|Mot de passe de connexion|Password di connessione|接続パスワード|연결 비밀번호
+连接密码（6–64位）|連線密碼（6–64字元）|Connection password (6–64 characters)|Contraseña (6–64 caracteres)|Passwort (6–64 Zeichen)|Mot de passe (6–64 caractères)|Password (6–64 caratteri)|接続パスワード（6～64文字）|연결 비밀번호(6~64자)
+设置连接密码|設定連線密碼|Set connection password|Establecer contraseña|Passwort festlegen|Définir le mot de passe|Imposta password|接続パスワードを設定|연결 비밀번호 설정
+申请文字（必填，最多200字）|申請文字（必填，最多200字）|Request message (required, up to 200 characters)|Solicitud (obligatoria, hasta 200 caracteres)|Anfrage (erforderlich, bis 200 Zeichen)|Message requis (200 caractères maximum)|Messaggio richiesto (massimo 200 caratteri)|申請メッセージ（必須、200文字まで）|신청 메시지(필수, 최대 200자)
+邀请链接或编号|邀請連結或編號|Invitation link or ID|Enlace o ID de invitación|Einladungslink oder ID|Lien ou identifiant d’invitation|Link o ID invito|招待リンクまたは番号|초대 링크 또는 번호
+邀请编号|邀請編號|Invitation ID|ID de invitación|Einladungs-ID|Identifiant d’invitation|ID invito|招待番号|초대 번호
+局域邀请|區域網路邀請|LAN invitation|Invitación local|LAN-Einladung|Invitation locale|Invito locale|LAN 招待|로컬 초대
+公网邀请|公網邀請|Internet invitation|Invitación por Internet|Internet-Einladung|Invitation Internet|Invito Internet|インターネット招待|인터넷 초대
+公网地址|公網位址|Public IP address|Dirección IP pública|Öffentliche IP-Adresse|Adresse IP publique|Indirizzo IP pubblico|公開 IP アドレス|공인 IP 주소
+接入申请|接入申請|Access request|Solicitud de acceso|Zugriffsanfrage|Demande d’accès|Richiesta di accesso|接続申請|접속 신청
+请先在设置中设置连接密码|請先在設定中設定連線密碼|Set a connection password in Settings first|Configura primero una contraseña en Ajustes|Zuerst ein Passwort in den Einstellungen festlegen|Définissez d’abord un mot de passe dans les réglages|Imposta prima una password nelle impostazioni|先に設定で接続パスワードを設定してください|먼저 설정에서 연결 비밀번호를 지정하세요
+邀请链接不含密码；请另行告知接收者连接密码|邀請連結不含密碼；請另外告知接收者連線密碼|Invitations contain no password. Share the password separately.|La invitación no contiene contraseña. Compártela por separado.|Einladungen enthalten kein Passwort. Passwort separat mitteilen.|L’invitation ne contient aucun mot de passe. Communiquez-le séparément.|L’invito non contiene la password. Comunicala separatamente.|招待リンクにパスワードは含まれません。別途伝えてください。|초대 링크에는 비밀번호가 없습니다. 별도로 알려주세요.
+"""
 strings = {}
 for row in ROWS.strip().splitlines():
     if not row.strip(): continue
@@ -166,6 +180,6 @@ for row in ROWS.strip().splitlines():
 print(f'Generated {len(strings)} entries in {len(LANGUAGES)} languages')
 
 # Browser uses only connection and notice strings; keep each static asset bounded.
-web_keys = ["匹配码", "开始接收", "断开", "等待连接", "开启声音", "关闭声音", "全屏观看", "诊断", "隐私政策", "连接诊断", "接收工作台", "正在连接发送端…", "接入申请已提交，等待投送者接受…", "已连接 · 设备直接传输", "已断开", "配对成功，正在检查设备直连…", "请输入6至36位数字匹配码", "接入申请已超时", "投送者拒绝申请或连接已达上限", "请更新投送端以启用公网接入审批", "请勿利用本工具传播违法信息或侵犯他人合法权益。公网接入须经投送者确认，必要连接日志依法留存。违法使用者依法承担相应责任。"]
+web_keys = ["连接密码", "申请文字（必填，最多200字）", "邀请链接或编号", "匹配码", "开始接收", "断开", "等待连接", "开启声音", "关闭声音", "全屏观看", "诊断", "隐私政策", "连接诊断", "接收工作台", "正在连接发送端…", "接入申请已提交，等待投送者接受…", "已连接 · 设备直接传输", "已断开", "配对成功，正在检查设备直连…", "请输入6至36位数字匹配码", "接入申请已超时", "投送者拒绝申请或连接已达上限", "请更新投送端以启用公网接入审批", "请勿利用本工具传播违法信息或侵犯他人合法权益。公网接入须经投送者确认，必要连接日志依法留存。违法使用者依法承担相应责任。"]
 web = {key: [strings[key]['localizations'][lang]['stringUnit']['value'] for lang in LANGUAGES] for key in web_keys}
 (ROOT / 'Server/Web/receiver-i18n.js').write_text("'use strict';window.ToupingI18n=" + json.dumps({'languages':LANGUAGES,'strings':web}, ensure_ascii=False, separators=(',',':')) + ';\n')

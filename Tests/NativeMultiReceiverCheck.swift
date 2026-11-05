@@ -25,15 +25,16 @@ private final class Counts: @unchecked Sendable {
         let server = CastingServer(port: 19328, accessCode: code)
         let counts = Counts()
         var registrations = 0, viewers = 0
-        server.onInternetStatus = { if $0.contains("匹配就绪") { registrations += 1 } }
+        server.onInternetStatus = { if $0.contains("公网邀请已就绪") { registrations += 1 } }
         server.onClientCountChanged = { viewers = $0 }
+        server.connectionPassword = "Fixture-only-71"
         server.configureNative(bitrate: 8_000_000, fps: 30)
         let approval = server.$pendingConnections.sink { requests in
             for request in requests { DispatchQueue.main.async { server.respondToRequest(request.id, accept: true) } }
         }
         defer { approval.cancel() }
         server.start(); server.setInternetEnabled(true)
-        let first = NativeVideoRoom(code: code), second = NativeVideoRoom(code: code)
+        let first = NativeVideoRoom(code: code, password: "Fixture-only-71", application: "Synthetic multi-receiver fixture"), second = NativeVideoRoom(code: code, password: "Fixture-only-71", application: "Synthetic multi-receiver fixture")
         first.video.onImage = { _ in counts.frame(0) }; second.video.onImage = { _ in counts.frame(1) }
         first.video.onReceiveTiming = { counts.timing(0, $0) }; second.video.onReceiveTiming = { counts.timing(1, $0) }
         first.onError = { counts.failed("first: " + $0) }; second.onError = { counts.failed("second: " + $0) }
@@ -54,7 +55,7 @@ private final class Counts: @unchecked Sendable {
         var passed = await pump({ registrations >= 1 })
         if passed { first.start(); passed = await pump({ counts.snapshot().0[0] >= 30 }) }
         let before = counts.snapshot().0[0]
-        if passed { passed = await pump({ registrations >= 2 }) }
+        if passed { passed = await pump({ registrations >= 1 }) }
         if passed { second.start(); passed = await pump({ counts.snapshot().0[1] >= 60 }) }
         if passed { passed = await pump({ counts.timingsReady() }) }
         let final = counts.snapshot()

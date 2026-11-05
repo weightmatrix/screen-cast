@@ -52,6 +52,7 @@ struct MacCasterApp: App {
         }
         Settings {
             AppearanceSettingsView()
+                .environmentObject(streamer)
                 .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
                 .preferredColorScheme(AppAppearance.scheme(appearance))
@@ -60,6 +61,9 @@ struct MacCasterApp: App {
 }
 
 private struct AppearanceSettingsView: View {
+    @EnvironmentObject private var streamer: ScreenStreamer
+    @State private var passwordDraft = ""
+    @State private var passwordError = false
     @AppStorage("appearance.skin") private var skin = "minimal"
     @AppStorage("appearance.colorScheme") private var appearance = "system"
 
@@ -87,11 +91,20 @@ private struct AppearanceSettingsView: View {
             Section("语言") {
                 AppLanguagePicker()
             }
+            Section("连接密码") {
+                SecureField("连接密码（6–64位）", text: $passwordDraft)
+                Button("设置连接密码") {
+                    passwordError = !streamer.updateConnectionPassword(passwordDraft)
+                    if !passwordError { passwordDraft = "" }
+                }.disabled(!AdmissionCredentials.validPassword(passwordDraft))
+                Text(passwordError ? "密码保存失败，请重试" : AdmissionCredentials.validPassword(streamer.connectionPassword) ? "已设置密码；修改密码会断开当前连接" : "请先设置密码，接收者还须填写申请文字")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .formStyle(.grouped)
         .font(.system(size: 16))
         .controlSize(.large)
-        .frame(width: 520, height: skin == "icons3d" ? 480 : 390)
+        .frame(width: 520, height: skin == "icons3d" ? 610 : 520)
         .navigationTitle("设置")
     }
 }

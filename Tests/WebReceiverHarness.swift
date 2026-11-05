@@ -13,16 +13,18 @@ import CoreImage
         let server = BrowserReceiverServer(port: 20319, code: { "61328407" }, addresses: { addresses }) {
             NativeVideoPeer(source: source, internet: false, bitrate: 8_000_000, fps: 15)
         }
+        server.password = { "Fixture-only-71" }
+        server.requestApproval = { _, _, _, reply in reply(true) } // Synthetic fixture only.
         server.reserveSlot = { SenderConnectionBudget.reserve($0, internet: false) }
         server.releaseSlot = { SenderConnectionBudget.release($0) }
         server.onReady = { print("BrowserHarness LAN ready=\($0)"); fflush(stdout) }
         server.onChanged = { print("BrowserHarness connected=\(server.connectedCount)"); fflush(stdout) }
         server.start()
-        let room = NativeVideoRoom(code: "61328407", source: source, bitrate: 8_000_000, fps: 15)
+        let room = NativeVideoHost(code: "61328407", password: "Fixture-only-71") { NativeVideoPeer(source: source, internet: true, bitrate: 8_000_000, fps: 15) }
         if ProcessInfo.processInfo.arguments.contains("--internet") {
-            room.onApprovalRequested = { room.respondToApproval(accept: true) } // Synthetic fixture only.
+            room.onRequest = { id, _, _ in room.respond(id, accept: true) } // Synthetic fixture only.
             room.onRegistered = { print("BrowserHarness WAN ready"); fflush(stdout) }
-            room.onConnected = { print("BrowserHarness WAN connected"); fflush(stdout) }
+            room.onChanged = { print("BrowserHarness WAN connected"); fflush(stdout) }
             room.onError = { print("BrowserHarness WAN error=\($0)"); fflush(stdout) }
             room.start()
         }

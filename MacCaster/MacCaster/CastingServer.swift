@@ -25,29 +25,35 @@ final class CastingServer: ObservableObject {
     private var pendingTimeouts: [String: DispatchWorkItem] = [:]
     private var requestAudits: [ObjectIdentifier: DirectConnectionAudit] = [:]
     private var connectionSlots: [ObjectIdentifier: String] = [:]
-    private var roomSlots = Set<String>()
+
     private var browserServer: BrowserReceiverServer?
 
-    private func requestApproval(id: String, route: String, action: @escaping (Bool) -> Void) {
+    private func requestApproval(id: String, route: String, ip: String, application: String, action: @escaping (Bool) -> Void) {
         guard pendingActions[id] == nil else { return }
-        guard pendingActions.count < 16 else { action(false); return }
+        guard pendingActions.count < 64 else { action(false); return }
         pendingActions[id] = action
-        pendingConnections.append(PendingConnection(id: id, route: route))
+        pendingConnections.append(PendingConnection(id: id, route: route, ip: ip, application: application))
         let work = DispatchWorkItem { [weak self] in self?.respondToRequest(id, accept: false) }
         pendingTimeouts[id] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 60, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 300, execute: work)
     }
     func respondToRequest(_ id: String, accept: Bool) {
         pendingTimeouts.removeValue(forKey: id)?.cancel()
         pendingConnections.removeAll { $0.id == id }
         pendingActions.removeValue(forKey: id)?(accept)
     }
-    private func releaseRoom(_ room: NativeVideoRoom) {
-        let id = room.video.diagnosticID
-        SenderConnectionBudget.release(id); roomSlots.remove(id)
-        pendingTimeouts.removeValue(forKey: id)?.cancel()
-        pendingActions.removeValue(forKey: id)
+    private func forgetRequest(_ id: String) {
+        pendingTimeouts.removeValue(forKey: id)?.cancel(); pendingActions.removeValue(forKey: id)
         pendingConnections.removeAll { $0.id == id }
+    }
+    var connectionPassword = "" {
+        didSet {
+            guard oldValue != connectionPassword else { return }
+            for request in pendingConnections { respondToRequest(request.id, accept: false) }
+            for connection in connections { drop(connection) }
+            browserServer?.stop(); browserServer?.start()
+            if internetEnabled { stopInternet(); startInternet() }
+        }
     }
     var listeningPort: UInt16? { isRunning ? listener?.port?.rawValue : nil }
     private var diagnosticValues: [String: PeerDiagnostic] = [:]
@@ -56,7 +62,7 @@ final class CastingServer: ObservableObject {
         video.onDiagnostic = { [weak self, weak video] value in
             guard let self, let video,
                 self.nativePeers.values.contains(where: { $0 === video }) ||
-                self.connectedInternetRooms.values.contains(where: { $0.video === video }) ||
+                self.nativeHost?.videos.contains(where: { $0 === video }) == true ||
                 self.browserServer?.videos.contains(where: { $0 === video }) == true else { return }
             var snapshot = value
             snapshot.route = route
@@ -65,7 +71,7 @@ final class CastingServer: ObservableObject {
         }
     }
     private func publishDiagnostics() {
-        let active = Set(nativePeers.values.map(\.diagnosticID) + connectedInternetRooms.values.map { $0.video.diagnosticID } + (browserServer?.videos.map(\.diagnosticID) ?? []))
+        let active = Set(nativePeers.values.map(\.diagnosticID) + (nativeHost?.videos.map(\.diagnosticID) ?? []) + (browserServer?.videos.map(\.diagnosticID) ?? []))
         diagnosticValues = diagnosticValues.filter { active.contains($0.key) }
         diagnostics = diagnosticValues.values.sorted { $0.id < $1.id }
     }
@@ -73,13 +79,9 @@ final class CastingServer: ObservableObject {
         browserServer?.disconnect(id)
         if let connection = connections.first(where: { nativePeers[ObjectIdentifier($0)]?.diagnosticID == id }) {
             drop(connection)
-        } else if let item = connectedInternetRooms.first(where: { $0.value.video.diagnosticID == id }) {
-            releaseRoom(item.value)
-            connectedInternetRooms.removeValue(forKey: item.key)?.stop()
-            notifyClientCountChanged()
-            startInternet()
-        }
+        } else { nativeHost?.disconnect(id) }
     }
+
     var onNativeFPS: ((Double) -> Void)?
     var onClientCountChanged: ((Int) -> Void)?
     var onRemoteResolutionChanged: (() -> Void)?
@@ -113,15 +115,12 @@ final class CastingServer: ObservableObject {
     private var internetConnections: Set<ObjectIdentifier> = []
     private var nativeBitrate = 100_000_000
     private var nativeFPS = 60
-    private var nativeRoom: NativeVideoRoom?
-    private var connectedInternetRooms: [ObjectIdentifier: NativeVideoRoom] = [:]
-    private let maxInternetRooms = 5
+    private var nativeHost: NativeVideoHost?
     func configureNative(bitrate: Int, fps: Int, dimension: Int = 0) {
         nativeBitrate = bitrate; nativeFPS = fps
         nativeSource.configure(fps: fps, dimension: dimension)
         nativePeers.values.forEach { $0.quality(bitrate: bitrate, fps: fps) }
-        nativeRoom?.video.quality(bitrate: bitrate, fps: fps)
-        connectedInternetRooms.values.forEach { $0.video.quality(bitrate: bitrate, fps: fps) }
+        nativeHost?.videos.forEach { $0.quality(bitrate: bitrate, fps: fps) }
         browserServer?.videos.forEach { $0.quality(bitrate: bitrate, fps: fps) }
     }
     private var internetRetry: DispatchWorkItem?
@@ -137,11 +136,9 @@ final class CastingServer: ObservableObject {
 
     private func stopNativeMatching() {
         internetRetry?.cancel(); internetRetry = nil
-        if let nativeRoom { releaseRoom(nativeRoom); nativeRoom.stop() }; nativeRoom = nil
-        let rooms = Array(connectedInternetRooms.values)
-        connectedInternetRooms.removeAll()
-        rooms.forEach { releaseRoom($0); $0.stop() }
+        nativeHost?.stop(); nativeHost = nil
     }
+
     private func stopInternet() {
         for connection in connections where internetConnections.contains(ObjectIdentifier(connection)) { drop(connection) }
         stopNativeMatching(); notifyClientCountChanged()
@@ -149,10 +146,10 @@ final class CastingServer: ObservableObject {
     }
 
     private func startInternet() {
-        guard internetEnabled, isRunning, MatchingCode.isValid(accessCode) else { return }
+        guard internetEnabled, isRunning, MatchingCode.isValid(accessCode), connectionPassword != accessCode, AdmissionCredentials.validPassword(connectionPassword) else { return }
         if internetListener == nil, let internetPort {
             do {
-                let listener = try NWListener(using: InternetSettings.tlsParameters(code: accessCode), on: NWEndpoint.Port(rawValue: internetPort)!)
+                let listener = try NWListener(using: InternetSettings.tlsParameters(code: connectionPassword), on: NWEndpoint.Port(rawValue: internetPort)!)
                 internetListener = listener
                 listener.newConnectionHandler = { [weak self] conn in
                     self?.internetConnections.insert(ObjectIdentifier(conn)); self?.accept(conn)
@@ -173,57 +170,36 @@ final class CastingServer: ObservableObject {
             onInternetStatus?("广域网 IP 直连 · 不使用配对服务器")
             return
         }
-        guard nativeRoom == nil, connectedInternetRooms.count < maxInternetRooms else { return }
-        let room = NativeVideoRoom(code: accessCode, source: nativeSource, bitrate: nativeBitrate, fps: nativeFPS)
-        nativeRoom = room
-        watch(room.video, route: "广域网匹配码")
-        room.video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
-        room.onApprovalRequested = { [weak self, weak room] in
-            guard let self, let room else { return }
-            let id = room.video.diagnosticID
-            self.requestApproval(id: id, route: "公网匹配码") { [weak self, weak room] accepted in
-                guard let self, let room, self.nativeRoom === room else { return }
+        guard nativeHost == nil else { return }
+        let host = NativeVideoHost(code: accessCode, password: connectionPassword) { [weak self] in
+            guard let self else { return NativeVideoPeer(internet: true) }
+            let video = NativeVideoPeer(source: self.nativeSource, internet: true, bitrate: self.nativeBitrate, fps: self.nativeFPS)
+            self.watch(video, route: "公网邀请")
+            video.onSendingFPS = { [weak self] in self?.onNativeFPS?($0) }
+            return video
+        }
+        nativeHost = host
+        host.onRequest = { [weak self, weak host] id, text, ip in
+            guard let self, let host else { return }
+            self.requestApproval(id: id, route: "公网邀请", ip: ip, application: text) { [weak host] accepted in
                 let admitted = accepted && SenderConnectionBudget.reserve(id, internet: true)
-                if admitted { self.roomSlots.insert(id) }
-                room.respondToApproval(accept: admitted)
+                host?.respond(id, accept: admitted)
             }
         }
-        room.onRegistered = { [weak self] in
-            guard let self else { return }
-            self.onInternetStatus?("广域网匹配就绪 · 已连接\(self.connectedInternetRooms.count)台 · 原生视频")
+        host.onEnded = { [weak self] id in
+            SenderConnectionBudget.release(id); self?.forgetRequest(id); self?.notifyClientCountChanged()
         }
-        room.onConnected = { [weak self, weak room] in
-            guard let self, let room, self.nativeRoom === room else { return }
-            self.nativeRoom = nil
-            self.connectedInternetRooms[ObjectIdentifier(room)] = room
-            self.internetFailures = 0; self.notifyClientCountChanged()
-            self.onInternetStatus?("P2P 已直连 · 已连接\(self.connectedInternetRooms.count)台 · 原生视频")
-            // Existing media is independent of signaling. Let the completed room
-            // close, then register one new slot without touching active peers.
-            let work = DispatchWorkItem { [weak self] in self?.startInternet() }
-            self.internetRetry = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
-        }
-        room.onError = { [weak self, weak room] text in
-            guard let self, let room else { return }
-            let pending = self.nativeRoom === room
-            let active = self.connectedInternetRooms.removeValue(forKey: ObjectIdentifier(room)) != nil
-            guard pending || active else { return }
-            self.releaseRoom(room)
-            if pending { self.nativeRoom = nil }
-            self.onInternetStatus?(text); self.notifyClientCountChanged()
-            guard self.internetEnabled, self.internetMatchingEnabled, self.isRunning else { return }
-            self.internetFailures = min(self.internetFailures + 1, 5)
-            let work = DispatchWorkItem { [weak self] in self?.startInternet() }; self.internetRetry = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + min(60, 5 * pow(2, Double(self.internetFailures - 1))), execute: work)
-        }
-        room.start()
+        host.onChanged = { [weak self] in self?.notifyClientCountChanged() }
+        host.onRegistered = { [weak self] in self?.onInternetStatus?("公网邀请已就绪 · 等待密码验证与申请") }
+        host.onError = { [weak self] in self?.onInternetStatus?($0) }
+        host.start()
     }
 
     private let perf = StreamPerformance("transport.send")
     private var listener: NWListener?
     private var connections: [NWConnection] = []
     private var clientResolutions: [ObjectIdentifier: (Int, Int)] = [:]
+    private var authenticationNonces: [ObjectIdentifier: String] = [:]
     private var controlBuffers: [ObjectIdentifier: [UInt8]] = [:]
     private var authenticatedConnections: Set<ObjectIdentifier> = []
     private var outboundQueues: [ObjectIdentifier: [OutboundMessage]] = [:]
@@ -365,6 +341,7 @@ final class CastingServer: ObservableObject {
         nativePeers.values.forEach { $0.stop() }; nativePeers.removeAll(); internetConnections.removeAll()
         connections.forEach { $0.cancel() }
         connections.removeAll()
+        authenticationNonces.removeAll()
         controlBuffers.removeAll()
         authenticatedConnections.removeAll()
         outboundQueues.removeAll()
@@ -384,11 +361,18 @@ final class CastingServer: ObservableObject {
         if !internetConnections.contains(ObjectIdentifier(conn)) {
             guard case .hostPort(let host, _) = conn.endpoint, BrowserReceiverServer.isLocalAddress(host.debugDescription) else { conn.cancel(); return }
         }
-        guard connections.count < 32 else { internetConnections.remove(ObjectIdentifier(conn)); conn.cancel(); return }
+        guard connections.count < 80 else { internetConnections.remove(ObjectIdentifier(conn)); conn.cancel(); return }
         DiagLog.log("Connection", "conn accepted \(conn.endpoint.debugDescription)")
+        let challenge = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        authenticationNonces[ObjectIdentifier(conn)] = challenge
         conn.stateUpdateHandler = { [weak self, weak conn] state in
             guard let conn else { return }
             switch state {
+            case .ready:
+                if let data = NativeVideo.packet(["nonce":challenge, "invite":self?.accessCode ?? ""]) {
+                    var packet = Data(); packet.append(uint32: data.count); packet.append(UInt8(21)); packet.append(data)
+                    conn.send(content: packet, completion: .idempotent)
+                }
             case .failed, .cancelled:
                 DiagLog.log("Connection", "conn dropped \(conn.endpoint.debugDescription) state=\(state)")
                 self?.drop(conn)
@@ -424,6 +408,7 @@ final class CastingServer: ObservableObject {
         nativePeers.removeValue(forKey: key)?.stop()
         internetConnections.remove(key)
         onTouchDisconnect?(key)
+        authenticationNonces.removeValue(forKey: key)
         controlBuffers[key] = nil
         clientResolutions[key] = nil
         authenticatedConnections.remove(key)
@@ -467,37 +452,34 @@ final class CastingServer: ObservableObject {
             guard buffer.count >= 5 + length else { break }
             let type = buffer[4]
             if type == 5 {
-                let codeData = Data(buffer[5..<(5 + length)])
-                if let code = String(data: codeData, encoding: .utf8), MatchingCode.isValid(code), code == accessCode {
-                    if internetConnections.contains(key), !authenticatedConnections.contains(key) {
-                        let id = connectionSlots[key] ?? UUID().uuidString
-                        connectionSlots[key] = id
-                        requestAudits[key] = DirectConnectionAudit(sessionID: id.replacingOccurrences(of: "-", with: "").lowercased(), sending: true)
-                        authTimeouts.removeValue(forKey: key)?.cancel()
-                        buffer.removeFirst(5 + length); controlBuffers[key] = buffer
-                        requestApproval(id: id, route: "公网 IP") { [weak self, weak conn] accepted in
-                            guard let self, let conn else { return }
-                            if accepted {
-                                let report = self.requestAudits[key]
-                                self.authenticate(conn)
-                                report?.record(self.authenticatedConnections.contains(key) ? "approved" : "rejected")
-                                self.parseControlMessages(for: conn)
-                            } else { self.requestAudits[key]?.record("rejected"); self.drop(conn) }
-                        }
-                        return
-                    }
-                    authenticate(conn)
-                } else {
-                    DiagLog.log("Connection", "authentication rejected \(conn.endpoint.debugDescription)")
-                    controlBuffers[key] = nil
-                    let payload = Data("匹配码错误，请输入发送端显示的匹配码".utf8)
-                    var message = Data()
-                    message.append(uint32: payload.count)
-                    message.append(UInt8(7))
-                    message.append(payload)
-                    conn.send(content: message, completion: .contentProcessed { _ in conn.cancel() })
-                    return
+                let payload = Data(buffer[5..<(5 + length)])
+                guard !authenticatedConnections.contains(key), connectionPassword != accessCode, AdmissionCredentials.validPassword(connectionPassword),
+                      let nonce = authenticationNonces.removeValue(forKey: key),
+                      let object = try? JSONSerialization.jsonObject(with: payload) as? [String: String],
+                      Set(object.keys) == Set(["proof", "application"]), let proof = object["proof"],
+                      AdmissionCredentials.equalProof(proof, AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: connectionPassword, invitation: accessCode), nonce: nonce)),
+                      let text = object["application"], let application = AdmissionCredentials.application(text) else {
+                    reject(conn, message: "连接密码错误或申请文字无效"); return
                 }
+                var waiting = Data(); waiting.append(uint32: 1); waiting.append(UInt8(22)); waiting.append(UInt8(1))
+                conn.send(content: waiting, completion: .idempotent)
+                let id = UUID().uuidString
+                connectionSlots[key] = id
+                if internetConnections.contains(key) { requestAudits[key] = DirectConnectionAudit(sessionID: id.replacingOccurrences(of: "-", with: "").lowercased(), sending: true) }
+                authTimeouts.removeValue(forKey: key)?.cancel()
+                buffer.removeFirst(5 + length); controlBuffers[key] = buffer
+                let ip: String
+                if case .hostPort(let host, _) = conn.endpoint { ip = host.debugDescription } else { ip = "未知" }
+                requestApproval(id: id, route: internetConnections.contains(key) ? "公网地址" : "局域网", ip: ip, application: application) { [weak self, weak conn] accepted in
+                    guard let self, let conn else { return }
+                    if accepted {
+                        let report = self.requestAudits[key]
+                        self.authenticate(conn)
+                        report?.record(self.authenticatedConnections.contains(key) ? "approved" : "rejected")
+                        self.parseControlMessages(for: conn)
+                    } else { self.requestAudits[key]?.record("rejected"); self.reject(conn, message: "投送者拒绝申请或申请已超时") }
+                }
+                return
             } else if authenticatedConnections.contains(key), type == 20 {
                 let data = Data(buffer[5..<(5 + length)])
                 guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { conn.cancel(); return }
@@ -544,6 +526,14 @@ final class CastingServer: ObservableObject {
         controlBuffers[key] = buffer
     }
 
+    private func reject(_ connection: NWConnection, message: String) {
+        let payload = Data(message.utf8)
+        var packet = Data(); packet.append(uint32: payload.count); packet.append(UInt8(7)); packet.append(payload)
+        connection.send(content: packet, completion: .contentProcessed { [weak self, weak connection] _ in
+            if let connection { self?.drop(connection) }
+        })
+    }
+
     private func authenticate(_ conn: NWConnection) {
         let key = ObjectIdentifier(conn)
         guard !authenticatedConnections.contains(key) else { return }
@@ -561,7 +551,7 @@ final class CastingServer: ObservableObject {
 
     private func notifyClientCountChanged() {
         publishDiagnostics()
-        onClientCountChanged?(authenticatedConnections.count + connectedInternetRooms.count + (browserServer?.connectedCount ?? 0))
+        onClientCountChanged?(authenticatedConnections.count + (nativeHost?.connectedCount ?? 0) + (browserServer?.connectedCount ?? 0))
     }
 
     private func startBrowser() {
@@ -573,6 +563,12 @@ final class CastingServer: ObservableObject {
             video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
             return video
         }
+        browser.password = { [weak self] in self?.connectionPassword ?? "" }
+        browser.requestApproval = { [weak self] id, text, ip, reply in
+            guard let self else { reply(false); return }
+            self.requestApproval(id: id, route: "局域网页", ip: ip, application: text, action: reply)
+        }
+        browser.onRequestEnded = { [weak self] in self?.forgetRequest($0) }
         browser.reserveSlot = { SenderConnectionBudget.reserve($0, internet: false) }
         browser.releaseSlot = { SenderConnectionBudget.release($0) }
         browserServer = browser

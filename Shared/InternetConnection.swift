@@ -6,6 +6,26 @@ import WebRTC
 import Combine
 import Darwin
 
+/// Sender password is kept in the app's private Keychain, never in invitation URLs or defaults.
+enum ConnectionPasswordStore {
+    private static var query: [String: Any] { [kSecClass as String:kSecClassGenericPassword, kSecAttrService as String:"Han.touping.connection-password", kSecAttrAccount as String:"sender"] }
+    static func read() -> String {
+        var item = query; item[kSecReturnData as String] = true; item[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(item as CFDictionary, &value) == errSecSuccess, let data = value as? Data else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+    static func save(_ value: String) -> Bool {
+        let data = Data(value.utf8)
+        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String:data] as CFDictionary)
+        if status == errSecSuccess { return true }
+        guard status == errSecItemNotFound else { return false }
+        var item = query; item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
+    }
+}
+
 /// App-instance identity, not a hardware identifier or proof of identity.
 enum DeviceAuditMetadata {
     static let value: [String: String] = {
@@ -159,16 +179,16 @@ enum ConnectionMode: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .localIP: return "局域 IP 直连"
-        case .localCode: return "局域匹配码"
-        case .internetIP: return "广域网 IP 直连"
-        case .internetCode: return "广域网匹配码"
+        case .localCode: return "局域邀请"
+        case .internetIP: return "公网地址"
+        case .internetCode: return "公网邀请"
         }
     }
 }
 
 enum InternetSettings {
-    static func browserAddress(code: String) -> String { "https://zhibenwang.com/touping/#code=\(code)" }
-    static func localBrowserAddress(ip: String, port: UInt16, code: String) -> String { "http://\(ip):\(port)/#code=\(code)" }
+    static func browserAddress(code: String) -> String { "https://zhibenwang.com/touping/#invite=\(code)" }
+    static func localBrowserAddress(ip: String, port: UInt16, code: String) -> String { "http://\(ip):\(port)/#invite=\(code)" }
     static let signalingURL = URL(string: "wss://zhibenwang.com/touping/signal")!
     static let auditURL = URL(string: "wss://zhibenwang.com/touping/audit")!
     static let stunURL = "stun:67.216.201.61:3478"
@@ -179,7 +199,7 @@ enum InternetSettings {
         sec_protocol_options_set_max_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
         sec_protocol_options_append_tls_ciphersuite(tls.securityProtocolOptions,
             tls_ciphersuite_t(rawValue: UInt16(TLS_PSK_WITH_AES_128_GCM_SHA256))!)
-        let key = Data(SHA256.hash(data: Data(("touping-tls-v1:" + code).utf8)))
+        let key = Data(SHA256.hash(data: Data(("touping-tls-v1:" + code.precomposedStringWithCanonicalMapping).utf8)))
         let secret = key.withUnsafeBytes { DispatchData(bytes: $0) }
         let identity = Data("touping-v1".utf8).withUnsafeBytes { DispatchData(bytes: $0) }
         sec_protocol_options_add_pre_shared_key(tls.securityProtocolOptions, secret as __DispatchData, identity as __DispatchData)

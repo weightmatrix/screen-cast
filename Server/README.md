@@ -1,3 +1,7 @@
+## 2026-11-05 · 71版接入协议（覆盖下方旧配对说明）
+
+主控独立设置连接密码，邀请#invite仅定位投屏。protocol=2的sender通过WSS登记room摘要及内存verifier；receiver收到一次性nonce后发送HMAC proof与1–200字application。错密码不通知主控；正确后转发request{id,ip,application}，主控按id批准/拒绝，批准前禁止媒体协商。一个sender可同时持有64个有界请求，全服务256连接/32登记位及IP限流；已批准媒体仍由客户端进程统一限制公网5/局域10，待批不占位。receiver发来的id不能改变所属会话。申请正文、密码、proof、verifier不写审计，审计仅记录长度及状态。新增receiver-auth.js需随网页发布且打包进原生应用，可信LAN HTTP使用它计算证明；不能抵御主动篡改HTTP页面。旧App/网页协议必须升级，不回退免密。主控收到的是服务观察到的来源IP，不是实名或绕过代理的真实IP。
+
 ## 2026-11-05 当前审计政策（覆盖下方旧版说明）
 
 仅境内腾讯主机留存；已停用境外复制timer/service，不新增第二台、不发邮件。旧境外快照未擅自删除，须另行核对处理。固定184天、日/5MiB分段、200段约1GiB，容量满拒绝配对而非覆盖未到期记录；共享锁协调轮转与ops/cleanup_audit.py。将ops内cleanup.service/timer链接到标准systemd目录并每小时运行，admin-audit目录也受184天清理。不要启用旧复制协议：仅支持40段，目标还必须明确destination_region=CN。

@@ -21,6 +21,8 @@ struct RecoveryBudget {
 final class ConnectionRecovery {
     enum State { case idle, connecting, connected, failed }
     var state: (() -> State)?
+    var waitingForApproval: (() -> Bool)?
+    private var approvalWaiting = false
     var cancelTransport: (() -> Void)?
     var onMessage: ((String) -> Void)?
     var onExhausted: (() -> Void)?
@@ -67,7 +69,7 @@ final class ConnectionRecovery {
     }
 
     func stop() {
-        generation = UUID(); isActive = false; attempt = nil
+        generation = UUID(); approvalWaiting = false; isActive = false; attempt = nil
         timer?.cancel(); timer = nil; monitor?.cancel(); monitor = nil
         due = nil; attemptStarted = nil; pathSignature = nil
         wasConnected = false; suspended = false; online = true
@@ -117,6 +119,10 @@ final class ConnectionRecovery {
             return
         }
         if wasConnected { wasConnected = false; budget.reset() }
+        if waitingForApproval?() == true {
+            approvalWaiting = true; onMessage?("等待投送者审批，最多5分钟"); return
+        }
+        if approvalWaiting { approvalWaiting = false; budget.reset(); attemptStarted = now; onMessage?("") }
         guard !budget.expired(now: now) else { exhaust(); return }
         guard online else { onMessage?("等待网络恢复，最长等待 2 分钟"); return }
         if let due {

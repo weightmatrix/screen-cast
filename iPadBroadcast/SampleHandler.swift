@@ -24,7 +24,8 @@ final class SampleHandler: RPBroadcastSampleHandler {
         nativeCapture.setPaused(false)
         let defaults = BroadcastSettings.store
         let code = defaults.string(forKey: "broadcastCode") ?? "67890123"
-        guard MatchingCode.isValid(code) else {
+        let password = defaults.string(forKey: "broadcastPassword") ?? ""
+        guard MatchingCode.isValid(code), AdmissionCredentials.validPassword(password) else {
             fail("请先在投屏 App 中设置 6–36 位数字匹配码")
             return
         }
@@ -39,6 +40,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
             self.running = true
             self.lastDiagnosticSnapshot = ""; self.lastDiagnosticNetwork = ""; self.lastPendingSnapshot = ""
             let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
+            server.connectionPassword = password
             server.configureNative(bitrate: bitrate, fps: fps, dimension: requestedResolution)
             server.nativeSource.onResolution = { summary in defaults.set(summary, forKey: "broadcastResolutionStatus") }
             self.server = server
