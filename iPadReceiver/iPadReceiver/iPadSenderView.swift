@@ -269,7 +269,8 @@ struct iPadSenderView: View {
             DispatchQueue.main.async {
                 refreshing = false
                 active = snapshot.active; peers = snapshot.peers; pending = snapshot.active ? snapshot.pending : [];
-                if let id = pendingSubmission, !pending.contains(where: { $0.id == id }) { pendingSubmission = nil } localIPs = snapshot.localIPs
+                if let id = pendingSubmission, !pending.contains(where: { $0.id == id }) { pendingSubmission = nil }
+                localIPs = snapshot.localIPs
                 signalPort = snapshot.signalPort; internetPort = snapshot.internetPort; browserPort = snapshot.browserPort
                 internetStatus = snapshot.internetStatus; resolutionStatus = snapshot.resolutionStatus
                 status = !snapshot.active && snapshot.status == "正在投屏" ? "投屏已结束" : snapshot.status
