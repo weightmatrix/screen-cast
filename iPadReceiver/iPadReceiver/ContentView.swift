@@ -3,7 +3,7 @@ import Combine
 import MetalKit
 import CoreImage
 
-private let drawerWidth: CGFloat = 400
+private var drawerWidth: CGFloat { min(400, UIScreen.main.bounds.width) }
 
 struct ContentView: View {
     @AppStorage("appMode") private var appMode = "receive"

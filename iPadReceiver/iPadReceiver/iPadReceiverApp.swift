@@ -85,47 +85,54 @@ struct ModePicker: View {
     let select: (String) -> Void
 
     var body: some View {
-        ZStack {
-            Color(UIColor.secondarySystemBackground).ignoresSafeArea()
-            VStack(spacing: 28) {
-                Image(systemName: "display.2")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.blue)
-                Text(AppPresentation.title).font(.largeTitle.bold())
+        GeometryReader { geometry in
+            ZStack {
+                Color(UIColor.secondarySystemBackground).ignoresSafeArea()
+                ScrollView {
+                    VStack(spacing: 28) {
+                        Image(systemName: "display.2")
+                            .font(.system(size: 64))
+                            .foregroundStyle(.blue)
+                        Text(AppPresentation.title).font(.largeTitle.bold())
 
-                VStack(spacing: 16) {
-                    Button {
-                        select("receive")
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.down.circle.fill")
-                                .font(.title2)
-                            Text("接收")
-                                .font(.title3.bold())
-                        }
-                        .frame(width: 220, height: 64)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
+                        VStack(spacing: 16) {
+                            Button {
+                                select("receive")
+                            } label: {
+                                HStack {
+                                    Image(systemName: "arrow.down.circle.fill")
+                                        .font(.title2)
+                                    Text("接收")
+                                        .font(.title3.bold())
+                                }
+                                .frame(width: 220, height: 64)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.blue)
 
-                    Button {
-                        select("cast")
-                    } label: {
-                        HStack {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
-                            Text("投屏")
-                                .font(.title3.bold())
+                            Button {
+                                select("cast")
+                            } label: {
+                                HStack {
+                                    Image(systemName: "arrow.up.circle.fill")
+                                        .font(.title2)
+                                    Text("投屏")
+                                        .font(.title3.bold())
+                                }
+                                .frame(width: 220, height: 64)
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(.blue)
                         }
-                        .frame(width: 220, height: 64)
+
+                        Text("整屏投屏，或接收另一台设备的画面")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.blue)
+                    .padding(24)
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: geometry.size.height)
                 }
-
-                Text("整屏投屏，或接收另一台设备的画面")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
         }
     }

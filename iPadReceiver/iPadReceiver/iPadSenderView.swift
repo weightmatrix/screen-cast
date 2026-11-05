@@ -4,6 +4,8 @@ import ReplayKit
 import UIKit
 
 struct iPadSenderView: View {
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    private var compact: Bool { horizontalSizeClass == .compact }
     @AppStorage("appMode") private var appMode = "cast"
     @State private var code = ""
     @State private var connectionPassword = ""
@@ -35,19 +37,26 @@ struct iPadSenderView: View {
     private static let settingsQueue = DispatchQueue(label: "casting.sender.settings", qos: .userInitiated)
     private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
+    @ViewBuilder private var workbenchHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
+            Text("投屏工作台").font(.system(size: 32, weight: .semibold))
+            Text("将这台设备的画面分享给 Mac、iPhone 或 iPad")
+                .foregroundStyle(.secondary)
+        }
+        if !compact { Spacer() }
+        Button { appMode = "receive" } label: {
+            Label(LocalizedStringKey(AppPresentation.receiveWorkbench), systemImage: "arrow.down.left")
+        }.buttonStyle(.bordered).controlSize(.large)
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
-                        Text("投屏工作台").font(.system(size: 32, weight: .semibold))
-                        Text("将这台 iPad 的画面分享给 Mac 或另一台 iPad")
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button { appMode = "receive" } label: { Label(LocalizedStringKey(AppPresentation.receiveWorkbench), systemImage: "arrow.down.left") }
-                        .buttonStyle(.bordered).controlSize(.large)
+                if compact {
+                    VStack(alignment: .leading, spacing: 16) { workbenchHeader }
+                } else {
+                    HStack { workbenchHeader }
                 }
                 VStack(alignment: .leading, spacing: 24) {
                     Label(active ? "正在投屏" : "整屏投屏", systemImage: "rectangle.inset.filled.and.person.filled")
@@ -65,7 +74,7 @@ struct iPadSenderView: View {
                         }
                     Text("接收设备选择邀请编号连接。投屏包含屏幕上的所有可采集内容，请先关闭不想分享的信息。")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    HStack(spacing: 24) {
+                    VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 10) {
                             HStack {
                                 Text("码率").foregroundStyle(.secondary)
@@ -134,7 +143,7 @@ struct iPadSenderView: View {
                         }
                     }
                     Text(status).foregroundStyle(active ? .green : .secondary)
-                }.padding(28).frame(maxWidth: .infinity, alignment: .leading)
+                }.padding(compact ? 16 : 28).frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
                 VStack(alignment: .leading, spacing: 12) {
                     Text("网页接收地址").font(.headline)
@@ -170,7 +179,7 @@ struct iPadSenderView: View {
                 ConnectionPrivacyNotice()
                 Text("在系统弹窗中确认开始后，可以切换到其他应用继续投屏。系统不允许静默启动录屏；受保护的视频可能不会显示。声音可分别选择页面与话筒。")
                     .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }.font(.system(size: 18)).padding(32).frame(maxWidth: 900)
+            }.font(.system(size: 18)).padding(compact ? 16 : 32).frame(maxWidth: 900)
                 .frame(maxWidth: .infinity)
         }
         .background(Color(red: 0.035, green: 0.05, blue: 0.075).ignoresSafeArea())
