@@ -26,6 +26,13 @@ final class ScreenStreamer: NSObject, ObservableObject {
         var isUnnamed: Bool { application.applicationName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         var displayName: String { ScreenStreamer.displayName(for: application) }
         var icon: NSImage? {
+            // Bundle identifiers can be shared by installed and Xcode-built copies.
+            // The capture candidate's PID identifies the copy that is actually running.
+            if let running = NSRunningApplication(processIdentifier: application.processID),
+               running.bundleIdentifier == application.bundleIdentifier {
+                if let icon = running.icon { return icon }
+                if let url = running.bundleURL { return NSWorkspace.shared.icon(forFile: url.path) }
+            }
             if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: application.bundleIdentifier) {
                 return NSWorkspace.shared.icon(forFile: url.path)
             }

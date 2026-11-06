@@ -658,7 +658,8 @@ private struct AppGroupPicker: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold)).foregroundStyle(.tertiary).frame(width: 12)
                 if let icon = group.icon {
-                    Image(nsImage: icon).resizable().frame(width: 42, height: 42)
+                    Image(nsImage: icon).resizable().scaledToFit().frame(width: 42, height: 42)
+                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 } else {
                     Image(systemName: "app.dashed").font(.system(size: 36, weight: .medium)).foregroundStyle(.secondary).frame(width: 42, height: 42)
                 }
@@ -718,7 +719,8 @@ private struct EditAppGroupPicker: View {
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 15)).foregroundStyle(.secondary)
                 if let icon = group.icon {
-                    Image(nsImage: icon).resizable().frame(width: 16, height: 16)
+                    Image(nsImage: icon).resizable().scaledToFit().frame(width: 16, height: 16)
+                        .clipShape(RoundedRectangle(cornerRadius: 3.5, style: .continuous))
                 }
                 Text(group.displayName).font(.system(size: 16)).bold()
                 Spacer()
