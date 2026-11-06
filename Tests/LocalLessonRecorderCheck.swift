@@ -4,12 +4,17 @@ import CoreImage
 
 @main enum LocalLessonRecorderCheck {
     @MainActor static func main() async throws {
+        let reference = ISO8601DateFormatter().date(from: "2026-11-06T22:30:00Z")!
+        let zone = TimeZone(secondsFromGMT: 8 * 3600)!
+        precondition(RecordingNameFormat(prefix: "课程", year: true, month: true, time: true).name(at: reference, timeZone: zone) == "课程·2026110630")
+        precondition(RecordingNameFormat(prefix: "课程", year: false, month: true, time: false).name(at: reference, timeZone: zone) == "课程·11")
+        precondition(RecordingNameFormat(prefix: "../课程:/", year: false, month: false, time: false).name(at: reference, timeZone: zone) == "课程")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("touping-recorder-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
         let retained = cache.appendingPathComponent("retained-from-previous-session.txt")
         try Data("preserve".utf8).write(to: retained)
-        let recorder = LocalLessonRecorder(folder: folder, segmentDuration: 1)
+        let recorder = LocalLessonRecorder(folder: folder, segmentDuration: 1, naming: RecordingNameFormat(prefix: "课程", year: true, month: true, time: true))
         recorder.start()
         let start = CACurrentMediaTime()
         for n in 0..<100 {
@@ -47,7 +52,7 @@ import CoreImage
         var totalVideo = 0, totalAudio = 0
         var sizes = Set<String>()
         for file in files {
-            precondition(file.lastPathComponent.range(of: #"^\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}( \(\d+\))?\.mp4$"#, options: .regularExpression) != nil)
+            precondition(file.lastPathComponent.range(of: #"^课程·\d{10}( \(\d+\))?\.mp4$"#, options: .regularExpression) != nil)
             let asset = AVURLAsset(url: file)
             let videos = try await asset.loadTracks(withMediaType: .video)
             let audios = try await asset.loadTracks(withMediaType: .audio)

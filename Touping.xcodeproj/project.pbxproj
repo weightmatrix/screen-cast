@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        CD7900000000000000000011 = {isa = PBXBuildFile; fileRef = CD7900000000000000000001; };
         CD7200000000000000000043 = {isa = PBXBuildFile; fileRef = CD7200000000000000000004; };
         CD7200000000000000000042 = {isa = PBXBuildFile; fileRef = CD7200000000000000000004; };
         CD7200000000000000000041 = {isa = PBXBuildFile; fileRef = CD7200000000000000000004; };
@@ -125,6 +126,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+        CD7900000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaiduDrive.swift; sourceTree = "<group>"; };
         CD7200000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = receiver-room.js; path = Server/Web/receiver-room.js; sourceTree = SOURCE_ROOT; };
         CD7200000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RoomControls.swift; path = Shared/RoomControls.swift; sourceTree = SOURCE_ROOT; };
         CD7200000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RoomAudioSettings.swift; path = Shared/RoomAudioSettings.swift; sourceTree = SOURCE_ROOT; };
@@ -283,6 +285,7 @@
 		AB0000000000000000000301 /* macOS */ = {
 			isa = PBXGroup;
 			children = (
+                CD7900000000000000000001,
                 CD4600000000000000000004,
 				AB0000000000000000000101 /* MacCasterApp.swift */,
 				AB0000000000000000000102 /* ContentView.swift */,
@@ -526,6 +529,7 @@
 			buildActionMask = 2147483647;
 			files = (
                 CD4700000000000000000003,
+                CD7900000000000000000011,
                 CD4600000000000000000005,
                 CD4600000000000000000003,
 				91A8F80BD0F349F2B2FBA901,

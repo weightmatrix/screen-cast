@@ -2,6 +2,7 @@
 import asyncio, base64, collections, hashlib, hmac, ipaddress, json, os, re, secrets, struct, time, unicodedata, uuid
 from pathlib import Path
 from audit import AuditLog, AuditUnavailable
+import baidu_oauth
 MAX_FRAME = 16384
 MAX_TOTAL = 65536
 ROOMS = {}
@@ -272,6 +273,22 @@ async def connection(reader, writer):
         method, path, _ = parts[0].split(' ')
         headers = dict(line.split(':', 1) for line in parts[1:] if ':' in line)
         headers = {k.lower():v.strip() for k,v in headers.items()}
+        if path.startswith('/baidu/'):
+            ip = source_ip(peer[0], headers)
+            if not allowance(ip, 'baidu_oauth', 20):
+                code, extra, body = baidu_oauth.response(429, {'error': '授权请求过于频繁'})
+            else:
+                payload = None
+                if method == 'POST':
+                    if headers.get('transfer-encoding') or headers.get('content-type', '').split(';')[0] != 'application/json': raise Rejected()
+                    length = int(headers.get('content-length', '0'))
+                    if not 1 <= length <= 8192: raise Rejected()
+                    payload = json.loads(await asyncio.wait_for(reader.readexactly(length), 10))
+                code, extra, body = await baidu_oauth.handle(method, path, payload)
+            status = {200:'OK',302:'Found',400:'Bad Request',404:'Not Found',405:'Method Not Allowed',429:'Too Many Requests',502:'Bad Gateway',503:'Service Unavailable'}[code]
+            raw = f'HTTP/1.1 {code} {status}\r\n' + ''.join(f'{k}: {v}\r\n' for k,v in extra.items())
+            writer.write(raw.encode() + f'Content-Length: {len(body)}\r\nConnection: close\r\n\r\n'.encode() + body)
+            await writer.drain(); return
         if method == 'GET' and path in ('/', '/receiver.js', '/receiver-i18n.js', '/receiver-auth.js', '/receiver-room.js', '/privacy.html', '/support.html'):
             asset = 'receiver.html' if path == '/' else path[1:]
             body = (Path(__file__).parent / 'Web' / asset).read_bytes()

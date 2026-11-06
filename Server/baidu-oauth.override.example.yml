@@ -1,0 +1,7 @@
+# Copy to /srv/apps/touping/ops/baidu-oauth.override.yml after provisioning the private file.
+services:
+  signaling:
+    environment:
+      BAIDU_OAUTH_CONFIG: /run/baidu-oauth.json
+    volumes:
+      - /srv/apps/touping/secrets/baidu-oauth.json:/run/baidu-oauth.json:ro

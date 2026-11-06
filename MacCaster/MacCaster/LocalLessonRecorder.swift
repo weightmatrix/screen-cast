@@ -4,6 +4,30 @@ import CoreImage
 import Combine
 import SwiftUI
 
+struct RecordingNameFormat {
+    var prefix = "录课"
+    var year = true
+    var month = true
+    var time = true
+    static func current() -> Self {
+        let store = UserDefaults.standard
+        return Self(prefix: store.string(forKey: "lesson.namePrefix") ?? "录课",
+            year: store.object(forKey: "lesson.nameYear") as? Bool ?? true,
+            month: store.object(forKey: "lesson.nameMonth") as? Bool ?? true,
+            time: store.object(forKey: "lesson.nameTime") as? Bool ?? true)
+    }
+    func name(at date: Date, timeZone: TimeZone = .current) -> String {
+        let allowed = prefix.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !"/:\\\"<>|?*".unicodeScalars.contains($0) }
+        let clean = String(String.UnicodeScalarView(allowed)).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
+        let title = clean.isEmpty ? "录课" : String(clean.prefix(48))
+        let format = (year ? "yyyy" : "") + (month ? "MM" : "") + (time ? "HHmm" : "")
+        guard !format.isEmpty else { return title }
+        let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian); formatter.timeZone = timeZone; formatter.dateFormat = format
+        return title + "·" + formatter.string(from: date)
+    }
+}
+
 /// Records the received picture and the locally selected audio mix. Writer work
 /// never blocks WebRTC or the audio render thread; only two pictures are retained.
 final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
@@ -29,6 +53,9 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var segment: Segment?
     private var outputFolder: URL?
+    private var outputNaming = RecordingNameFormat()
+    private let namingOverride: RecordingNameFormat?
+    private let cloudEligible: Bool
     private var finishing = 0
     private var folderSubscription: AnyCancellable?
     private var lastVideoTime = -Double.infinity
@@ -45,11 +72,9 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         let folder: URL
         let stem: String
         var audioTime = -Double.infinity
-        init(folder: URL, size: CGSize, time: Double) throws {
+        init(folder: URL, size: CGSize, time: Double, naming: RecordingNameFormat) throws {
             self.size = size; started = time
-            let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-            stem = formatter.string(from: Date()); self.folder = folder
+            stem = naming.name(at: Date()); self.folder = folder
             let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
             let url = cache.appendingPathComponent(UUID().uuidString + ".mp4")
             writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -89,7 +114,8 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
     }
 
-    init(folder: URL? = nil, segmentDuration: TimeInterval = 600, automaticKey: String = "lessonAutomatic.receive") {
+    init(folder: URL? = nil, segmentDuration: TimeInterval = 600, automaticKey: String = "lessonAutomatic.receive", naming: RecordingNameFormat? = nil) {
+        self.namingOverride = naming; self.cloudEligible = folder == nil
         self.automaticKey = automaticKey
         self.segmentDuration = segmentDuration
         Self.instances.add(self)
@@ -109,11 +135,12 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     func start() {
         guard folder != nil else { message = "请先在设置中选择录课文件夹"; return }
         guard let folder, !isArmed, !isSaving else { return }
+        let naming = namingOverride ?? RecordingNameFormat.current()
         let token = UUID()
         lock.lock(); generation = token; accepting = true; lock.unlock()
         isArmed = true; message = "等待接收画面，连接后自动录课"
         queue.async {
-            self.outputFolder = folder; self.lastVideoTime = -.infinity
+            self.outputFolder = folder; self.outputNaming = naming; self.lastVideoTime = -.infinity
         }
     }
 
@@ -159,7 +186,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                     guard self.finishing < 2 else { throw RecordingError.message("磁盘保存过慢，录课已停止") }
                     let free = (try FileManager.default.attributesOfFileSystem(forPath: folder.path)[.systemFreeSize] as? NSNumber)?.int64Value
                     if let free, free <= 200 * 1024 * 1024 { throw RecordingError.message("剩余空间不足 200 MB，录课已停止") }
-                    self.segment = try Segment(folder: folder, size: size, time: time)
+                    self.segment = try Segment(folder: folder, size: size, time: time, naming: self.outputNaming)
                     self.publish("正在录课 · 每 10 分钟自动分段")
                 }
                 guard let segment = self.segment else { return }
@@ -224,7 +251,10 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                 if current.writer.status == .completed {
                     do {
                         let saved = try current.publish()
-                        DispatchQueue.main.async { self.lastFile = saved }
+                        DispatchQueue.main.async {
+                            self.lastFile = saved
+                            if self.cloudEligible { BaiduDrive.shared.enqueue(saved) }
+                        }
                         if self.ticket() == nil, self.finishing == 1 { self.publish("录课已保存") }
                     } catch { self.fail(error) }
                 } else { self.fail(current.writer.error ?? RecordingError.message("录课文件保存失败")) }
@@ -326,12 +356,12 @@ final class RecordingFolderPreferences: ObservableObject {
         return cache
     }
 
-    func chooseFolder() {
-        guard !LocalLessonRecorder.storageInUse else { errorMessage = "请先停止所有录课并等待保存完成，再修改目录"; return }
+    @MainActor func chooseFolder() {
+        guard !LocalLessonRecorder.storageInUse, BaiduDrive.shared.pendingCount == 0 else { errorMessage = "请先停止所有录课，等待保存和网盘待传队列处理完成，再修改目录"; return }
         let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
         panel.canCreateDirectories = true; panel.allowsMultipleSelection = false; panel.prompt = "保存录课到此处"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        guard !LocalLessonRecorder.storageInUse else { errorMessage = "录课已开始，请保存完成后再选择目录"; return }
+        guard !LocalLessonRecorder.storageInUse, BaiduDrive.shared.pendingCount == 0 else { errorMessage = "仍有录课或网盘待传任务，请处理完成后再选择目录"; return }
         let granted = url.startAccessingSecurityScopedResource()
         do {
             _ = try Self.cacheDirectory(in: url)
@@ -349,8 +379,19 @@ final class RecordingFolderPreferences: ObservableObject {
 
 struct RecordingFolderSettings: View {
     @ObservedObject private var preferences = RecordingFolderPreferences.shared
+    @AppStorage("lesson.namePrefix") private var prefix = "录课"
+    @AppStorage("lesson.nameYear") private var year = true
+    @AppStorage("lesson.nameMonth") private var month = true
+    @AppStorage("lesson.nameTime") private var time = true
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            TextField("录课名字前缀", text: $prefix)
+            HStack {
+                Toggle("年份", isOn: $year).toggleStyle(.checkbox)
+                Toggle("月份", isOn: $month).toggleStyle(.checkbox)
+                Toggle("时间（小时和分）", isOn: $time).toggleStyle(.checkbox)
+            }
+            Text("示例：" + RecordingNameFormat(prefix: prefix, year: year, month: month, time: time).name(at: Date()) + ".mp4").font(.caption)
             Button("选择录课文件夹") { preferences.chooseFolder() }
             Text(preferences.folder?.path ?? "尚未选择录课文件夹").font(.caption).textSelection(.enabled)
             Text("录课中的分段缓存在此目录的tmp子文件夹；保存完成后移到主目录。更换目录前请先停止所有录课并等待保存完成。")

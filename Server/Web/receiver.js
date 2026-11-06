@@ -238,7 +238,7 @@
   $('play').onclick=()=>{if(current)playVideo(current,true);};
   const syncSound=()=>{
     const video=$('video'), muted=video.muted || video.volume===0;
-    for(const id of ['sound','speaker-sound']) {$(id).textContent=muted?t('开启声音'):t('关闭声音');$(id).setAttribute('aria-pressed',String(!muted));}
+    for(const id of ['sound','speaker-sound']) {$(id).textContent=muted?t('开启声音'):t('关闭声音');$(id).setAttribute('aria-pressed',String(!muted));$(id).setAttribute('data-active',String(!muted));}
   };
   const toggleSound=()=>{
     const video=$('video');
@@ -248,14 +248,20 @@
   $('video').muted=false;
   $('video').addEventListener('volumechange',syncSound);
   $('sound').onclick=toggleSound;$('speaker-sound').onclick=toggleSound;syncSound();
-  $('fullscreen').onclick=()=>{
-    const viewer=$('viewer'), expand=()=>viewer.classList.add('expanded');
-    if(viewer.requestFullscreen) viewer.requestFullscreen().catch(expand); else expand();
-  };
-  $('exit-viewer').onclick=()=>{
+  const leaveFullscreen=()=>{
     $('viewer').classList.remove('expanded');
-    if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+    if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+    else if(document.webkitFullscreenElement)document.webkitExitFullscreen?.();
   };
+  const maximize=()=>{
+    const viewer=$('viewer'), expand=()=>viewer.classList.add('expanded');
+    if(document.fullscreenElement || document.webkitFullscreenElement || viewer.classList.contains('expanded')) {leaveFullscreen();return;}
+    if(viewer.requestFullscreen) viewer.requestFullscreen().catch(expand);
+    else if(viewer.webkitRequestFullscreen) {try{viewer.webkitRequestFullscreen();}catch(_){expand();}}
+    else expand();
+  };
+  $('fullscreen').onclick=$('viewer-maximize').onclick=maximize;
+  $('exit-viewer').onclick=leaveFullscreen;
   window.addEventListener('keydown',event=>{if(event.key==='Escape')$('viewer').classList.remove('expanded');});
   window.addEventListener('pagehide',()=>stop(current));
 })();

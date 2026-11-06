@@ -26,12 +26,14 @@ struct MacCasterApp: App {
     var body: some Scene {
         WindowGroup("投屏") {
             RootView()
+                .background(NativeWindowCapabilities().frame(width: 0, height: 0))
                 .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
                 .preferredColorScheme(AppSkin.victorian(appSkin) ? .light : AppAppearance.scheme(appearance))
                 .environmentObject(streamer)
                 .overlay { RoomChatOverlay() }
                 .task {
+                    _ = BaiduDrive.shared
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-motion") { await NativeRoutesVerification.motion() }
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-receive") { await NativeRoutesVerification.receive() }
@@ -46,6 +48,7 @@ struct MacCasterApp: App {
                 }
         }
         .defaultSize(width: 820, height: 600)
+        .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .help) {
                 Link("隐私政策", destination: AppPresentation.privacyURL)
@@ -77,6 +80,7 @@ private struct AppearanceSettingsView: View {
 
             }
             Section("录课存储") { RecordingFolderSettings() }
+            Section("百度网盘录课") { BaiduDriveSettings() }
             Section("外观") {
                 Picker("深浅色", selection: $appearance) {
                     Text("跟随系统").tag("system")
@@ -249,4 +253,20 @@ struct MacModePicker: View {
         .padding(40)
         .frame(width: 420, height: 320)
     }
+}
+
+// Keep the native green window control available even when content supplies minimum dimensions.
+private struct NativeWindowCapabilities: NSViewRepresentable {
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            window.styleMask.insert(.resizable)
+            window.collectionBehavior.remove(.fullScreenAuxiliary)
+            window.collectionBehavior.insert(.fullScreenPrimary)
+            window.standardWindowButton(.zoomButton)?.isEnabled = true
+        }
+    }
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ view: Probe, context: Context) {}
 }

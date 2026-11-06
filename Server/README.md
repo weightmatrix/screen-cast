@@ -1,3 +1,13 @@
+## 79版百度网盘授权与录课直传
+
+授权回调固定为 `https://zhibenwang.com/touping/baidu/callback`，在百度应用控制台填写完整地址。官方依据：[OAuth](https://openauth.baidu.com/doc/doc.html)、[网盘官方SDK上传接口](https://github.com/baidu-netdisk/baidu-drive-sdk-go/tree/main/baidudriver/api)。新增 `baidu_oauth.py` 仅交换/刷新授权，不接收文件或媒体；应用凭据从 `/srv/apps/touping/secrets/baidu-oauth.json` 只读挂载，字段只有 `client_id`、`client_secret`，禁止写入仓库/镜像/网页。SignKey等不用于此流程。官方登录页可复用系统浏览器登录状态，不读取或保存用户Cookie；令牌在Mac钥匙串，服务器不持久保存用户令牌。
+
+`POST /baidu/start` 生成300秒state及私有claim；回调保存一次性code并跳回App；`POST /baidu/complete` 必须提交匹配claim，换取令牌后清内存；`POST /baidu/refresh` 有界续期。最大64个待授权、4个并发交换、8KiB请求体、每IP每分钟20次，错误响应不包含百度URL或凭据。`GET /baidu/status` 和无参数回调可用于部署检查。Nginx在更具体的 `/touping/baidu/` 路由关闭access_log及请求相关error_log，避免OAuth查询日志；其余配对审计不变。
+
+部署示例覆盖文件为 `baidu-oauth.override.example.yml`，实际覆盖放ops；部署脚本 `ops/deploy_baidu_oauth.py` 在沙盒内备份，先关回调日志，再仅重建touping服务；Nginx仅校验/reload。回滚目录 `/srv/apps/touping/backups/before79-baidu`。密钥文件640 root:65534，secrets目录保持私有，只有容器固定文件挂载；不在ops/staging长期留密钥副本。
+
+Mac每个完整MP4按4MiB分片直传百度，最多4GiB单文件、64个待传记录、单任务3次自动尝试，不覆盖同名远端文件。失败原件保留；目录权限由百度应用实际授权决定，非任意根目录均保证可写。真实用户授权/目录/上传必须实测，mock通过不代表百度应用权限已获批。生产发布检查只验证接口配置/回调/health与资源一致性。
+
 ## 2026-11-05 · 72版共用语音/聊天资源
 
 新增receiver-room.js白名单与原生打包资源。所有语音均通过设备WebRTC Opus轨道，聊天为经过接入审批的设备间有界SCTP文字；主投送设备跨所有任务分发，服务器仍不转发媒体或聊天，收到type=chat配对消息直接拒绝且不保存正文。浏览器仅在用户主动开启麦克风/测试后申请音频权限，HTTP安全限制/setSinkId能力不绕过。发布必须同时包含receiver.html、receiver.js、receiver-auth.js、receiver-room.js、receiver-i18n.js及更新的隐私/支持页；旧App不具备完整共用语音功能，双方需72版。

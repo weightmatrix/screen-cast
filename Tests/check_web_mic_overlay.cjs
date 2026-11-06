@@ -42,13 +42,13 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
     el(id).add=function(option){this.options.push(option);};
   }
   const before=stopped;
-  await el('voice-refresh').onclick();
-  assert.equal(stopped,before+1);assert.equal(el('voice-toggle').checked,false);
+  await el('voice-input').onfocus();
+  assert.equal(stopped,before);assert.equal(el('voice-toggle').checked,false);
   assert.equal(el('voice-input').options[1].value,'mic-1');
   assert.equal(detached,1); // Device access never attaches a sender.
   let captures=0;
   const liveTrack={kind:'audio',enabled:true,stop(){}}, liveStream={getTracks:()=>[liveTrack],getAudioTracks:()=>[liveTrack]};
-  sandbox.navigator.mediaDevices.getUserMedia=async()=>{captures++;return liveStream;};
+  sandbox.navigator.mediaDevices.getUserMedia=async()=>{captures++;liveTrack.enabled=true;return liveStream;};
   sandbox.window.AudioContext=class {
     createAnalyser(){return {fftSize:256};}
     createMediaStreamSource(){return {connect(){}};}
@@ -64,14 +64,18 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   await new Promise(setImmediate);
   assert.equal(captures,1);assert.equal(liveSender.track,liveTrack);assert.equal(el('mute-mic').attrs['data-state'],'on');
   sandbox.ToupingRoom.ready(liveSession);assert.equal(captures,1);
-  el('mute-mic').onclick();assert.equal(liveSender.track,null);
+  el('screen-mic').onclick();assert.equal(liveSender.track,null);
+  assert.equal(el('voice-button').textContent,'开启麦克');
+  assert.equal(el('screen-mic').attrs['data-active'],'false');
   assert.equal(el('mute-mic').attrs['aria-label'],'打开麦克风');
-  await el('mute-mic').onclick();assert.equal(liveSender.track,liveTrack);
+  await el('voice-button').onclick();assert.equal(liveSender.track,liveTrack);
+  assert.equal(el('screen-mic').textContent,'关闭麦克');
+  assert.equal(el('screen-mic').attrs['data-active'],'true');
   assert.equal(el('mute-mic').attrs['aria-label'],'关闭麦克风');
   el('mute-mic').onclick();assert.equal(liveSender.track,null);
   sandbox.ToupingRoom.stop(liveSession);
   const events={},classes=new Set();
-  el('viewer').classList={add:x=>classes.add(x),remove:x=>classes.delete(x)};
+  el('viewer').classList={add:x=>classes.add(x),remove:x=>classes.delete(x),contains:x=>classes.has(x)};
   sandbox.window.addEventListener=(name,fn)=>{events[name]=fn;};
   sandbox.window.ToupingI18n={languages:[],strings:{}};
   sandbox.document.documentElement={};sandbox.document.querySelectorAll=()=>[];
@@ -82,7 +86,7 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   el('video').srcObject={};el('video').play=()=>Promise.resolve();el('video').volume=1;
   el('sound').onclick();assert.equal(el('video').muted,true);assert.equal(el('speaker-sound').textContent,'开启声音');
   el('speaker-sound').onclick();assert.equal(el('video').muted,false);assert.equal(el('sound').textContent,'关闭声音');
-  el('fullscreen').onclick();assert(classes.has('expanded'));
+  el('viewer-maximize').onclick();assert(classes.has('expanded'));
   el('exit-viewer').onclick();assert(!classes.has('expanded'));
   el('fullscreen').onclick();events.keydown({key:'Escape'});assert(!classes.has('expanded'));
   let requested=false;el('viewer').requestFullscreen=()=>{requested=true;return Promise.resolve();};

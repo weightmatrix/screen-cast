@@ -7,7 +7,7 @@
   const key=/^zh-(tw|hk|mo|hant)/.test(language)?'zh-Hant':language.split('-')[0], locale=window.ToupingI18n?.languages.indexOf(key)??-1;
   const t=text=>window.ToupingI18n?.strings[text]?.[locale]||text;
   const participant=random(), fallback='访客-'+participant.slice(0,4);
-  let active=null, microphone=null, context=null, analyser=null, meter=null, testing=false, generation=0;
+  let active=null, microphone=null, context=null, analyser=null, meter=null, testing=false, generation=0, micAction=0;
   el('nickname').value=read('touping-nickname','');
   el('nickname').oninput=()=>{store('touping-nickname',el('nickname').value); hello(active);};
   const name=()=>el('nickname').value.replace(/[\p{Cc}]/gu,'').trim().slice(0,32)||fallback;
@@ -19,6 +19,11 @@
     button.setAttribute('data-state',sending?'on':requested?'pending':'off');
     button.setAttribute('aria-label',label);button.setAttribute('title',requested && !sending?'取消开启麦克风（等待连接或授权）':label);
     button.setAttribute('aria-pressed',String(Boolean(sending)));
+    for(const id of ['voice-button','screen-mic']) {
+      el(id).textContent=requested?'关闭麦克':'开启麦克';el(id).setAttribute('aria-pressed',String(Boolean(requested)));el(id).setAttribute('data-active',String(Boolean(sending)));
+    }
+    el('voice-test-button').textContent=testing?'停止测试':'测试麦克';
+    el('voice-test-button').setAttribute('aria-pressed',String(testing));el('voice-test-button').setAttribute('data-active',String(testing));
   }
   const notes=text=>{el('voice-status').textContent=text;syncMicrophoneButton();};
   function send(s,packet) {
@@ -83,6 +88,7 @@
   }
   // Stop tracks synchronously, including local testing and pending permission requests.
   function muteMicrophone() {
+    micAction++;
     testing=false;el('voice-test').checked=false;el('voice-toggle').checked=false;
     stopCapture();
     for(const sender of active?.pc.getSenders()||[]) {
@@ -96,29 +102,22 @@
     return el('voice-toggle').onchange();
   };
   el('voice-toggle').onchange=async()=>{
-    syncMicrophoneButton();
+    const action=++micAction;syncMicrophoneButton();
     try {
       if(el('voice-toggle').checked) await replaceMic();
       else {const sender=active?.pc.getSenders().find(x=>x.track?.kind==='audio'); if(sender)await sender.replaceTrack(null);if(!testing)stopCapture();notes('麦克风已关闭。');}
-    }catch(error){el('voice-toggle').checked=false;stopCapture();notes(error.message);}
+    }catch(error){if(action===micAction){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}
   };
+  el('voice-button').onclick=el('screen-mic').onclick=el('mute-mic').onclick;
   syncMicrophoneButton();
   el('voice-test').onchange=async()=>{
-    testing=el('voice-test').checked;
+    testing=el('voice-test').checked;syncMicrophoneButton();
     try{if(testing && !microphone) await startCapture();else if(!testing && !el('voice-toggle').checked)stopCapture();}
     catch(error){testing=false;el('voice-test').checked=false;notes(error.message);}
   };
+  el('voice-test-button').onclick=()=>{el('voice-test').checked=!el('voice-test').checked;return el('voice-test').onchange();};
   el('voice-input').onchange=async()=>{try{if(el('voice-toggle').checked)await replaceMic();else if(testing)await startCapture();}catch(error){el('voice-toggle').checked=false;stopCapture();notes(error.message);}};
-  el('voice-refresh').onclick=async()=>{
-    // Explicit device access is independent of sending or joining a cast.
-    let permission;
-    try {
-      if(!navigator.mediaDevices?.getUserMedia) throw Error('选择设备需要HTTPS地址和浏览器麦克风授权。');
-      if(!microphone) permission=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
-      await devices();notes('设备列表已更新，请在下拉框选择；此操作不会发送声音。');
-    }catch(error){notes(error.message);}
-    finally{permission?.getTracks().forEach(track=>track.stop());}
-  };
+  el('voice-input').onfocus=devices;
   el('voice-output').onchange=async()=>{try{if(!el('video').setSinkId)throw Error('请在系统声音设置选择喇叭。');await el('video').setSinkId(el('voice-output').value);}catch(error){notes(error.message);}};
   el('speaker-test').onclick=async()=>{
     // Short, local test tone; nothing is transmitted to other participants.
@@ -142,8 +141,8 @@
   function ready(s) {
     if(active!==s || s.closed || !s.connected || !s.roomReady || s.micStarting || !el('voice-toggle').checked) return;
     if(microphone?.getAudioTracks().some(track=>s.pc.getSenders().some(sender=>sender.track===track))) return;
-    s.micStarting=true;
-    replaceMic().catch(error=>{if(active===s){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}).finally(()=>{s.micStarting=false;});
+    s.micStarting=true;const action=micAction;
+    replaceMic().catch(error=>{if(active===s && action===micAction){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}).finally(()=>{s.micStarting=false;});
   }
   globalThis.ToupingRoom={
     ready,

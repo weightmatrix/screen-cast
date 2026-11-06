@@ -3,6 +3,7 @@ FROM ${RUNTIME_IMAGE}
 WORKDIR /app
 COPY signaling.py /app/signaling.py
 COPY audit.py /app/audit.py
+COPY baidu_oauth.py /app/baidu_oauth.py
 COPY Web /app/Web
 USER 65534:65534
 ENV BIND_HOST=0.0.0.0 TRUST_PROXY=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
