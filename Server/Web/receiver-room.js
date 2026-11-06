@@ -11,7 +11,7 @@
   el('nickname').value=read('touping-nickname','');
   el('nickname').oninput=()=>{store('touping-nickname',el('nickname').value); hello(active);};
   const name=()=>el('nickname').value.replace(/[\p{Cc}]/gu,'').trim().slice(0,32)||fallback;
-  el('nickname').placeholder=fallback;
+  el('nickname').placeholder='你的名字（选填）';
   const notes=text=>{el('voice-status').textContent=text;};
   function send(s,packet) {
     if(!s || s.closed || !s.chat || s.chat.readyState!=='open' || s.chat.bufferedAmount>32768) return false;
@@ -56,12 +56,16 @@
     await devices(); return stream;
   }
   async function replaceMic() {
-    if(!active || active.closed || !active.connected || !active.roomReady) throw Error('请先连接72版投送端并完成共用语音握手。');
+    const session=active;
+    if(!session || session.closed || !session.connected || !session.roomReady) {notes('已选择发送，连接就绪后会请求麦克风授权。');return;}
     const stream=await startCapture(), track=stream.getAudioTracks()[0];
-    const transceiver=active.pc.getTransceivers().find(x=>x.receiver.track.kind==='audio');
+    if(active!==session || session.closed || stream!==microphone) {track.stop();return;}
+    const transceiver=session.pc.getTransceivers().find(x=>x.receiver.track.kind==='audio');
     if(!el('voice-toggle').checked) {track.stop();throw Error('麦克风操作已取消');}
     if(!transceiver) {track.stop();throw Error('当前连接没有双向音频，请更新投送端。');}
-    await transceiver.sender.replaceTrack(track); notes('麦克风已开启，主控及其他接收者都能听见。');
+    await transceiver.sender.replaceTrack(track);
+    if(!el('voice-toggle').checked || active!==session || session.closed || stream!==microphone) {track.enabled=false;track.stop();return;}
+    notes('麦克风已开启，主控及其他接收者都能听见。');
   }
   function stopCapture() {
     generation++;
@@ -90,8 +94,17 @@
     try{if(testing && !microphone) await startCapture();else if(!testing && !el('voice-toggle').checked)stopCapture();}
     catch(error){testing=false;el('voice-test').checked=false;notes(error.message);}
   };
-  el('voice-input').onchange=async()=>{try{if(el('voice-toggle').checked)await replaceMic();else if(testing)await startCapture();}catch(error){notes(error.message);}};
-  el('voice-refresh').onclick=devices;
+  el('voice-input').onchange=async()=>{try{if(el('voice-toggle').checked)await replaceMic();else if(testing)await startCapture();}catch(error){el('voice-toggle').checked=false;stopCapture();notes(error.message);}};
+  el('voice-refresh').onclick=async()=>{
+    // Explicit device access is independent of sending or joining a cast.
+    let permission;
+    try {
+      if(!navigator.mediaDevices?.getUserMedia) throw Error('选择设备需要HTTPS地址和浏览器麦克风授权。');
+      if(!microphone) permission=await navigator.mediaDevices.getUserMedia({audio:true,video:false});
+      await devices();notes('设备列表已更新，请在下拉框选择；此操作不会发送声音。');
+    }catch(error){notes(error.message);}
+    finally{permission?.getTracks().forEach(track=>track.stop());}
+  };
   el('voice-output').onchange=async()=>{try{if(!el('video').setSinkId)throw Error('请在系统声音设置选择喇叭。');await el('video').setSinkId(el('voice-output').value);}catch(error){notes(error.message);}};
   el('speaker-test').onclick=async()=>{
     // Short, local test tone; nothing is transmitted to other participants.
@@ -106,27 +119,25 @@
     }catch(_){notes('喇叭测试失败，请检查浏览器播放权限或系统输出设备。');}
   };
   el('chat-draft').placeholder=t('输入文字，所有人可见');
-  el('chat-toggle').onclick=()=>{el('chat-body').hidden=!el('chat-body').hidden;};
   el('chat-form').onsubmit=event=>{
     event.preventDefault();const text=el('chat-draft').value.trim(), now=performance.now();
     if(!active || !active.roomReady || !text || Array.from(text).length>500 || new TextEncoder().encode(text).length>2000) {el('chat-error').textContent='请先连接，消息最多500字。';return;}
     active.sent=active.sent.filter(x=>now-x<10000);if(active.sent.length>=8){el('chat-error').textContent='发送过于频繁，请稍后重试。';return;}
     if(send(active,{kind:'chat',id:random(),text})){active.sent.push(now);el('chat-draft').value='';el('chat-error').textContent='';}else el('chat-error').textContent='聊天室尚未连接，或发送队列已满。';
   };
-  function position() {
-    const corner=el('chat-position').value, box=el('room-chat');
-    box.style.top=corner.startsWith('top')?'12px':'auto';box.style.bottom=corner.startsWith('bottom')?'12px':'auto';box.style.left=corner.endsWith('Left')?'12px':'auto';box.style.right=corner.endsWith('Right')?'12px':'auto';
-    box.style.background='rgba(24,32,48,'+Math.max(.35,Math.min(1,Number(el('chat-opacity').value)))+')';
-    store('touping-chat-position',corner);store('touping-chat-opacity',el('chat-opacity').value);
+  function ready(s) {
+    if(active!==s || s.closed || !s.connected || !s.roomReady || s.micStarting || !el('voice-toggle').checked) return;
+    if(microphone?.getAudioTracks().some(track=>s.pc.getSenders().some(sender=>sender.track===track))) return;
+    s.micStarting=true;
+    replaceMic().catch(error=>{if(active===s){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}).finally(()=>{s.micStarting=false;});
   }
-  el('chat-position').value=read('touping-chat-position','bottomLeft');el('chat-opacity').value=read('touping-chat-opacity','.9');
-  el('chat-position').onchange=position;el('chat-opacity').oninput=position;position();
   globalThis.ToupingRoom={
+    ready,
     attach(s) {
       active=s;s.roomReady=false;s.seen=new Set();s.ids=[];s.arrivals=[];s.sent=[];el('chat-messages').replaceChildren();
       try{s.outputContext=new (window.AudioContext||window.webkitAudioContext)();s.outputAnalyser=s.outputContext.createAnalyser();s.outputAnalyser.fftSize=256;s.outputContext.resume().catch(()=>{});}catch(_){}
       s.chat=s.pc.createDataChannel('touping-room-text-v1',{negotiated:true,id:1,ordered:true});s.chat.onopen=()=>hello(s);
-      s.chat.onmessage=event=>{if(active!==s || s.closed || typeof event.data!=='string' || new TextEncoder().encode(event.data).length>4096)return;try{const packet=JSON.parse(event.data);if((packet.kind==='hello'||packet.kind==='host') && typeof packet.participant==='string' && /^[a-f0-9-]{36}$/i.test(packet.participant)){s.roomReady=true;return;}if(packet.kind==='chat')showMessage(s,packet);else if(packet.kind==='notice' && typeof packet.text==='string' && packet.text.length<=500)el('chat-error').textContent=packet.text;}catch(_){}};
+      s.chat.onmessage=event=>{if(active!==s || s.closed || typeof event.data!=='string' || new TextEncoder().encode(event.data).length>4096)return;try{const packet=JSON.parse(event.data);if((packet.kind==='hello'||packet.kind==='host') && typeof packet.participant==='string' && /^[a-f0-9-]{36}$/i.test(packet.participant)){s.roomReady=true;ready(s);return;}if(packet.kind==='chat')showMessage(s,packet);else if(packet.kind==='notice' && typeof packet.text==='string' && packet.text.length<=500)el('chat-error').textContent=packet.text;}catch(_){}};
     },
     track(s,stream){
       if(!s.outputContext || !s.outputAnalyser || stream.getAudioTracks().length===0)return;

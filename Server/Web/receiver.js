@@ -223,7 +223,7 @@
       if(current!==s || s.closed) return;
       const state=s.pc.connectionState;
       if(state==='connected') {
-        s.connected=true; s.connectedAt=performance.now(); report(s, 'connected'); clearTimeout(s.timeout); clearTimeout(s.disconnected); clearInterval(s.clock); diagnostics(s); status('已直连，等待首帧画面…'); sampleMedia(s);
+        s.connected=true; s.connectedAt=performance.now(); report(s, 'connected'); clearTimeout(s.timeout); clearTimeout(s.disconnected); clearInterval(s.clock); diagnostics(s); status('已直连，等待首帧画面…'); sampleMedia(s); window.ToupingRoom?.ready(s);
         if(!local) { try {send(s,{type:'done'});} catch(error){fail(s,error);} }
       } else if(state==='failed') fail(s,Error('无法直连，请检查网络；此服务不提供视频中继'));
       else if(state==='disconnected') {status('连接中断，正在等待网络恢复…'); s.disconnected=setTimeout(()=>fail(s,Error('连接已中断，请重新接收')),8000);}
@@ -236,7 +236,18 @@
   });
   $('stop').onclick=()=>stop(current);
   $('play').onclick=()=>{if(current)playVideo(current,true);};
-  $('sound').onclick=()=>{const video=$('video'); video.muted=!video.muted; $('sound').textContent=video.muted?t('开启声音'):t('关闭声音'); if(!video.muted) video.play().catch(()=>status('请点击播放器播放声音'));};
+  const syncSound=()=>{
+    const video=$('video'), muted=video.muted || video.volume===0;
+    for(const id of ['sound','speaker-sound']) {$(id).textContent=muted?t('开启声音'):t('关闭声音');$(id).setAttribute('aria-pressed',String(!muted));}
+  };
+  const toggleSound=()=>{
+    const video=$('video');
+    if(video.muted || video.volume===0) {video.muted=false;if(video.volume===0)video.volume=1;} else video.muted=true;
+    syncSound();if(!video.muted && video.srcObject)video.play().catch(()=>status('请点击“播放画面”开启声音'));
+  };
+  $('video').muted=false;
+  $('video').addEventListener('volumechange',syncSound);
+  $('sound').onclick=toggleSound;$('speaker-sound').onclick=toggleSound;syncSound();
   $('fullscreen').onclick=()=>{
     const viewer=$('viewer'), expand=()=>viewer.classList.add('expanded');
     if(viewer.requestFullscreen) viewer.requestFullscreen().catch(expand); else expand();
