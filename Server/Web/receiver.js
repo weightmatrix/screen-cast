@@ -237,6 +237,14 @@
   $('stop').onclick=()=>stop(current);
   $('play').onclick=()=>{if(current)playVideo(current,true);};
   $('sound').onclick=()=>{const video=$('video'); video.muted=!video.muted; $('sound').textContent=video.muted?t('开启声音'):t('关闭声音'); if(!video.muted) video.play().catch(()=>status('请点击播放器播放声音'));};
-  $('fullscreen').onclick=()=>{const video=$('video'); if(video.requestFullscreen) video.requestFullscreen().catch(()=>{}); else if(video.webkitEnterFullscreen) video.webkitEnterFullscreen();};
+  $('fullscreen').onclick=()=>{
+    const viewer=$('viewer'), expand=()=>viewer.classList.add('expanded');
+    if(viewer.requestFullscreen) viewer.requestFullscreen().catch(expand); else expand();
+  };
+  $('exit-viewer').onclick=()=>{
+    $('viewer').classList.remove('expanded');
+    if(document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  };
+  window.addEventListener('keydown',event=>{if(event.key==='Escape')$('viewer').classList.remove('expanded');});
   window.addEventListener('pagehide',()=>stop(current));
 })();

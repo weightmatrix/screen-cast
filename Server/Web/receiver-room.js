@@ -69,6 +69,16 @@
     if(meter)clearInterval(meter);meter=null; if(context)context.close().catch(()=>{});context=null;analyser=null;
     el('mic-fill').style.height='0%';
   }
+  // Stop tracks synchronously, including local testing and pending permission requests.
+  function muteMicrophone() {
+    testing=false;el('voice-test').checked=false;el('voice-toggle').checked=false;
+    stopCapture();
+    for(const sender of active?.pc.getSenders()||[]) {
+      if(sender.track?.kind==='audio') {sender.track.enabled=false;sender.replaceTrack(null).catch(()=>{});}
+    }
+    notes('麦克风已关闭。');
+  }
+  el('mute-mic').onclick=muteMicrophone;
   el('voice-toggle').onchange=async()=>{
     try {
       if(el('voice-toggle').checked) await replaceMic();
