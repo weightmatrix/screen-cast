@@ -137,33 +137,31 @@ struct RoomChatOverlay: View {
     }
 }
 
-/// Mirrored acanthus scrolls grow from the centre; the same mark denotes every active control.
+/// Four corner tendrils curl inward; left-hand paths are drawn before right-hand paths.
 struct StateFlourish: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let scale = min(rect.width / 100, rect.height / 20)
-        func point(_ x: CGFloat, _ y: CGFloat, _ direction: CGFloat) -> CGPoint {
-            CGPoint(x: rect.midX + x * scale * direction, y: rect.midY + y * scale)
+        for (right, bottom) in [(false, false), (false, true), (true, false), (true, true)] {
+            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+                CGPoint(x: rect.minX + (right ? 100 - x : x) * rect.width / 100,
+                        y: rect.minY + (bottom ? 40 - y : y) * rect.height / 40)
+            }
+            path.move(to: pt(1, 2))
+            path.addCurve(to: pt(48, 19), control1: pt(9, 0), control2: pt(19, 31))
+            path.addCurve(to: pt(33, 12), control1: pt(59, 8), control2: pt(34, 2))
+            path.addCurve(to: pt(43, 14), control1: pt(30, 22), control2: pt(48, 22))
+            path.move(to: pt(4, 5))
+            path.addCurve(to: pt(23, 8), control1: pt(15, -1), control2: pt(27, 0))
+            path.addCurve(to: pt(15, 7), control1: pt(19, 16), control2: pt(10, 13))
+            path.addCurve(to: pt(21, 7), control1: pt(13, 1), control2: pt(23, 2))
+            path.move(to: pt(10, 11))
+            path.addCurve(to: pt(9, 23), control1: pt(0, 9), control2: pt(1, 25))
+            path.addCurve(to: pt(13, 16), control1: pt(17, 28), control2: pt(19, 15))
+            path.addQuadCurve(to: pt(10, 21), control: pt(6, 16))
+            path.move(to: pt(25, 17))
+            path.addQuadCurve(to: pt(31, 25), control: pt(20, 27))
+            path.addQuadCurve(to: pt(25, 17), control: pt(36, 19))
         }
-        for direction: CGFloat in [-1, 1] {
-            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { point(x, y, direction) }
-            path.move(to: pt(0, 3))
-            path.addCurve(to: pt(44, -2), control1: pt(15, 11), control2: pt(26, -11))
-            path.addCurve(to: pt(32, 1), control1: pt(52, 7), control2: pt(34, 10))
-            path.addCurve(to: pt(39, -1), control1: pt(29, -5), control2: pt(43, -7))
-            path.move(to: pt(8, 5))
-            path.addCurve(to: pt(22, -6), control1: pt(5, -8), control2: pt(13, -13))
-            path.addCurve(to: pt(13, -1), control1: pt(28, 0), control2: pt(13, 5))
-            path.addCurve(to: pt(19, -4), control1: pt(10, -6), control2: pt(20, -9))
-            path.move(to: pt(19, 3))
-            path.addCurve(to: pt(31, 7), control1: pt(26, 2), control2: pt(24, 10))
-            path.addCurve(to: pt(23, 3), control1: pt(30, 1), control2: pt(26, -1))
-            path.move(to: pt(34, -4))
-            path.addQuadCurve(to: pt(45, -9), control: pt(34, -12))
-            path.addQuadCurve(to: pt(34, -4), control: pt(43, -3))
-        }
-        path.move(to: point(-3, 2, 1)); path.addQuadCurve(to: point(0, -6, 1), control: point(-5, -3, 1))
-        path.addQuadCurve(to: point(3, 2, 1), control: point(5, -3, 1))
         return path
     }
 }
@@ -174,7 +172,7 @@ struct StateOrnament: View {
     var body: some View {
         StateFlourish().trim(from: 0, to: active ? 1 : 0)
             .stroke(Color(red: 0.20, green: 0.48, blue: 0.30), style: StrokeStyle(lineWidth: 0.9, lineCap: .round, lineJoin: .round))
-            .frame(height: 18).padding(.horizontal, 6).padding(.bottom, 2)
+            .padding(3).opacity(0.36)
             .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: active)
             .allowsHitTesting(false).accessibilityHidden(true)
     }
@@ -191,11 +189,11 @@ struct AudioActionButton: View {
                 if let symbol { Image(systemName: symbol) }
                 if !title.isEmpty { Text(LocalizedStringKey(title)) }
             }.font(.system(size: 14, weight: .medium))
-                .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 24)
+                .padding(.horizontal, 12).padding(.vertical, 8)
                 .foregroundStyle(active ? Color(red: 0.17, green: 0.40, blue: 0.25) : Color.primary)
+                .background { StateOrnament(active: active) }
                 .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(active ? Color(red: 0.20, green: 0.48, blue: 0.30).opacity(0.65) : Color.secondary.opacity(0.25)))
-                .overlay(alignment: .bottom) { StateOrnament(active: active) }
         }.buttonStyle(.plain).accessibilityAddTraits(active ? .isSelected : [])
     }
 }
@@ -203,11 +201,11 @@ struct AudioActionButton: View {
 struct OrnamentalToggleStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
-            configuration.label.font(.system(size: 14)).padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 24)
+            configuration.label.font(.system(size: 14)).padding(.horizontal, 12).padding(.vertical, 8)
                 .foregroundStyle(configuration.isOn ? Color(red: 0.17, green: 0.40, blue: 0.25) : Color.primary)
+                .background { StateOrnament(active: configuration.isOn) }
                 .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
                 .overlay(RoundedRectangle(cornerRadius: 5).stroke(configuration.isOn ? Color(red: 0.20, green: 0.48, blue: 0.30).opacity(0.65) : Color.secondary.opacity(0.25)))
-                .overlay(alignment: .bottom) { StateOrnament(active: configuration.isOn) }
         }.buttonStyle(.plain).accessibilityValue(configuration.isOn ? "已开启" : "已关闭")
             .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
     }

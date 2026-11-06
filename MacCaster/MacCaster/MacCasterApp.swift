@@ -139,27 +139,24 @@ struct AppGlassButtonStyle: ButtonStyle {
         let label = configuration.label
             .font(.system(size: 16, weight: .medium))
             .padding(.horizontal, 18)
-            .padding(.bottom, AppSkin.victorian(skin) || selected ? 18 : 0)
             .frame(minWidth: 24, minHeight: 46)
             .contentShape(RoundedRectangle(cornerRadius: 14))
+            .background { StateOrnament(active: selected) }
             .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
         if AppSkin.victorian(skin) {
             label.foregroundStyle(selected ? Color(red: 0.17, green: 0.40, blue: 0.25) : Color.primary)
                 .background(LinearGradient(colors: prominent ? [AppSkin.ivory, AppSkin.brass.opacity(0.16)] : [AppSkin.paper, AppSkin.ivory.opacity(0.5)], startPoint: .top, endPoint: .bottom), in: RoundedRectangle(cornerRadius: 3))
                 .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(selected ? Color(red: 0.20, green: 0.48, blue: 0.30) : AppSkin.brass, lineWidth: 0.8))
                 .overlay(RoundedRectangle(cornerRadius: 2).inset(by: 3).strokeBorder(AppSkin.brass.opacity(0.35), lineWidth: 0.5))
-                .overlay(alignment: .bottom) { StateOrnament(active: selected) }
         } else if #available(macOS 26.0, *) {
             if prominent || selected {
                 label.glassEffect(.regular.tint((selected ? Color.green : Color.accentColor).opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(alignment: .bottom) { StateOrnament(active: selected) }
             } else {
                 label.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
             }
         } else {
             label.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(selected ? Color.green.opacity(0.5) : Color.primary.opacity(configuration.isPressed ? 0.2 : 0.08)))
-                .overlay(alignment: .bottom) { StateOrnament(active: selected) }
         }
     }
 }
