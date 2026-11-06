@@ -2,7 +2,7 @@
 // No network or device access: exercise production mute and pending capture cancellation.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const nodes=new Map();
-const el=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},setAttribute(){},addEventListener(){},replaceChildren(){}});return nodes.get(id);};
+const el=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},attrs:{},setAttribute(key,value){this.attrs[key]=value;},addEventListener(){},replaceChildren(){}});return nodes.get(id);};
 let resolveCapture,stopped=0,detached=0;
 const track={kind:'audio',enabled:true,stop(){stopped++;}};
 const stream={getTracks:()=>[track],getAudioTracks:()=>[track]};
@@ -27,7 +27,11 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   assert.equal(el('voice-toggle').checked,false);assert.equal(el('voice-test').checked,false);
   resolveCapture(stream);await pending;
   assert.equal(stopped,1);assert.equal(el('voice-toggle').checked,false);
-  sandbox.ToupingRoom.stop(session);el('mute-mic').onclick();
+  sandbox.ToupingRoom.stop(session);
+  await el('mute-mic').onclick();
+  assert.equal(el('voice-toggle').checked,true);assert.equal(el('mute-mic').attrs['data-state'],'pending');
+  el('mute-mic').onclick();
+  assert.equal(el('voice-toggle').checked,false);assert.equal(el('mute-mic').attrs['data-state'],'off');
   assert.equal(el('voice-status').textContent,'麦克风已关闭。');
   sandbox.navigator.mediaDevices.getUserMedia=async()=>stream;
   sandbox.navigator.mediaDevices.enumerateDevices=async()=>[{kind:'audioinput',deviceId:'mic-1',label:'测试设备'}];
@@ -58,8 +62,12 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   assert.equal(captures,0); // Handshake alone must not start capture before connection.
   liveSession.connected=true;sandbox.ToupingRoom.ready(liveSession);
   await new Promise(setImmediate);
-  assert.equal(captures,1);assert.equal(liveSender.track,liveTrack);
+  assert.equal(captures,1);assert.equal(liveSender.track,liveTrack);assert.equal(el('mute-mic').attrs['data-state'],'on');
   sandbox.ToupingRoom.ready(liveSession);assert.equal(captures,1);
+  el('mute-mic').onclick();assert.equal(liveSender.track,null);
+  assert.equal(el('mute-mic').attrs['aria-label'],'打开麦克风');
+  await el('mute-mic').onclick();assert.equal(liveSender.track,liveTrack);
+  assert.equal(el('mute-mic').attrs['aria-label'],'关闭麦克风');
   el('mute-mic').onclick();assert.equal(liveSender.track,null);
   sandbox.ToupingRoom.stop(liveSession);
   const events={},classes=new Set();

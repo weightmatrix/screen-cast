@@ -12,7 +12,15 @@
   el('nickname').oninput=()=>{store('touping-nickname',el('nickname').value); hello(active);};
   const name=()=>el('nickname').value.replace(/[\p{Cc}]/gu,'').trim().slice(0,32)||fallback;
   el('nickname').placeholder='你的名字（选填）';
-  const notes=text=>{el('voice-status').textContent=text;};
+  function syncMicrophoneButton() {
+    const requested=el('voice-toggle').checked;
+    const sending=requested && microphone?.getAudioTracks().some(track=>track.enabled && track.readyState!=='ended' && active?.pc.getSenders().some(sender=>sender.track===track));
+    const button=el('mute-mic'), label=requested?'关闭麦克风':'打开麦克风';
+    button.setAttribute('data-state',sending?'on':requested?'pending':'off');
+    button.setAttribute('aria-label',label);button.setAttribute('title',requested && !sending?'取消开启麦克风（等待连接或授权）':label);
+    button.setAttribute('aria-pressed',String(Boolean(sending)));
+  }
+  const notes=text=>{el('voice-status').textContent=text;syncMicrophoneButton();};
   function send(s,packet) {
     if(!s || s.closed || !s.chat || s.chat.readyState!=='open' || s.chat.bufferedAmount>32768) return false;
     const raw=JSON.stringify(packet); if(new TextEncoder().encode(raw).length>4096) return false;
@@ -82,13 +90,19 @@
     }
     notes('麦克风已关闭。');
   }
-  el('mute-mic').onclick=muteMicrophone;
+  el('mute-mic').onclick=()=>{
+    if(el('voice-toggle').checked) {muteMicrophone();return;}
+    el('voice-toggle').checked=true;syncMicrophoneButton();
+    return el('voice-toggle').onchange();
+  };
   el('voice-toggle').onchange=async()=>{
+    syncMicrophoneButton();
     try {
       if(el('voice-toggle').checked) await replaceMic();
       else {const sender=active?.pc.getSenders().find(x=>x.track?.kind==='audio'); if(sender)await sender.replaceTrack(null);if(!testing)stopCapture();notes('麦克风已关闭。');}
     }catch(error){el('voice-toggle').checked=false;stopCapture();notes(error.message);}
   };
+  syncMicrophoneButton();
   el('voice-test').onchange=async()=>{
     testing=el('voice-test').checked;
     try{if(testing && !microphone) await startCapture();else if(!testing && !el('voice-toggle').checked)stopCapture();}
