@@ -111,9 +111,9 @@ struct iPadSenderView: View {
                     SecureField("连接密码（6–64位）", text: $connectionPassword)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(active)
                     Text("邀请链接不含密码；请另行告知接收者连接密码").font(.caption).foregroundStyle(.secondary)
-                    Toggle("允许广域网直连", isOn: $internetEnabled).toggleStyle(.switch).disabled(active)
+                    Toggle("允许广域网直连", isOn: $internetEnabled).toggleStyle(OrnamentalToggleStyle()).disabled(active)
                     if internetEnabled {
-                        Toggle("允许公网邀请", isOn: $internetMatchingEnabled).toggleStyle(.switch).disabled(active)
+                        Toggle("允许公网邀请", isOn: $internetMatchingEnabled).toggleStyle(OrnamentalToggleStyle()).disabled(active)
                         Text(active ? internetStatus : "公网 IP 使用端口 9318；邀请编号仅交换连接信息，视频不经服务器。")
                             .foregroundStyle(.secondary)
                         if internetStatus.contains("邀请编号已占用") || codeSuggestion.code != nil || codeSuggestion.isLoading || codeSuggestion.errorText != nil {
@@ -132,8 +132,8 @@ struct iPadSenderView: View {
                             }
                         }
                     }
-                    Toggle("发送页面声音", isOn: $pageAudio).toggleStyle(.switch)
-                    Toggle("发送话筒声音", isOn: $micAudio).toggleStyle(.switch)
+                    Toggle("发送页面声音", isOn: $pageAudio).toggleStyle(OrnamentalToggleStyle())
+                    Toggle("发送话筒声音", isOn: $micAudio).toggleStyle(OrnamentalToggleStyle())
                     Text("话筒需先在系统广播面板打开麦克风；此处可随时静音或恢复。").foregroundStyle(.secondary)
                     HStack(spacing: 18) {
                         SystemBroadcastButton().frame(width: 64, height: 64)

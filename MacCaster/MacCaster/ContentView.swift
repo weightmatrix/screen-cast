@@ -17,12 +17,10 @@ struct ContentView: View {
             StreamListView(streamer: streamer, onAdd: onAdd)
         }
         .padding(24)
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(minWidth: 700, minHeight: 500).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             AppPaperBackground()
-                .overlay(alignment: .topTrailing) {
-                    RadialGradient(colors: [Color.indigo.opacity(0.09), .clear], center: .topTrailing, startRadius: 0, endRadius: 560)
-                }
+
                 .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
         }
         .task { streamer.loadShareableContent() }
@@ -86,7 +84,7 @@ private struct StreamListView: View {
                 }
                 if streamer.sessions.isEmpty { Button(action: onAdd) {
                     Label("添加投屏", systemImage: "plus").frame(maxWidth: .infinity).padding(.vertical, 6)
-                }.buttonStyle(AppGlassButtonStyle(prominent: true)) }
+                }.buttonStyle(AppGlassButtonStyle()) }
             }
             .frame(maxWidth: 760).frame(maxWidth: .infinity)
         }
@@ -405,11 +403,10 @@ struct AddStreamSheet: View {
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
                             }
-                            .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
-                            .tint(selected.contains(key) ? .blue : nil)
+                            .buttonStyle(AppGlassButtonStyle(selected: selected.contains(key))).controlSize(.large)
                         }
                         .padding(14)
-                        .background(selected.contains(key) ? Color.accentColor.opacity(0.08) : Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14))
+                        .background(selected.contains(key) ? Color.green.opacity(0.035) : Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 14))
                     }
 
                     Text("应用与窗口").font(.system(size: 20, weight: .bold, design: .rounded)).padding(.top, 16).padding(.bottom, 4)
@@ -576,11 +573,10 @@ private struct EditStreamSheet: View {
                             Button(selected.contains(key) ? "已选" : "选择") {
                                 toggleDisplay(key: key, name: "显示器 \(Int(display.width))×\(Int(display.height))", display: display)
                             }
-                            .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
-                            .tint(selected.contains(key) ? .blue : nil)
+                            .buttonStyle(AppGlassButtonStyle(selected: selected.contains(key))).controlSize(.large)
                         }
                         .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(selected.contains(key) ? Color.blue.opacity(0.12) : Color.clear))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(selected.contains(key) ? Color.green.opacity(0.035) : Color.clear))
                     }
 
                     Text("应用与窗口").font(.system(size: 15)).foregroundStyle(.secondary).padding(.top, 8)
@@ -690,8 +686,7 @@ private struct AppGroupPicker: View {
                         if selected.contains(key) { selected.remove(key); selectedApps.removeAll { $0.1 === group.application } }
                         else { selected.insert(key); selectedApps.append((group.displayName, group.application)) }
                     }
-                    .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
-                    .tint(selected.contains(key) ? .blue : nil)
+                    .buttonStyle(AppGlassButtonStyle(selected: selected.contains(key))).controlSize(.large)
                 }
             }
             .contentShape(Rectangle())
@@ -710,8 +705,7 @@ private struct AppGroupPicker: View {
                             if selected.contains(key) { selected.remove(key); selectedWindows.removeAll { $0.1 === window } }
                             else { selected.insert(key); selectedWindows.append((title, window)) }
                         }
-                        .buttonStyle(AppGlassButtonStyle()).controlSize(.large)
-                        .tint(selected.contains(key) ? .blue : nil)
+                        .buttonStyle(AppGlassButtonStyle(selected: selected.contains(key))).controlSize(.large)
                     }
                     .padding(.leading, 28)
                 }

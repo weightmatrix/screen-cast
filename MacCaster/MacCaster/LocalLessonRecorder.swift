@@ -386,9 +386,9 @@ struct RecordingFolderSettings: View {
         VStack(alignment: .leading, spacing: 10) {
             TextField("录课名字前缀", text: $prefix)
             HStack {
-                Toggle("年份", isOn: $year).toggleStyle(.checkbox)
-                Toggle("月份", isOn: $month).toggleStyle(.checkbox)
-                Toggle("时间（小时和分）", isOn: $time).toggleStyle(.checkbox)
+                Toggle("年份", isOn: $year).toggleStyle(OrnamentalToggleStyle())
+                Toggle("月份", isOn: $month).toggleStyle(OrnamentalToggleStyle())
+                Toggle("时间（小时和分）", isOn: $time).toggleStyle(OrnamentalToggleStyle())
             }
             Text("示例：" + RecordingNameFormat(prefix: prefix, year: year, month: month, time: time).name(at: Date()) + ".mp4").font(.caption)
             Button("选择录课文件夹") { preferences.chooseFolder() }

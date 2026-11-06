@@ -92,7 +92,7 @@ struct MacReceiverView: View {
                     ForEach(ConnectionMode.allCases) { mode in
                         Button { client.disconnect(); connectMode = mode.rawValue } label: {
                             Text(LocalizedStringKey(mode.label)).font(.system(size: 13)).frame(maxWidth: .infinity)
-                        }.buttonStyle(AppGlassButtonStyle(prominent: connectMode == mode.rawValue))
+                        }.buttonStyle(AppGlassButtonStyle(selected: connectMode == mode.rawValue))
                     }
                 }
                 VStack(alignment: .leading, spacing: 10) {

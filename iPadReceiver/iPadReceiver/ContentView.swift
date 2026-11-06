@@ -149,8 +149,8 @@ struct ContentView: View {
                 Button { client.disconnect(); appMode = "cast" } label: { Label("投屏模式", systemImage: "arrow.up.right.video") }.buttonStyle(.bordered)
                 LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                     ForEach(ConnectionMode.allCases) { mode in
-                        Button { client.disconnect(); connectMode = mode.rawValue } label: { Text(LocalizedStringKey(mode.label)).font(.system(size:13)).frame(maxWidth:.infinity,minHeight:36) }
-                            .buttonStyle(.bordered).tint(connectMode == mode.rawValue ? AppSkin.ink : .gray)
+                        AudioActionButton(title: mode.label, active: connectMode == mode.rawValue) { client.disconnect(); connectMode = mode.rawValue }
+                            .frame(maxWidth: .infinity)
                     }
                 }
                 VStack(alignment: .leading, spacing: 10) {

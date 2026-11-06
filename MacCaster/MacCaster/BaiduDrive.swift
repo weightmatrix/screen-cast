@@ -170,7 +170,7 @@ enum BaiduTransport {
                     if webSession?.start() != true { continuation.resume(throwing: DriveError.message("无法打开百度授权窗口")); webSession = nil }
                 }
                 webSession = nil
-                guard URLComponents(url: returned, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "state" })?.value == state else { throw DriveError.message("授权校验失败，请重试") }
+                guard returned.scheme == "touping-baidu", returned.host == "oauth", URLComponents(url: returned, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "state" })?.value == state else { throw DriveError.message("授权校验失败，请重试") }
                 let response = try await broker("complete", ["state": state, "claim": claim])
                 guard let access = response["access_token"] as? String, let refresh = response["refresh_token"] as? String else { throw DriveError.message("百度未返回完整授权，请重新登录") }
                 let (account, name) = try await BaiduTransport.user(access)
@@ -285,6 +285,12 @@ struct BaiduDriveSettings: View {
                 Button("登录百度网盘") { drive.login(qr: false) }.disabled(drive.authenticating)
                 Button("二维码登录") { drive.login(qr: true) }.disabled(drive.authenticating)
                 if drive.loggedIn { Button("退出登录") { drive.logout() } }
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("百度应用的OAuth授权回调页地址").font(.caption)
+                Text(verbatim: BaiduDrive.callback).font(.caption.monospaced()).textSelection(.enabled)
+                Button("复制回调地址") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(BaiduDrive.callback, forType: .string) }
+                Text("出现 redirect_uri_mismatch 时，请在百度网盘开放平台对应应用的安全设置中保存上面的完整地址；普通登录和二维码登录使用同一地址。").font(.caption).foregroundStyle(.secondary)
             }
             Toggle("录课分段完成后上传百度网盘", isOn: $drive.enabled).disabled(!drive.loggedIn)
             HStack { Text("网盘目录：" + drive.destination).lineLimit(2); Button("选择网盘目录") { choosing = true; drive.browse(drive.destination) }.disabled(!drive.loggedIn) }

@@ -1,3 +1,9 @@
+## 81版状态纹样与百度回调排查
+
+网页声音按钮使用对称SVG卷草，与原生状态控件统一，减少动态效果设置下关闭动画。ops/deploy_receiver81.py只替换两份静态文件，回滚backups/before81-web，无服务重启。
+
+普通/扫码线上授权URL的callback一致、client_id与私有部署配置一致，但百度实际返回redirect_uri_mismatch；必须在对应应用安全设置登记https://zhibenwang.com/touping/baidu/callback，等待用户核对保存值。官方匹配及扫码参数说明：https://openauth.baidu.com/doc/doc.html 。未改服务端回调或密钥，未把configured状态当成真实登录成功。
+
 ## 80版昵称与说明排版
 
 申请包增加可选nickname，控制字符拒绝、最多32 Unicode码点/128 UTF8字节；缺省访客，兼容旧客户端，昵称不写入配对审计。媒体与聊天路径不变。Server/ops/deploy_release80.py仅在既有沙盒备份并更新信令及两份网页，复用OAuth覆盖文件；回滚backups/before80，不改变Nginx或其他业务。

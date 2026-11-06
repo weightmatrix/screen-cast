@@ -51,45 +51,43 @@ struct RoomAudioControls: View {
     @State private var output = UserDefaults.standard.string(forKey: "room.outputDevice") ?? ""
     var receiver = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
-                Picker("麦克风设备", selection: $input) {
-                    Text("系统默认").tag("")
-                    ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) }
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("麦克风").font(.headline)
+                HStack(spacing: 8) {
+                    AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
+                    if receiver {
+                        AudioActionButton(title: audio.microphoneEnabled ? "关闭麦克" : "开启麦克", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
+                    }
+                    AudioActionButton(title: audio.testing ? "停止测试" : "测试麦克", active: audio.testing) { audio.setTesting(!audio.testing) }
                 }
-            }
-            if receiver {
-                Toggle("向所有人发送麦克风", isOn: Binding(get: { audio.microphoneEnabled }, set: { audio.setMicrophone($0) }))
-                    .disabled(!room.receiverCanSpeak)
-                if !room.receiverCanSpeak { Text("连接到新版投送端后可开启共用麦克风").font(.caption).foregroundStyle(.secondary) }
-            }
-            HStack {
-                Toggle("测试麦克风（仅看音量，不发送）", isOn: Binding(get: { audio.testing }, set: { audio.setTesting($0) }))
-                Button("刷新设备") { audio.refreshDevices() }
-            }
-            HStack {
-                AudioLevelIcon(symbol: "speaker.wave.2.fill", level: audio.outputLevel)
+                Picker("麦克风设备", selection: $input) {
+                    Text("系统默认").tag(""); ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) }
+                }
+                if !receiver { Text("投屏话筒请在对应投屏源的设置中开启。").font(.caption).foregroundStyle(.secondary) }
+                if receiver && !room.receiverCanSpeak { Text("连接就绪后可开启麦克；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
+            }.padding(16).overlay(RoundedRectangle(cornerRadius: 5).stroke(.secondary.opacity(0.25)))
+            VStack(alignment: .leading, spacing: 12) {
+                Text("喇叭").font(.headline)
+                HStack(spacing: 8) {
+                    AudioLevelIcon(symbol: "speaker.wave.2.fill", level: audio.outputLevel)
+                    AudioActionButton(title: audio.receivesVoices ? "关闭声音" : "开启声音", active: audio.receivesVoices) { audio.receivesVoices.toggle() }
+                    AudioActionButton(title: "测试喇叭", active: false) { audio.testSpeaker() }
+                }
                 #if os(macOS)
                 Picker("声音输出设备", selection: $output) {
-                    Text("系统默认").tag("")
-                    ForEach(audio.outputs) { Text(verbatim: $0.name).tag($0.id) }
+                    Text("系统默认").tag(""); ForEach(audio.outputs) { Text(verbatim: $0.name).tag($0.id) }
                 }
                 #else
-                Text("声音输出由系统路由选择")
-                SystemAudioRoutePicker().frame(width: 36, height: 36)
+                HStack { Text("声音输出由系统选择").font(.caption); SystemAudioRoutePicker().frame(width: 30, height: 30) }
                 #endif
-                Button("测试喇叭") { audio.testSpeaker() }
-            }
-            if !receiver { Toggle("接收接收方麦克风（全员共用）", isOn: $audio.receivesVoices) }
-            Text("绿色表示当前音量；设备权限、蓝牙及输出切换以系统支持为准。多人语音建议使用耳机，避免扬声器回声。")
-                .font(.caption).foregroundStyle(.secondary)
+                Text("这里控制共用语音的播放；投屏原声由接收页喇叭控制。").font(.caption).foregroundStyle(.secondary)
+            }.padding(16).overlay(RoundedRectangle(cornerRadius: 5).stroke(.secondary.opacity(0.25)))
+            Button("刷新设备") { audio.refreshDevices() }
+            Text("绿色音量图标表示当前音量。多人语音建议使用耳机，避免扬声器回声。").font(.caption).foregroundStyle(.secondary)
             if !audio.error.isEmpty { Text(audio.error).font(.caption).foregroundStyle(.red) }
-        }
-        .onAppear { audio.beginMetering() }
-        .onDisappear { audio.setTesting(false) }
-        .onChange(of: input) { audio.selectInput($0) }
-        .onChange(of: output) { audio.selectOutput($0) }
+        }.onAppear { audio.beginMetering() }.onDisappear { audio.setTesting(false) }
+            .onChange(of: input) { audio.selectInput($0) }.onChange(of: output) { audio.selectOutput($0) }
     }
 }
 
@@ -139,15 +137,46 @@ struct RoomChatOverlay: View {
     }
 }
 
-private struct AudioVine: Shape {
+/// Mirrored acanthus scrolls grow from the centre; the same mark denotes every active control.
+struct StateFlourish: Shape {
     func path(in rect: CGRect) -> Path {
-        var p = Path(); p.move(to: CGPoint(x: 0, y: rect.midY)); p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
-        for x in stride(from: CGFloat(4), to: rect.width, by: 11) {
-            p.move(to: CGPoint(x: x, y: rect.midY))
-            p.addQuadCurve(to: CGPoint(x: x + 6, y: 0), control: CGPoint(x: x, y: 0))
-            p.addQuadCurve(to: CGPoint(x: x, y: rect.midY), control: CGPoint(x: x + 6, y: rect.midY))
-            p.addQuadCurve(to: CGPoint(x: x + 7, y: rect.maxY), control: CGPoint(x: x + 7, y: rect.midY))
-        }; return p
+        var path = Path()
+        let scale = min(rect.width / 100, rect.height / 20)
+        func point(_ x: CGFloat, _ y: CGFloat, _ direction: CGFloat) -> CGPoint {
+            CGPoint(x: rect.midX + x * scale * direction, y: rect.midY + y * scale)
+        }
+        for direction: CGFloat in [-1, 1] {
+            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { point(x, y, direction) }
+            path.move(to: pt(0, 3))
+            path.addCurve(to: pt(44, -2), control1: pt(15, 11), control2: pt(26, -11))
+            path.addCurve(to: pt(32, 1), control1: pt(52, 7), control2: pt(34, 10))
+            path.addCurve(to: pt(39, -1), control1: pt(29, -5), control2: pt(43, -7))
+            path.move(to: pt(8, 5))
+            path.addCurve(to: pt(22, -6), control1: pt(5, -8), control2: pt(13, -13))
+            path.addCurve(to: pt(13, -1), control1: pt(28, 0), control2: pt(13, 5))
+            path.addCurve(to: pt(19, -4), control1: pt(10, -6), control2: pt(20, -9))
+            path.move(to: pt(19, 3))
+            path.addCurve(to: pt(31, 7), control1: pt(26, 2), control2: pt(24, 10))
+            path.addCurve(to: pt(23, 3), control1: pt(30, 1), control2: pt(26, -1))
+            path.move(to: pt(34, -4))
+            path.addQuadCurve(to: pt(45, -9), control: pt(34, -12))
+            path.addQuadCurve(to: pt(34, -4), control: pt(43, -3))
+        }
+        path.move(to: point(-3, 2, 1)); path.addQuadCurve(to: point(0, -6, 1), control: point(-5, -3, 1))
+        path.addQuadCurve(to: point(3, 2, 1), control: point(5, -3, 1))
+        return path
+    }
+}
+
+struct StateOrnament: View {
+    let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        StateFlourish().trim(from: 0, to: active ? 1 : 0)
+            .stroke(Color(red: 0.20, green: 0.48, blue: 0.30), style: StrokeStyle(lineWidth: 0.9, lineCap: .round, lineJoin: .round))
+            .frame(height: 18).padding(.horizontal, 6).padding(.bottom, 2)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: active)
+            .allowsHitTesting(false).accessibilityHidden(true)
     }
 }
 
@@ -156,24 +185,33 @@ struct AudioActionButton: View {
     let active: Bool
     var symbol: String? = nil
     let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 4) {
-                HStack(spacing: 6) {
-                    if let symbol { Image(systemName: symbol) }
-                    if !title.isEmpty { Text(LocalizedStringKey(title)) }
-                }.font(.system(size: 14, weight: .medium))
-                AudioVine().trim(from: 0, to: active ? 1 : 0).stroke(Color.green, lineWidth: 1)
-                    .frame(height: 6).animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: active)
-            }.padding(.horizontal, 12).padding(.vertical, 8)
-                .foregroundStyle(active ? Color.green : Color.primary)
+            HStack(spacing: 6) {
+                if let symbol { Image(systemName: symbol) }
+                if !title.isEmpty { Text(LocalizedStringKey(title)) }
+            }.font(.system(size: 14, weight: .medium))
+                .padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 24)
+                .foregroundStyle(active ? Color(red: 0.17, green: 0.40, blue: 0.25) : Color.primary)
                 .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
-                .overlay(RoundedRectangle(cornerRadius: 5).stroke(active ? Color.green.opacity(0.7) : Color.secondary.opacity(0.25)))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(active ? Color(red: 0.20, green: 0.48, blue: 0.30).opacity(0.65) : Color.secondary.opacity(0.25)))
+                .overlay(alignment: .bottom) { StateOrnament(active: active) }
         }.buttonStyle(.plain).accessibilityAddTraits(active ? .isSelected : [])
     }
 }
 
+struct OrnamentalToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            configuration.label.font(.system(size: 14)).padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 24)
+                .foregroundStyle(configuration.isOn ? Color(red: 0.17, green: 0.40, blue: 0.25) : Color.primary)
+                .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(configuration.isOn ? Color(red: 0.20, green: 0.48, blue: 0.30).opacity(0.65) : Color.secondary.opacity(0.25)))
+                .overlay(alignment: .bottom) { StateOrnament(active: configuration.isOn) }
+        }.buttonStyle(.plain).accessibilityValue(configuration.isOn ? "已开启" : "已关闭")
+            .accessibilityAddTraits(configuration.isOn ? .isSelected : [])
+    }
+}
 
 #if os(iOS)
 struct SystemAudioRoutePicker: UIViewRepresentable {

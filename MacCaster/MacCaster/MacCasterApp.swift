@@ -49,6 +49,7 @@ struct MacCasterApp: App {
                 }
         }
         .defaultSize(width: 820, height: 600)
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentMinSize)
         .commands {
             CommandGroup(replacing: .help) {
@@ -58,6 +59,7 @@ struct MacCasterApp: App {
         }
         Settings {
             AppearanceSettingsView()
+                .background(NativeWindowCapabilities().frame(width: 0, height: 0))
                 .environmentObject(streamer)
                 .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
@@ -68,6 +70,7 @@ struct MacCasterApp: App {
 
 private struct AppearanceSettingsView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
+    @AppStorage("appMode") private var activeMode = "cast"
     @State private var passwordDraft = ""
     @State private var passwordError = false
     @AppStorage("appearance.skin") private var skin = "victorian"
@@ -94,7 +97,7 @@ private struct AppearanceSettingsView: View {
                 AppLanguagePicker()
             }
             RoomPreferences()
-            Section("声音设备与测试") { RoomAudioControls() }
+            Section("声音设备与测试") { RoomAudioControls(receiver: activeMode == "receive") }
             Section("连接密码") {
                 SecureField("连接密码（6–64位）", text: $passwordDraft)
                 Button("设置连接密码") {
@@ -105,7 +108,8 @@ private struct AppearanceSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
+        .formStyle(.columns)
+        .toggleStyle(OrnamentalToggleStyle())
         .scrollContentBackground(AppSkin.victorian(skin) ? .hidden : .visible)
         .background(AppPaperBackground())
         .preferredColorScheme(AppSkin.victorian(skin) ? .light : nil)
@@ -127,6 +131,7 @@ enum AppAppearance {
 
 struct AppGlassButtonStyle: ButtonStyle {
     var prominent = false
+    var selected = false
     @AppStorage(AppSkin.key) private var skin = "victorian"
     @Environment(\.isEnabled) private var isEnabled
 
@@ -134,23 +139,27 @@ struct AppGlassButtonStyle: ButtonStyle {
         let label = configuration.label
             .font(.system(size: 16, weight: .medium))
             .padding(.horizontal, 18)
+            .padding(.bottom, AppSkin.victorian(skin) || selected ? 18 : 0)
             .frame(minWidth: 24, minHeight: 46)
             .contentShape(RoundedRectangle(cornerRadius: 14))
             .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
         if AppSkin.victorian(skin) {
-            label.foregroundStyle(prominent ? AppSkin.paper : AppSkin.ink)
-                .background(LinearGradient(colors: prominent ? [AppSkin.ink.opacity(0.9), AppSkin.ink] : [AppSkin.paper, AppSkin.ivory], startPoint: .top, endPoint: .bottom), in: RoundedRectangle(cornerRadius: 3))
-                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(AppSkin.brass, lineWidth: 0.8))
+            label.foregroundStyle(selected ? Color(red: 0.17, green: 0.40, blue: 0.25) : Color.primary)
+                .background(LinearGradient(colors: prominent ? [AppSkin.ivory, AppSkin.brass.opacity(0.16)] : [AppSkin.paper, AppSkin.ivory.opacity(0.5)], startPoint: .top, endPoint: .bottom), in: RoundedRectangle(cornerRadius: 3))
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(selected ? Color(red: 0.20, green: 0.48, blue: 0.30) : AppSkin.brass, lineWidth: 0.8))
                 .overlay(RoundedRectangle(cornerRadius: 2).inset(by: 3).strokeBorder(AppSkin.brass.opacity(0.35), lineWidth: 0.5))
+                .overlay(alignment: .bottom) { StateOrnament(active: selected) }
         } else if #available(macOS 26.0, *) {
-            if prominent {
-                label.glassEffect(.regular.tint(.accentColor.opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 14))
+            if prominent || selected {
+                label.glassEffect(.regular.tint((selected ? Color.green : Color.accentColor).opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(alignment: .bottom) { StateOrnament(active: selected) }
             } else {
                 label.glassEffect(.regular.interactive(), in: RoundedRectangle(cornerRadius: 14))
             }
         } else {
             label.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.primary.opacity(configuration.isPressed ? 0.2 : 0.08)))
+                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(selected ? Color.green.opacity(0.5) : Color.primary.opacity(configuration.isPressed ? 0.2 : 0.08)))
+                .overlay(alignment: .bottom) { StateOrnament(active: selected) }
         }
     }
 }
@@ -171,6 +180,9 @@ struct RootView: View {
             else { ContentView(onAdd: beginAdding) }
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppPaperBackground().ignoresSafeArea())
+        .toggleStyle(OrnamentalToggleStyle())
         .font(.system(size: 16))
         .buttonStyle(AppGlassButtonStyle())
         .controlSize(.large)
@@ -186,23 +198,24 @@ struct RootView: View {
 
     private var modeBar: some View {
             HStack(spacing: 18) {
-                Spacer()
                 HStack(spacing: 12) {
                     Button { appMode = "cast" } label: {
                         Label("投屏", systemImage: "arrow.up.right.video")
                     }
-                        .buttonStyle(AppGlassButtonStyle(prominent: appMode == "cast"))
+                        .buttonStyle(AppGlassButtonStyle(selected: appMode == "cast"))
                         .accessibilityAddTraits(appMode == "cast" ? .isSelected : [])
                     Button { appMode = "receive" } label: {
                         Label("接收", systemImage: "arrow.down.left.video")
                     }
-                        .buttonStyle(AppGlassButtonStyle(prominent: appMode == "receive"))
+                        .buttonStyle(AppGlassButtonStyle(selected: appMode == "receive"))
                         .accessibilityAddTraits(appMode == "receive" ? .isSelected : [])
                 }
                 .labelStyle(.titleAndIcon)
-                Spacer()
+                .frame(maxWidth: .infinity)
+            }
+            .overlay(alignment: .trailing) {
                 Button(action: beginAdding) { Label("添加投屏", systemImage: "plus") }
-                    .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("添加投屏")
+                    .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("添加投屏").padding(.trailing, 24)
             }
             .padding(.horizontal, 24).padding(.vertical, 10)
             .background(AppPaperBackground())
@@ -258,9 +271,18 @@ struct MacModePicker: View {
 
 // Keep the native green window control available even when content supplies minimum dimensions.
 private struct NativeWindowCapabilities: NSViewRepresentable {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     final class Probe: NSView {
+        var paper = NSColor.windowBackgroundColor
+        func configure() {
+            guard let window else { return }
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.backgroundColor = paper
+        }
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            configure()
             guard let window else { return }
             window.styleMask.insert(.resizable)
             window.collectionBehavior.remove(.fullScreenAuxiliary)
@@ -268,6 +290,6 @@ private struct NativeWindowCapabilities: NSViewRepresentable {
             window.standardWindowButton(.zoomButton)?.isEnabled = true
         }
     }
-    func makeNSView(context: Context) -> Probe { Probe() }
-    func updateNSView(_ view: Probe, context: Context) {}
+    func makeNSView(context: Context) -> Probe { let view = Probe(); view.paper = AppSkin.victorian(skin) ? NSColor(AppSkin.paper) : .windowBackgroundColor; return view }
+    func updateNSView(_ view: Probe, context: Context) { view.paper = AppSkin.victorian(skin) ? NSColor(AppSkin.paper) : .windowBackgroundColor; view.configure() }
 }

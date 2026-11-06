@@ -33,6 +33,7 @@ struct RootView: View {
             #endif
         }.preferredColorScheme(AppSkin.victorian(skin) ? .light : .dark)
         .tint(AppSkin.victorian(skin) ? AppSkin.ink : .blue)
+        .toggleStyle(OrnamentalToggleStyle())
         .overlay(alignment: .topTrailing) {
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape").font(.system(size: 17)).frame(width: 32, height: 32)
