@@ -6,6 +6,9 @@ import CoreImage
     @MainActor static func main() async throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("touping-recorder-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
+        let retained = cache.appendingPathComponent("retained-from-previous-session.txt")
+        try Data("preserve".utf8).write(to: retained)
         let recorder = LocalLessonRecorder(folder: folder, segmentDuration: 1)
         recorder.start()
         let start = CACurrentMediaTime()
@@ -17,6 +20,17 @@ import CoreImage
                 let offset = Double(n) / 30 + Double(block) / 100
                 let samples = (0..<480).map { Float(sin((offset + Double($0) / 48000) * 440 * 2 * .pi) * 0.2) }
                 recorder.appendAudio(samples, time: start + offset)
+            }
+            if n == 10 {
+                // Cold hardware encoder initialization can outlive the first synthetic frames.
+                for _ in 0..<100 {
+                    if recorder.isRecording || !recorder.isArmed { break }
+                    try await Task.sleep(nanoseconds: 20_000_000)
+                }
+                let staging = try FileManager.default.contentsOfDirectory(at: cache, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }
+                precondition(!staging.isEmpty, "An in-progress segment must live in selected-folder/tmp: \(recorder.message), armed=\(recorder.isArmed), recording=\(recorder.isRecording)")
+                let finished = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }
+                precondition(finished.isEmpty, "Incomplete MP4 must not be exposed as a finished lesson")
             }
             if n == 55 { recorder.endSegment() }
             try await Task.sleep(nanoseconds: 15_000_000)
@@ -68,8 +82,18 @@ import CoreImage
         let count = files.count
         recorder.start(); recorder.stop()
         try await Task.sleep(nanoseconds: 100_000_000)
-        let afterEmpty = try FileManager.default.contentsOfDirectory(atPath: folder.path).count
+        let afterEmpty = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }.count
         precondition(afterEmpty == count)
+        let retainedData = try Data(contentsOf: retained)
+        let cacheFiles = try FileManager.default.contentsOfDirectory(atPath: cache.path)
+        precondition(retainedData == Data("preserve".utf8))
+        precondition(cacheFiles == [retained.lastPathComponent])
+        precondition(recorder.lastFile?.deletingLastPathComponent().standardizedFileURL.path == folder.standardizedFileURL.path)
+        let invalid = folder.appendingPathComponent("invalid-cache")
+        try FileManager.default.createDirectory(at: invalid, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: invalid.appendingPathComponent("tmp"), withDestinationURL: cache)
+        do { _ = try RecordingFolderPreferences.cacheDirectory(in: invalid); preconditionFailure("Symlink cache must be rejected") } catch {}
+
         print("PASS playable H264/AAC MP4, red pixels, \(totalVideo) frames, \(totalAudio) audio samples, timed/reconnect/rotation segments, stop/drain and empty session; files=\(folder.path)")
     }
 }

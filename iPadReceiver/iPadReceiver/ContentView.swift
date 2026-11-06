@@ -6,6 +6,7 @@ import CoreImage
 private var drawerWidth: CGFloat { min(400, UIScreen.main.bounds.width) }
 
 struct ContentView: View {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     @AppStorage("appMode") private var appMode = "receive"
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var client = StreamClient()
@@ -42,8 +43,10 @@ struct ContentView: View {
 
                 HStack(spacing: 0) {
                     settingsPanel
+                        .padding(.vertical, AppSkin.victorian(skin) ? 34 : 0)
                         .frame(width: drawerWidth)
-                        .background(Color(red: 0.045, green: 0.065, blue: 0.095))
+                        .background { if AppSkin.victorian(skin) { AppPaperBackground() } else { Color(red: 0.045, green: 0.065, blue: 0.095) } }
+                        .overlay { if AppSkin.victorian(skin) { VictorianFrame() } }
                         .overlay(alignment: .trailing) { Rectangle().fill(.white.opacity(0.08)).frame(width: 1) }
                         .offset(x: drawerOpen ? 0 : -drawerWidth)
                     Spacer()
@@ -57,8 +60,8 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
-        .tint(Color(red: 0.34, green: 0.70, blue: 1))
+        .preferredColorScheme(AppSkin.victorian(skin) ? .light : .dark)
+        .tint(AppSkin.victorian(skin) ? AppSkin.ink : Color(red: 0.34, green: 0.70, blue: 1))
         .ignoresSafeArea()
         .simultaneousGesture(
             DragGesture(minimumDistance: 10)
@@ -144,7 +147,7 @@ struct ContentView: View {
                     Spacer()
                     Button { closeDrawer() } label: {
                         Image(systemName: "xmark").font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7)).frame(width: 48, height: 48)
+                            .foregroundStyle(AppSkin.victorian(skin) ? AppSkin.ink : Color.white.opacity(0.7)).frame(width: 48, height: 48)
                             .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 15))
                     }.accessibilityLabel("关闭设置")
                 }

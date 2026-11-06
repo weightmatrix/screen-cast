@@ -129,3 +129,104 @@ struct PeerDiagnosticsView: View {
         }
     }
 }
+
+// Native vector ornamentation shared by macOS and iOS; never decorates media pixels.
+enum AppSkin {
+    static let key = "appearance.skin"
+    static func victorian(_ value: String) -> Bool { value != "minimal" }
+    static let paper = Color(red: 0.98, green: 0.96, blue: 0.91)
+    static let ivory = Color(red: 0.94, green: 0.90, blue: 0.81)
+    static let brass = Color(red: 0.62, green: 0.47, blue: 0.25)
+    static let ink = Color(red: 0.17, green: 0.31, blue: 0.27)
+}
+
+struct AppPaperBackground: View {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
+    var body: some View {
+        if AppSkin.victorian(skin) {
+            LinearGradient(colors: [AppSkin.paper, AppSkin.ivory.opacity(0.9), AppSkin.paper], startPoint: .topLeading, endPoint: .bottomTrailing)
+        } else { Color.primary.opacity(0.035) }
+    }
+}
+
+struct VictorianFrame: View {
+    var body: some View {
+        Canvas { context, size in
+            guard size.width > 40, size.height > 40 else { return }
+            for inset in [3.0, 7.0, 11.0] {
+                let rect = CGRect(origin: .zero, size: size).insetBy(dx: inset, dy: inset)
+                context.stroke(Path(rect), with: .color(AppSkin.brass.opacity(inset == 7 ? 0.7 : 0.35)), lineWidth: inset == 7 ? 0.8 : 0.5)
+            }
+            for (x, y, sx, sy) in [(0.0, 0.0, 1.0, 1.0), (size.width, 0, -1, 1), (0, size.height, 1, -1), (size.width, size.height, -1, -1)] {
+                var corner = context
+                corner.translateBy(x: x, y: y); corner.scaleBy(x: sx, y: sy)
+                corner.translateBy(x: 14, y: 14)
+                var scroll = Path()
+                scroll.move(to: CGPoint(x: 0, y: 40)); scroll.addLine(to: .zero); scroll.addLine(to: CGPoint(x: 40, y: 0))
+                scroll.move(to: CGPoint(x: 2, y: 30))
+                scroll.addCurve(to: CGPoint(x: 20, y: 9), control1: CGPoint(x: 3, y: 6), control2: CGPoint(x: 31, y: 23))
+                scroll.addCurve(to: CGPoint(x: 8, y: 19), control1: CGPoint(x: 10, y: -2), control2: CGPoint(x: -1, y: 15))
+                scroll.addCurve(to: CGPoint(x: 30, y: 2), control1: CGPoint(x: 29, y: 25), control2: CGPoint(x: 7, y: 3))
+                scroll.move(to: CGPoint(x: 6, y: 35))
+                scroll.addCurve(to: CGPoint(x: 35, y: 6), control1: CGPoint(x: 31, y: 40), control2: CGPoint(x: 15, y: 13))
+                corner.stroke(scroll, with: .color(AppSkin.brass.opacity(0.8)), lineWidth: 0.8)
+                for point in [CGPoint(x: 8, y: 8), CGPoint(x: 23, y: 22)] {
+                    corner.fill(Path(ellipseIn: CGRect(x: point.x, y: point.y, width: 3, height: 3)), with: .color(AppSkin.brass.opacity(0.65)))
+                }
+            }
+        }
+        .allowsHitTesting(false).accessibilityHidden(true)
+    }
+}
+
+private struct AppPanelStyle: ViewModifier {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
+    func body(content: Content) -> some View {
+        if AppSkin.victorian(skin) {
+            content.padding(.vertical, 24).background(AppPaperBackground()).overlay { VictorianFrame() }
+        } else {
+            content.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
+        }
+    }
+}
+
+extension View {
+    func appPanelStyle() -> some View { modifier(AppPanelStyle()) }
+}
+
+struct VictorianHeading: View {
+    let title: String
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                Rectangle().frame(height: 0.5)
+                Text("❧  ❦  ❧").font(.system(size: 25, design: .serif))
+                Rectangle().frame(height: 0.5)
+            }.foregroundStyle(AppSkin.brass)
+            Text(LocalizedStringKey(title)).font(.system(size: 25, weight: .medium, design: .serif)).foregroundStyle(AppSkin.ink)
+        }.padding(.vertical, 8)
+    }
+}
+
+struct AppSkinPicker: View {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
+    var body: some View {
+        Picker("当前皮肤", selection: $skin) {
+            Text("极简皮肤").tag("minimal")
+            Text("维多利亚花饰").tag("victorian")
+        }
+        .onAppear { if skin == "icons3d" { skin = "victorian" } }
+    }
+}
+
+private struct AppSettingsPaper: ViewModifier {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(iOS 16.0, macOS 13.0, *) {
+            content.scrollContentBackground(AppSkin.victorian(skin) ? .hidden : .visible).background(AppPaperBackground())
+        } else { content.background(AppPaperBackground()) }
+    }
+}
+extension View {
+    func appSettingsPaper() -> some View { modifier(AppSettingsPaper()) }
+}

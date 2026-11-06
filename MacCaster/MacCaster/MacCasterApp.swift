@@ -7,6 +7,7 @@ struct MacCasterApp: App {
     @StateObject private var streamer = ScreenStreamer()
     @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     @AppStorage("appearance.colorScheme") private var appearance = "system"
+    @AppStorage(AppSkin.key) private var appSkin = "victorian"
 
     init() {
         #if DEBUG
@@ -27,7 +28,7 @@ struct MacCasterApp: App {
             RootView()
                 .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
-                .preferredColorScheme(AppAppearance.scheme(appearance))
+                .preferredColorScheme(AppSkin.victorian(appSkin) ? .light : AppAppearance.scheme(appearance))
                 .environmentObject(streamer)
                 .overlay { RoomChatOverlay() }
                 .task {
@@ -56,7 +57,7 @@ struct MacCasterApp: App {
                 .environmentObject(streamer)
                 .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
-                .preferredColorScheme(AppAppearance.scheme(appearance))
+                .preferredColorScheme(AppSkin.victorian(appSkin) ? .light : AppAppearance.scheme(appearance))
         }
     }
 }
@@ -65,29 +66,24 @@ private struct AppearanceSettingsView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
     @State private var passwordDraft = ""
     @State private var passwordError = false
-    @AppStorage("appearance.skin") private var skin = "minimal"
+    @AppStorage("appearance.skin") private var skin = "victorian"
     @AppStorage("appearance.colorScheme") private var appearance = "system"
 
     var body: some View {
         ScrollView { Form {
             Section("皮肤") {
-                Picker("当前皮肤", selection: $skin) {
-                    Text("极简皮肤").tag("minimal")
-                    Text("3D图标").tag("icons3d")
-                }
-                if skin == "icons3d" {
-                    HStack(spacing: 32) {
-                        SkinModeLabel(title: "投屏", symbol: "arrow.up.right.video", artwork: SkinArtwork.cast, iconSize: 80)
-                        SkinModeLabel(title: "接收", symbol: "arrow.down.left.video", artwork: SkinArtwork.receive, iconSize: 80)
-                    }.frame(maxWidth: .infinity).padding(.vertical, 8)
-                }
+                AppSkinPicker()
+                if AppSkin.victorian(skin) { VictorianHeading(title: "投屏自由") }
+
             }
+            Section("录课存储") { RecordingFolderSettings() }
             Section("外观") {
                 Picker("深浅色", selection: $appearance) {
                     Text("跟随系统").tag("system")
                     Text("固定浅色").tag("light")
                     Text("固定深色").tag("dark")
-                }.pickerStyle(.segmented)
+                }.pickerStyle(.segmented).disabled(AppSkin.victorian(skin))
+                if AppSkin.victorian(skin) { Text("维多利亚主题使用浅色纸纹；深浅色设置适用于极简皮肤。").font(.caption).foregroundStyle(.secondary) }
             }
             Section("语言") {
                 AppLanguagePicker()
@@ -105,9 +101,15 @@ private struct AppearanceSettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(AppSkin.victorian(skin) ? .hidden : .visible)
+        .background(AppPaperBackground())
+        .preferredColorScheme(AppSkin.victorian(skin) ? .light : nil)
         .font(.system(size: 16))
         .controlSize(.large)
-        }.frame(width: 620, height: 720)
+        }
+        .background(AppPaperBackground())
+        .overlay { if AppSkin.victorian(skin) { VictorianFrame() } }
+        .frame(width: 620, height: 720)
         .navigationTitle("设置")
     }
 }
@@ -118,33 +120,9 @@ enum AppAppearance {
     }
 }
 
-enum SkinArtwork {
-    static let cast = load("Skin3DCast")
-    static let receive = load("Skin3DReceive")
-    private static func load(_ name: String) -> NSImage? {
-        Bundle.main.url(forResource: name, withExtension: "png").flatMap { NSImage(contentsOf: $0) }
-    }
-}
-
-struct SkinModeLabel: View {
-    let title: String
-    let symbol: String
-    let artwork: NSImage?
-    var iconSize: CGFloat = 52
-    var body: some View {
-        HStack(spacing: 6) {
-            if let artwork {
-                Image(nsImage: artwork).resizable().scaledToFit().frame(width: iconSize, height: iconSize).accessibilityHidden(true)
-            } else {
-                Image(systemName: symbol).font(.system(size: 24))
-            }
-            Text(LocalizedStringKey(title)).font(.system(size: 17, weight: .semibold))
-        }
-    }
-}
-
 struct AppGlassButtonStyle: ButtonStyle {
     var prominent = false
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     @Environment(\.isEnabled) private var isEnabled
 
     func makeBody(configuration: Configuration) -> some View {
@@ -154,7 +132,12 @@ struct AppGlassButtonStyle: ButtonStyle {
             .frame(minWidth: 24, minHeight: 46)
             .contentShape(RoundedRectangle(cornerRadius: 14))
             .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
-        if #available(macOS 26.0, *) {
+        if AppSkin.victorian(skin) {
+            label.foregroundStyle(prominent ? AppSkin.paper : AppSkin.ink)
+                .background(LinearGradient(colors: prominent ? [AppSkin.ink.opacity(0.9), AppSkin.ink] : [AppSkin.paper, AppSkin.ivory], startPoint: .top, endPoint: .bottom), in: RoundedRectangle(cornerRadius: 3))
+                .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(AppSkin.brass, lineWidth: 0.8))
+                .overlay(RoundedRectangle(cornerRadius: 2).inset(by: 3).strokeBorder(AppSkin.brass.opacity(0.35), lineWidth: 0.5))
+        } else if #available(macOS 26.0, *) {
             if prominent {
                 label.glassEffect(.regular.tint(.accentColor.opacity(0.18)).interactive(), in: RoundedRectangle(cornerRadius: 14))
             } else {
@@ -169,13 +152,14 @@ struct AppGlassButtonStyle: ButtonStyle {
 
 struct RootView: View {
     @AppStorage("appMode") private var appMode = "cast"
-    @AppStorage("appearance.skin") private var skin = "minimal"
+    @AppStorage("appearance.skin") private var skin = "victorian"
     @EnvironmentObject private var streamer: ScreenStreamer
     @State private var showAddSheet = false
     @State private var sessionsBeforeAdding = Set<UUID>()
 
     var body: some View {
         VStack(spacing: 0) {
+            if AppSkin.victorian(skin) { VictorianHeading(title: "李知本·投屏自由").padding(.horizontal, 40).padding(.top, 14).background(AppPaperBackground()) }
             modeBar
             Group {
             if appMode == "receive" { MacReceiverView() }
@@ -185,7 +169,8 @@ struct RootView: View {
         .font(.system(size: 16))
         .buttonStyle(AppGlassButtonStyle())
         .controlSize(.large)
-        .tint(CastStyle.accent)
+        .tint(AppSkin.victorian(skin) ? AppSkin.ink : CastStyle.accent)
+        .preferredColorScheme(AppSkin.victorian(skin) ? .light : nil)
         .sheet(isPresented: $showAddSheet, onDismiss: {
             if streamer.sessions.contains(where: { !sessionsBeforeAdding.contains($0.id) }) { appMode = "cast" }
         }) {
@@ -199,16 +184,12 @@ struct RootView: View {
                 Spacer()
                 HStack(spacing: 12) {
                     Button { appMode = "cast" } label: {
-                        if skin == "icons3d" {
-                            SkinModeLabel(title: "投屏", symbol: "arrow.up.right.video", artwork: SkinArtwork.cast)
-                        } else { Label("投屏", systemImage: "arrow.up.right.video") }
+                        Label("投屏", systemImage: "arrow.up.right.video")
                     }
                         .buttonStyle(AppGlassButtonStyle(prominent: appMode == "cast"))
                         .accessibilityAddTraits(appMode == "cast" ? .isSelected : [])
                     Button { appMode = "receive" } label: {
-                        if skin == "icons3d" {
-                            SkinModeLabel(title: "接收", symbol: "arrow.down.left.video", artwork: SkinArtwork.receive)
-                        } else { Label("接收", systemImage: "arrow.down.left.video") }
+                        Label("接收", systemImage: "arrow.down.left.video")
                     }
                         .buttonStyle(AppGlassButtonStyle(prominent: appMode == "receive"))
                         .accessibilityAddTraits(appMode == "receive" ? .isSelected : [])
@@ -219,7 +200,7 @@ struct RootView: View {
                     .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("添加投屏")
             }
             .padding(.horizontal, 24).padding(.vertical, 10)
-            .background(CastStyle.canvas)
+            .background(AppPaperBackground())
     }
 
     private func beginAdding() {

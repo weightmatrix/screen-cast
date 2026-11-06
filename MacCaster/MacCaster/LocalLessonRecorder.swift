@@ -30,7 +30,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     private var segment: Segment?
     private var outputFolder: URL?
     private var finishing = 0
-    private var scope: URL?
+    private var folderSubscription: AnyCancellable?
     private var lastVideoTime = -Double.infinity
     private let segmentDuration: TimeInterval
     private static let instances = NSHashTable<LocalLessonRecorder>.weakObjects()
@@ -42,17 +42,16 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         let pixels: AVAssetWriterInputPixelBufferAdaptor
         let started: Double
         let size: CGSize
+        let folder: URL
+        let stem: String
         var audioTime = -Double.infinity
         init(folder: URL, size: CGSize, time: Double) throws {
             self.size = size; started = time
             let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
             formatter.dateFormat = "yyyy-MM-dd HH-mm-ss"
-            let stem = formatter.string(from: Date())
-            var url = folder.appendingPathComponent(stem + ".mp4")
-            var suffix = 2
-            while FileManager.default.fileExists(atPath: url.path) {
-                url = folder.appendingPathComponent("\(stem) (\(suffix)).mp4"); suffix += 1
-            }
+            stem = formatter.string(from: Date()); self.folder = folder
+            let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
+            let url = cache.appendingPathComponent(UUID().uuidString + ".mp4")
             writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
             video = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
@@ -71,6 +70,19 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
             guard writer.startWriting() else { throw writer.error ?? RecordingError.message("无法开始写入录课") }
             writer.startSession(atSourceTime: .zero)
         }
+        func publish() throws -> URL {
+            // moveItem refuses existing destinations; concurrent send/receive writers never overwrite a lesson.
+            for suffix in 1...10000 {
+                let name = suffix == 1 ? stem : "\(stem) (\(suffix))"
+                let destination = folder.appendingPathComponent(name + ".mp4")
+                do { try FileManager.default.moveItem(at: writer.outputURL, to: destination); return destination }
+                catch {
+                    if FileManager.default.fileExists(atPath: destination.path) { continue }
+                    throw error
+                }
+            }
+            throw RecordingError.message("录课文件重名过多，缓存已保留")
+        }
     }
     private enum RecordingError: LocalizedError {
         case message(String)
@@ -82,30 +94,20 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         self.segmentDuration = segmentDuration
         Self.instances.add(self)
         if let folder { self.folder = folder; return }
-        if let data = UserDefaults.standard.data(forKey: "lessonFolderBookmark") {
-            var stale = false
-            if let url = try? URL(resolvingBookmarkData: data, options: .withSecurityScope, bookmarkDataIsStale: &stale) {
-                scope = url; _ = url.startAccessingSecurityScopedResource(); self.folder = url
-            }
+        self.folder = RecordingFolderPreferences.shared.folder
+        folderSubscription = RecordingFolderPreferences.shared.$folder.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] url in
+            guard let self else { return }
+            self.folder = url
+            if self.automatic, url != nil { self.start() }
         }
         automatic = UserDefaults.standard.bool(forKey: automaticKey)
         if automatic, self.folder != nil { start() }
     }
 
-    func chooseFolder() {
-        guard !isArmed, !isSaving else { return }
-        let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
-        panel.canCreateDirectories = true; panel.allowsMultipleSelection = false; panel.prompt = "保存录课到此处"
-        guard panel.runModal() == .OK, let url = panel.url else { return }
-        scope?.stopAccessingSecurityScopedResource(); scope = url
-        _ = url.startAccessingSecurityScopedResource(); folder = url
-        if let data = try? url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil) {
-            UserDefaults.standard.set(data, forKey: "lessonFolderBookmark")
-        }
-    }
+    static var storageInUse: Bool { instances.allObjects.contains { $0.isArmed || $0.isSaving } }
 
     func start() {
-        if folder == nil { chooseFolder() }
+        guard folder != nil else { message = "请先在设置中选择录课文件夹"; return }
         guard let folder, !isArmed, !isSaving else { return }
         let token = UUID()
         lock.lock(); generation = token; accepting = true; lock.unlock()
@@ -219,12 +221,16 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         current.video.markAsFinished(); current.audio.markAsFinished()
         current.writer.finishWriting {
             self.queue.async {
+                if current.writer.status == .completed {
+                    do {
+                        let saved = try current.publish()
+                        DispatchQueue.main.async { self.lastFile = saved }
+                        if self.ticket() == nil, self.finishing == 1 { self.publish("录课已保存") }
+                    } catch { self.fail(error) }
+                } else { self.fail(current.writer.error ?? RecordingError.message("录课文件保存失败")) }
                 self.finishing -= 1
                 if self.finishing == 0 { DispatchQueue.main.async { self.isSaving = false } }
-                if current.writer.status == .completed {
-                    DispatchQueue.main.async { self.lastFile = current.writer.outputURL }
-                    if self.ticket() == nil, self.finishing == 0 { self.publish("录课已保存") }
-                } else { self.fail(current.writer.error ?? RecordingError.message("录课文件保存失败")) }
+
             }
         }
     }
@@ -247,7 +253,6 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         }
         return true
     }
-    deinit { scope?.stopAccessingSecurityScopedResource() }
 }
 
 final class RecordingAppDelegate: NSObject, NSApplicationDelegate {
@@ -270,10 +275,6 @@ struct LocalRecordingControls: View {
     @ObservedObject var recorder: LocalLessonRecorder
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Button("选择文件夹") { recorder.chooseFolder() }.disabled(recorder.isArmed || recorder.isSaving)
-                    .help(recorder.folder?.path ?? "选择录课保存位置")
-            }
             HStack(spacing: 12) {
                 Toggle("开启自动录课", isOn: $recorder.automatic).toggleStyle(.checkbox)
                 Spacer()
@@ -290,6 +291,71 @@ struct LocalRecordingControls: View {
             if let url = recorder.lastFile {
                 Button("显示最近录课") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
+        }
+    }
+}
+
+/// One sandbox bookmark for all native Mac send/receive recorders.
+final class RecordingFolderPreferences: ObservableObject {
+    static let shared = RecordingFolderPreferences()
+    @Published private(set) var folder: URL?
+    @Published private(set) var errorMessage = ""
+    private var scope: URL?
+
+    private init() {
+        guard let data = UserDefaults.standard.data(forKey: "lessonFolderBookmark") else { return }
+        do {
+            var stale = false
+            let url = try URL(resolvingBookmarkData: data, options: .withSecurityScope, bookmarkDataIsStale: &stale)
+            _ = url.startAccessingSecurityScopedResource()
+            scope = url; folder = url
+            if stale {
+                let renewed = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+                UserDefaults.standard.set(renewed, forKey: "lessonFolderBookmark")
+            }
+        } catch { errorMessage = "录课目录授权已失效，请重新选择" }
+    }
+
+    static func cacheDirectory(in folder: URL) throws -> URL {
+        let cache = folder.appendingPathComponent("tmp", isDirectory: true)
+        try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
+        let values = try cache.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey])
+        guard values.isSymbolicLink != true, values.isDirectory == true else {
+            throw NSError(domain: "ToupingRecording", code: 1, userInfo: [NSLocalizedDescriptionKey: "录课tmp必须是当前文件夹内的普通目录"])
+        }
+        return cache
+    }
+
+    func chooseFolder() {
+        guard !LocalLessonRecorder.storageInUse else { errorMessage = "请先停止所有录课并等待保存完成，再修改目录"; return }
+        let panel = NSOpenPanel(); panel.canChooseFiles = false; panel.canChooseDirectories = true
+        panel.canCreateDirectories = true; panel.allowsMultipleSelection = false; panel.prompt = "保存录课到此处"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard !LocalLessonRecorder.storageInUse else { errorMessage = "录课已开始，请保存完成后再选择目录"; return }
+        let granted = url.startAccessingSecurityScopedResource()
+        do {
+            _ = try Self.cacheDirectory(in: url)
+            let data = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
+            UserDefaults.standard.set(data, forKey: "lessonFolderBookmark")
+            scope?.stopAccessingSecurityScopedResource(); scope = granted ? url : nil
+            folder = url; errorMessage = ""
+        } catch {
+            if granted { url.stopAccessingSecurityScopedResource() }
+            errorMessage = "无法使用此录课目录：\(error.localizedDescription)"
+        }
+    }
+    deinit { scope?.stopAccessingSecurityScopedResource() }
+}
+
+struct RecordingFolderSettings: View {
+    @ObservedObject private var preferences = RecordingFolderPreferences.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button("选择录课文件夹") { preferences.chooseFolder() }
+            Text(preferences.folder?.path ?? "尚未选择录课文件夹").font(.caption).textSelection(.enabled)
+            Text("录课中的分段缓存在此目录的tmp子文件夹；保存完成后移到主目录。更换目录前请先停止所有录课并等待保存完成。")
+                .font(.caption).foregroundStyle(.secondary)
+            if !preferences.errorMessage.isEmpty { Text(preferences.errorMessage).font(.caption).foregroundStyle(.red) }
         }
     }
 }

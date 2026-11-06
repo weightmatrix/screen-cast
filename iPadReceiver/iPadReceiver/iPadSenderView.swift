@@ -4,6 +4,7 @@ import ReplayKit
 import UIKit
 
 struct iPadSenderView: View {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private var compact: Bool { horizontalSizeClass == .compact }
     @AppStorage("appMode") private var appMode = "cast"
@@ -40,7 +41,7 @@ struct iPadSenderView: View {
     @ViewBuilder private var workbenchHeader: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
-            Text("投屏工作台").font(.system(size: 32, weight: .semibold))
+            Group { if AppSkin.victorian(skin) { VictorianHeading(title: "投屏工作台") } else { Text("投屏工作台").font(.system(size: 32, weight: .semibold)) } }
             Text("将这台设备的画面分享给 Mac、iPhone 或 iPad")
                 .foregroundStyle(.secondary)
         }
@@ -144,7 +145,7 @@ struct iPadSenderView: View {
                     }
                     Text(status).foregroundStyle(active ? .green : .secondary)
                 }.padding(compact ? 16 : 28).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
+                    .appPanelStyle()
                 VStack(alignment: .leading, spacing: 12) {
                     Text("网页接收地址").font(.headline)
                     if active, let webPort = UInt16(exactly: browserPort), webPort > 0 {
@@ -156,7 +157,7 @@ struct iPadSenderView: View {
                     Text("浏览器打开地址后点击开始接收；公网须开启公网邀请，画面不经服务器。")
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 24))
+                    .appPanelStyle()
                 RoomAudioControls()
                 ConnectionLegalNotice()
                 PendingConnectionsView(requests: pending) { id, accepted in
@@ -182,8 +183,8 @@ struct iPadSenderView: View {
             }.font(.system(size: 18)).padding(compact ? 16 : 32).frame(maxWidth: 900)
                 .frame(maxWidth: .infinity)
         }
-        .background(Color(red: 0.035, green: 0.05, blue: 0.075).ignoresSafeArea())
-        .tint(Color(red: 0.34, green: 0.70, blue: 1))
+        .background { if AppSkin.victorian(skin) { AppPaperBackground().ignoresSafeArea() } else { Color(red: 0.035, green: 0.05, blue: 0.075).ignoresSafeArea() } }
+        .tint(AppSkin.victorian(skin) ? AppSkin.ink : Color(red: 0.34, green: 0.70, blue: 1))
         .onReceive(timer) { _ in refreshStatus() }
         .task {
             BonjourDiscovery.shared.start()

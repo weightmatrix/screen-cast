@@ -15,6 +15,7 @@ struct iPadReceiverApp: App {
 struct RootView: View {
     @AppStorage("appMode") private var appMode = ""
     @State private var showSettings = false
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     var body: some View {
         Group {
@@ -30,7 +31,8 @@ struct RootView: View {
             #else
             content
             #endif
-        }.preferredColorScheme(.dark)
+        }.preferredColorScheme(AppSkin.victorian(skin) ? .light : .dark)
+        .tint(AppSkin.victorian(skin) ? AppSkin.ink : .blue)
         .overlay(alignment: .topTrailing) {
             Button { showSettings = true } label: {
                 Image(systemName: "gearshape").padding(12)
@@ -40,7 +42,8 @@ struct RootView: View {
         }
         .sheet(isPresented: $showSettings) {
             NavigationView {
-                Form { Section("语言") { AppLanguagePicker() }; RoomPreferences(); Section("声音设备与测试") { RoomAudioControls(receiver: appMode == "receive") } }
+                Form { Section("皮肤") { AppSkinPicker(); if AppSkin.victorian(skin) { VictorianHeading(title: "投屏自由") } }; Section("语言") { AppLanguagePicker() }; RoomPreferences(); Section("声音设备与测试") { RoomAudioControls(receiver: appMode == "receive") } }
+                    .appSettingsPaper()
                     .navigationTitle("设置")
                     .toolbar { ToolbarItem(placement: .confirmationAction) {
                         Button("完成") { showSettings = false }
@@ -82,18 +85,19 @@ private enum StartupTiming {
 }
 
 struct ModePicker: View {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     let select: (String) -> Void
 
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Color(UIColor.secondarySystemBackground).ignoresSafeArea()
+                AppPaperBackground().ignoresSafeArea()
                 ScrollView {
                     VStack(spacing: 28) {
                         Image(systemName: "display.2")
                             .font(.system(size: 64))
                             .foregroundStyle(.blue)
-                        Text(AppPresentation.title).font(.largeTitle.bold())
+                        if AppSkin.victorian(skin) { VictorianHeading(title: AppPresentation.title) } else { Text(AppPresentation.title).font(.largeTitle.bold()) }
 
                         VStack(spacing: 16) {
                             Button {

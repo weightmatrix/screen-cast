@@ -6,6 +6,7 @@ import CoreImage
 private let macDrawerWidth: CGFloat = 400
 
 struct MacReceiverView: View {
+    @AppStorage(AppSkin.key) private var skin = "victorian"
     @StateObject private var client = MacReceiverClient()
     @AppStorage("macIP") private var host = ""
     @AppStorage("macPort") private var portText = "8318"
@@ -30,8 +31,9 @@ struct MacReceiverView: View {
 
             HStack(spacing: 0) {
                 settingsPanel
+                    .padding(.vertical, AppSkin.victorian(skin) ? 34 : 0)
                     .frame(width: macDrawerWidth)
-                    .background(CastStyle.canvas)
+                    .background(AppPaperBackground()).overlay { if AppSkin.victorian(skin) { VictorianFrame() } }
                     .offset(x: drawerOpen ? 0 : -macDrawerWidth)
                 Spacer()
             }

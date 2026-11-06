@@ -19,7 +19,7 @@ struct ContentView: View {
         .padding(24)
         .frame(minWidth: 700, minHeight: 500)
         .background {
-            CastStyle.canvas
+            AppPaperBackground()
                 .overlay(alignment: .topTrailing) {
                     RadialGradient(colors: [Color.indigo.opacity(0.09), .clear], center: .topTrailing, startRadius: 0, endRadius: 560)
                 }
@@ -41,11 +41,14 @@ enum CastStyle {
 /// A symbolic sharing illustration, never a simulated screen preview.
 private struct SharingIllustration: View {
     var compact = false
-    @AppStorage("appearance.skin") private var skin = "minimal"
+    @AppStorage("appearance.skin") private var skin = "victorian"
     var body: some View {
         ZStack {
-            if skin == "icons3d", let artwork = SkinArtwork.cast {
-                Image(nsImage: artwork).resizable().scaledToFit()
+            if AppSkin.victorian(skin) {
+                VStack(spacing: 12) {
+                    Text("❦").font(.system(size: 38, design: .serif)).foregroundStyle(AppSkin.brass)
+                    Image(systemName: "display.2").font(.system(size: compact ? 28 : 36, weight: .ultraLight)).foregroundStyle(AppSkin.ink)
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).appPanelStyle()
             } else {
             RoundedRectangle(cornerRadius: compact ? 22 : 30, style: .continuous)
                 .fill(LinearGradient(colors: [Color.blue.opacity(0.14), Color.indigo.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -76,8 +79,7 @@ private struct StreamListView: View {
                             .font(.system(size: 16)).foregroundStyle(.secondary)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 42)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24))
-                    .overlay(RoundedRectangle(cornerRadius: 24).strokeBorder(.primary.opacity(0.05)))
+                    .appPanelStyle()
                 }
                 ForEach(streamer.sessions) { session in
                     SessionRow(session: session, streamer: streamer, onStop: { streamer.removeSession(session) }, onEdit: { editSession = session })
@@ -295,8 +297,7 @@ private struct SessionRow: View {
         })
         .coordinateSpace(name: "code-card")
         .padding(28)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(.primary.opacity(0.06)))
+        .appPanelStyle()
         .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
     }
 
@@ -490,7 +491,7 @@ struct AddStreamSheet: View {
         }
         .padding(28)
         .frame(width: 800, height: 660)
-        .background(CastStyle.canvas)
+        .background(AppPaperBackground())
         .buttonStyle(AppGlassButtonStyle())
         .controlSize(.large)
     }
@@ -597,7 +598,7 @@ private struct EditStreamSheet: View {
         }
         .padding(28)
         .frame(width: 860, height: 720)
-        .background(CastStyle.canvas)
+        .background(AppPaperBackground())
     }
 
     private func applyChanges() {
