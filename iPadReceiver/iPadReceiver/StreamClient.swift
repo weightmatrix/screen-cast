@@ -24,6 +24,7 @@ final class StreamClient: ObservableObject {
             default: return .idle
             }
         }
+        value.onTransition = { text in ConnectionDiag.shared.log("recovery " + text) }
         value.waitingForApproval = { [weak self] in self?.waitingForApproval == true }
         value.cancelTransport = { [weak self] in self?.disconnect(userInitiated: false) }
         value.onMessage = { [weak self] text in
@@ -96,14 +97,14 @@ final class StreamClient: ObservableObject {
                     guard let self, self.nativePeer === video else { return }
                     self.receivedFrames = number; self.frameCount = number
                     self.lastDataAt = Date()
-                    self.connectionTimeout?.cancel(); self.setStatus(.connected)
+                    self.connectionTimeout?.cancel(); self.setStatus(.connected); self.recovery.noteMediaReceived()
                 }
             }
         }
         video.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         video.onError = { [weak self, weak video] text in
             guard let self, self.nativePeer === video else { return }
-            if self.frameCount == 0 { self.recovery.stop() }
+            if !self.recovery.hasReceivedMedia { self.recovery.stop() }
             self.disconnect(userInitiated: false); self.setStatus(.failed(text))
         }
     }
@@ -125,7 +126,7 @@ final class StreamClient: ObservableObject {
         room.onConnected = { [weak self] in self?.connectionTimeout?.cancel() }
         room.onError = { [weak self, weak room] text in
             guard let self, self.nativeRoom === room else { return }
-            if self.frameCount == 0 { self.recovery.stop() }
+            if !self.recovery.hasReceivedMedia { self.recovery.stop() }
             self.disconnect(userInitiated: false); self.setStatus(.failed(text))
         }
         room.start()
@@ -258,6 +259,7 @@ final class StreamClient: ObservableObject {
     }
 
     func disconnect(userInitiated: Bool = true) {
+        ConnectionDiag.shared.log("disconnect userInitiated=\(userInitiated) frames=\(frameCount)")
         RoomAudioSettings.shared.setMicrophone(false)
         waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
@@ -266,7 +268,6 @@ final class StreamClient: ObservableObject {
         nativePeer?.stop(); nativePeer = nil
         internetDirect = false
         connectionTimeout?.cancel()
-        ConnectionDiag.shared.log("manual disconnect")
         ConnectionDiag.shared.relay = nil
         isDisconnecting = true
         lastHost = nil
@@ -331,7 +332,7 @@ final class StreamClient: ObservableObject {
         guard let conn = connection, AdmissionCredentials.validPassword(connectionPassword),
               let application = AdmissionCredentials.application(applicationText) else { return }
         let proof = AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: connectionPassword, invitation: invitation), nonce: nonce)
-        guard let payload = NativeVideo.packet(["proof":proof, "application":application]) else { return }
+        guard let payload = NativeVideo.packet(["proof":proof, "application":application, "nickname":RoomSession.shared.nickname]) else { return }
         var msg = Data(); msg.append(uint32: payload.count); msg.append(UInt8(5)); msg.append(payload)
         conn.send(content: msg, completion: .idempotent)
         let video = NativeVideoPeer(internet: internetDirect, auditDirect: internetDirect)

@@ -182,8 +182,12 @@ async def exchange(ws):
             audit('admission_password_rejected', **ws.context)
             await ws.send({'type':'error','message':'连接密码错误'}); return
         text = application.get('application')
-        if set(application) != {'type','proof','application'} or application['type'] != 'apply' or not valid_application(text):
+        if set(application) - {'nickname'} != {'type','proof','application'} or application['type'] != 'apply' or not valid_application(text):
             await ws.send({'type':'error','message':'请填写1至200字申请文字'}); return
+        nickname = application.get('nickname', '')
+        if not isinstance(nickname, str) or len(nickname) > 32 or len(nickname.encode('utf-8')) > 128 or any(unicodedata.category(c) == 'Cc' for c in nickname):
+            await ws.send({'type':'error','message':'昵称无效'}); return
+        nickname = nickname.strip() or '访客'
         if ROOMS.get(key) is not room or len(room['receivers']) >= 64:
             await ws.send({'type':'error','message':'投屏已结束或申请队列已满'}); return
         identity = uuid.uuid4().hex
@@ -196,7 +200,7 @@ async def exchange(ws):
         else:
             audit('admission_requested', **ws.context, application_length=len(text.strip()))
             await ws.send({'type':'waiting_approval'})
-            await room['sender'].send({'type':'request','id':identity,'ip':ws.context['ip'],'application':text.strip()})
+            await room['sender'].send({'type':'request','id':identity,'ip':ws.context['ip'],'application':text.strip(),'nickname':nickname})
             room['receivers'][identity]['timeout'] = asyncio.create_task(expire_approval(room, identity))
         while True:
             obj = await ws.receive()

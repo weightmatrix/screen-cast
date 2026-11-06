@@ -306,14 +306,13 @@ struct LocalRecordingControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                Toggle("开启自动录课", isOn: $recorder.automatic).toggleStyle(.checkbox)
+                AudioActionButton(title: "自动录课", active: recorder.automatic) { recorder.automatic.toggle() }
                 Spacer()
-                Button { if recorder.isArmed { recorder.stop() } else { recorder.start() } } label: {
-                    Circle().fill(recorder.isRecording ? Color.green : Color.secondary.opacity(0.15))
-                        .frame(width: 18, height: 18)
+                AudioActionButton(title: "", active: recorder.isRecording, symbol: recorder.isRecording ? "record.circle.fill" : "record.circle") {
+                    if recorder.isArmed { recorder.stop() } else { recorder.start() }
                 }.disabled(!recorder.isArmed && recorder.isSaving)
-                    .help(recorder.isArmed ? "停止本次录课" : "开始录课")
-                    .accessibilityLabel(recorder.isArmed ? "停止录课" : "开始录课")
+                    .help(recorder.isArmed ? "停止本次录课" : "直接录课")
+                    .accessibilityLabel(recorder.isArmed ? "停止录课" : "直接录课")
             }
             if !recorder.isArmed && recorder.message != "未录课" && recorder.message != "录课已保存" && recorder.message != "已停止录课" {
                 Text(recorder.message).font(.caption).foregroundStyle(.secondary)

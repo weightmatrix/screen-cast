@@ -16,6 +16,7 @@ struct ContentView: View {
     @AppStorage("internetIP") private var internetHost = ""
     @AppStorage("internetPort") private var internetPortText = "9318"
     @AppStorage("matchCode") private var matchCode = ""
+    @AppStorage("room.nickname") private var nickname = ""
     @State private var connectionPassword = ""
     @State private var applicationText = ""
     @State private var drawerOpen = true
@@ -138,105 +139,51 @@ struct ContentView: View {
 
     private var settingsPanel: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
+            VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(LocalizedStringKey(AppPresentation.receiveWorkbench)).font(.system(size: 30, weight: .semibold))
-                    }
+                    Text(LocalizedStringKey(AppPresentation.receiveWorkbench)).font(.system(size: 22, weight: .medium, design: .serif))
                     Spacer()
-                    Button { closeDrawer() } label: {
-                        Image(systemName: "xmark").font(.system(size: 18, weight: .medium))
-                            .foregroundStyle(AppSkin.victorian(skin) ? AppSkin.ink : Color.white.opacity(0.7)).frame(width: 48, height: 48)
-                            .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 15))
-                    }.accessibilityLabel("关闭设置")
+                    Button { closeDrawer() } label: { Image(systemName: "xmark").frame(width:28,height:28) }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("收起接收设置")
                 }
-                Button { client.disconnect(); appMode = "cast" } label: {
-                    Label("切换到投屏", systemImage: "arrow.up.right")
-                        .font(.system(size: 18, weight: .medium)).frame(maxWidth: .infinity, minHeight: 48)
-                }.buttonStyle(.bordered)
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(ConnectionMode.allCases) { mode in
-                    Button { client.disconnect(); connectMode = mode.rawValue } label: {
-                        Text(LocalizedStringKey(mode.label)).font(.system(size: 16, weight: .medium))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }.buttonStyle(.bordered).tint(connectMode == mode.rawValue ? .blue : .gray)
-                }
-            }
-            if connectMode == "wanIP" {
-                Text("需要发送端可达的公网地址和映射端口；不经过配对服务器。")
-                    .font(.system(size: 14)).foregroundStyle(.secondary)
-
-            }
-                if connectMode == "ip" || connectMode == "wanIP" {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(connectMode == "wanIP" ? "对方公网地址" : "对方局域网地址").foregroundStyle(.secondary)
-                        TextField(connectMode == "wanIP" ? "公网 IP 或域名" : "192.168.x.x", text: connectMode == "wanIP" ? $internetHost : $host)
-                            .font(.system(size: 22, design: .monospaced))
-                            .keyboardType(.default)
-                            .textInputAutocapitalization(.never).autocorrectionDisabled()
-                            .padding(16).background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 16))
+                Text(AppPresentation.title).font(.caption).foregroundStyle(.secondary)
+                Button { client.disconnect(); appMode = "cast" } label: { Label("投屏模式", systemImage: "arrow.up.right.video") }.buttonStyle(.bordered)
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(ConnectionMode.allCases) { mode in
+                        Button { client.disconnect(); connectMode = mode.rawValue } label: { Text(LocalizedStringKey(mode.label)).font(.system(size:13)).frame(maxWidth:.infinity,minHeight:36) }
+                            .buttonStyle(.bordered).tint(connectMode == mode.rawValue ? AppSkin.ink : .gray)
                     }
+                }
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("昵称·选填").font(.caption)
+                    TextField("你的名字", text: $nickname).textFieldStyle(.roundedBorder).onChange(of:nickname) { _ in RoomSession.shared.refreshNickname() }
+                    if connectMode == "ip" || connectMode == "wanIP" {
+                        Text(connectMode == "wanIP" ? "公网地址" : "局域网地址").font(.caption)
+                        TextField("对方地址", text: connectMode == "wanIP" ? $internetHost : $host).textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Text("端口").font(.caption)
+                        TextField("端口", text: connectMode == "wanIP" ? $internetPortText : $portText).textFieldStyle(.roundedBorder)
+                    } else {
+                        Text("编号").font(.caption)
+                        TextField("邀请链接或编号", text: $matchCode).textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    }
+                    Text("密码·必填").font(.caption)
+                    SecureField("填写连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
+                    Text("申请·必填").font(.caption)
+                    TextEditor(text: $applicationText).frame(height:76).overlay(RoundedRectangle(cornerRadius:5).stroke(.secondary.opacity(0.35)))
                     HStack {
-                        Text("端口").foregroundStyle(.secondary)
-                        Spacer()
-                        TextField(connectMode == "wanIP" ? "9318" : "8318", text: connectMode == "wanIP" ? $internetPortText : $portText)
-                            .font(.system(size: 22, design: .monospaced)).multilineTextAlignment(.trailing)
-                            .keyboardType(.default).frame(width: 130)
-                    }.padding(16).background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 16))
-                }
-            if connectMode == "code" || connectMode == "wanCode" {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("邀请链接或编号").foregroundStyle(.secondary)
-                    TextField("邀请链接或编号", text: $matchCode)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled()
-                        .font(.system(size: 38, weight: .medium, design: .monospaced))
-                        .keyboardType(.default)
-                        .padding(18).frame(maxWidth: .infinity)
-                        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18))
-                        .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.08)))
-                }
-            }
-            RoomAudioControls(receiver: true)
-            VStack(alignment: .leading, spacing: 8) {
-                SecureField("连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
-                Text("申请文字（必填，最多200字）").font(.caption)
-                TextEditor(text: $applicationText).frame(height: 90).overlay(RoundedRectangle(cornerRadius: 6).stroke(.secondary))
-            }
-                VStack(alignment: .leading, spacing: 12) {
-                    Toggle("接收页面声音", isOn: $client.receivesPageAudio)
-                    Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
-                }.toggleStyle(.switch)
+                        Button("连接", action: toggleConnection).disabled(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty)
+                        Button("断开") { client.disconnect() }.disabled(!isConnected && client.status != .connecting && client.recoveryMessage.isEmpty)
+                    }.buttonStyle(.bordered)
+                }.padding(16).appPanelStyle()
+                ReceiverAudioControls(sound: Binding(get: { client.receivesPageAudio || client.receivesMicrophone }, set: { client.receivesPageAudio = $0; client.receivesMicrophone = $0 }))
+                VStack(alignment: .leading, spacing:10) {
+                    Text("诊断").font(.headline)
+                    HStack { Circle().fill(statusColor).frame(width:8,height:8); Text(LocalizedStringKey(statusText)).font(.caption) }
+                    if !client.recoveryMessage.isEmpty { Text(client.recoveryMessage).font(.caption) }
+                    if isConnected { ReceiveTimingView(timing:client.receiveTiming); Text(client.decoder.diagText).font(.caption); Text("已接收 \(client.frameCount) 帧").font(.caption) }
+                    ScrollView { Text(diag.text).font(.system(size:11,design:.monospaced)).frame(maxWidth:.infinity,alignment:.leading) }.frame(height:145)
+                }.padding(16).appPanelStyle()
                 ConnectionPrivacyNotice()
-                Button(action: toggleConnection) {
-                    Label(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开连接" : "连接画面", systemImage: isConnected ? "stop.fill" : "arrow.up.right")
-                        .font(.system(size: 19, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 58)
-                        .foregroundStyle(isConnected ? Color.white : Color.black)
-                        .background(isConnected ? Color.red.opacity(0.8) : Color(red: 0.34, green: 0.70, blue: 1), in: RoundedRectangle(cornerRadius: 18))
-                }.buttonStyle(.plain)
-                HStack(spacing: 12) {
-                    Circle().fill(statusColor).frame(width: 9, height: 9)
-                    Text(LocalizedStringKey(statusText)).font(.system(size: 17)).fixedSize(horizontal: false, vertical: true)
-                }.padding(18).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 16))
-                DisclosureGroup("连接诊断") {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if isConnected {
-                            ReceiveTimingView(timing: client.receiveTiming).foregroundStyle(.secondary)
-                            Text(client.decoder.diagText).foregroundStyle(.secondary)
-                            Text("已接收 \(client.frameCount) 帧").foregroundStyle(.secondary)
-                        }
-                        Button("清空日志") { diag.clear() }.frame(minHeight: 44)
-                        ScrollView {
-                            Text(diag.text).font(.system(size: 13, design: .monospaced))
-                                .foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
-                        }.frame(height: 180)
-                    }.padding(.top, 16)
-                }.font(.system(size: 16)).foregroundStyle(.secondary)
-            }
-            .font(.system(size: 17))
-            .padding(.horizontal, 28).padding(.top, 48).padding(.bottom, 32)
+            }.font(.system(size:15)).padding(.horizontal,22).padding(.top,48).padding(.bottom,24)
         }
     }
 

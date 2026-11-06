@@ -9,7 +9,7 @@ final class DiagLog {
     private let queue = DispatchQueue(label: "diaglog", qos: .utility)
     private let fmt: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return f
     }()
 

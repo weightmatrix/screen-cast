@@ -158,6 +158,7 @@ struct iPadSenderView: View {
                         .font(.caption).foregroundStyle(.secondary)
                 }.padding(24).frame(maxWidth: .infinity, alignment: .leading)
                     .appPanelStyle()
+                RoomChatPanel().padding(24).appPanelStyle()
                 RoomAudioControls()
                 ConnectionLegalNotice()
                 PendingConnectionsView(requests: pending) { id, accepted in

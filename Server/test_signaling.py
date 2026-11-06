@@ -50,12 +50,14 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         await client.send({**hello, **extra})
         return client
 
-    async def apply(self, sender, key='a'*64, text='Synthetic request', valid=True):
+    async def apply(self, sender, key='a'*64, text='Synthetic request', valid=True, nickname=None):
         receiver = await self.client('receiver',key)
         challenge = (await receiver.receive())[1]
         self.assertEqual(challenge['type'], 'challenge')
         proof = hmac.new(self.verifier.encode(),challenge['nonce'].encode(),hashlib.sha256).hexdigest()
-        await receiver.send({'type':'apply','proof':proof if valid else '0'*64,'application':text})
+        packet={'type':'apply','proof':proof if valid else '0'*64,'application':text}
+        if nickname is not None: packet['nickname']=nickname
+        await receiver.send(packet)
         return receiver
 
     async def pair(self):
@@ -70,6 +72,18 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         await a.send({'type':'approve','id':identity})
         self.assertEqual((await a.receive())[1],{'type':'approved','id':identity})
         self.assertEqual((await b.receive())[1],{'type':'approved','session_id':identity})
+
+    async def test_nickname_is_bounded_forwarded_but_not_logged(self):
+        a=await self.client('sender'); await a.receive()
+        b=await self.apply(a,nickname='PRIVATE_NICKNAME_FIXTURE'); await b.receive()
+        request=(await a.receive())[1]
+        self.assertEqual(request['nickname'],'PRIVATE_NICKNAME_FIXTURE')
+        with open(self.audit_path) as stream: self.assertNotIn('PRIVATE_NICKNAME_FIXTURE',stream.read())
+        for name in ['x'*33,'bad\x00name',42]:
+            bad=await self.apply(a,nickname=name)
+            self.assertEqual((await bad.receive())[1]['type'],'error')
+        legacy=await self.apply(a); await legacy.receive()
+        self.assertEqual((await a.receive())[1]['nickname'],'访客')
 
     async def test_password_and_application_required_before_sender_notification(self):
         a=await self.client('sender'); await a.receive()

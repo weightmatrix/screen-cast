@@ -28,11 +28,11 @@ final class CastingServer: ObservableObject {
 
     private var browserServer: BrowserReceiverServer?
 
-    private func requestApproval(id: String, route: String, ip: String, application: String, action: @escaping (Bool) -> Void) {
+    private func requestApproval(id: String, route: String, ip: String, application: String, nickname: String = "访客", action: @escaping (Bool) -> Void) {
         guard pendingActions[id] == nil else { return }
         guard pendingActions.count < 64 else { action(false); return }
         pendingActions[id] = action
-        pendingConnections.append(PendingConnection(id: id, route: route, ip: ip, application: application))
+        pendingConnections.append(PendingConnection(id: id, route: route, ip: ip, application: application, nickname: nickname))
         let work = DispatchWorkItem { [weak self] in self?.respondToRequest(id, accept: false) }
         pendingTimeouts[id] = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 300, execute: work)
@@ -179,9 +179,9 @@ final class CastingServer: ObservableObject {
             return video
         }
         nativeHost = host
-        host.onRequest = { [weak self, weak host] id, text, ip in
+        host.onRequest = { [weak self, weak host] id, text, ip, nickname in
             guard let self, let host else { return }
-            self.requestApproval(id: id, route: "公网邀请", ip: ip, application: text) { [weak host] accepted in
+            self.requestApproval(id: id, route: "公网邀请", ip: ip, application: text, nickname: nickname) { [weak host] accepted in
                 let admitted = accepted && SenderConnectionBudget.reserve(id, internet: true)
                 host?.respond(id, accept: admitted)
             }
@@ -456,7 +456,7 @@ final class CastingServer: ObservableObject {
                 guard !authenticatedConnections.contains(key), connectionPassword != accessCode, AdmissionCredentials.validPassword(connectionPassword),
                       let nonce = authenticationNonces.removeValue(forKey: key),
                       let object = try? JSONSerialization.jsonObject(with: payload) as? [String: String],
-                      Set(object.keys) == Set(["proof", "application"]), let proof = object["proof"],
+                      Set(object.keys).subtracting(["nickname"]) == Set(["proof", "application"]), let proof = object["proof"],
                       AdmissionCredentials.equalProof(proof, AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: connectionPassword, invitation: accessCode), nonce: nonce)),
                       let text = object["application"], let application = AdmissionCredentials.application(text) else {
                     reject(conn, message: "连接密码错误或申请文字无效"); return
@@ -470,7 +470,7 @@ final class CastingServer: ObservableObject {
                 buffer.removeFirst(5 + length); controlBuffers[key] = buffer
                 let ip: String
                 if case .hostPort(let host, _) = conn.endpoint { ip = host.debugDescription } else { ip = "未知" }
-                requestApproval(id: id, route: internetConnections.contains(key) ? "公网地址" : "局域网", ip: ip, application: application) { [weak self, weak conn] accepted in
+                requestApproval(id: id, route: internetConnections.contains(key) ? "公网地址" : "局域网", ip: ip, application: application, nickname: RoomSession.name(object["nickname"] ?? "", fallback: "访客")) { [weak self, weak conn] accepted in
                     guard let self, let conn else { return }
                     if accepted {
                         let report = self.requestAudits[key]
@@ -564,9 +564,9 @@ final class CastingServer: ObservableObject {
             return video
         }
         browser.password = { [weak self] in self?.connectionPassword ?? "" }
-        browser.requestApproval = { [weak self] id, text, ip, reply in
+        browser.requestApproval = { [weak self] id, text, ip, nickname, reply in
             guard let self else { reply(false); return }
-            self.requestApproval(id: id, route: "局域网页", ip: ip, application: text, action: reply)
+            self.requestApproval(id: id, route: "局域网页", ip: ip, application: text, nickname: nickname, action: reply)
         }
         browser.onRequestEnded = { [weak self] in self?.forgetRequest($0) }
         browser.reserveSlot = { SenderConnectionBudget.reserve($0, internet: false) }

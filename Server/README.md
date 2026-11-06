@@ -1,3 +1,7 @@
+## 80版昵称与说明排版
+
+申请包增加可选nickname，控制字符拒绝、最多32 Unicode码点/128 UTF8字节；缺省访客，兼容旧客户端，昵称不写入配对审计。媒体与聊天路径不变。Server/ops/deploy_release80.py仅在既有沙盒备份并更新信令及两份网页，复用OAuth覆盖文件；回滚backups/before80，不改变Nginx或其他业务。
+
 ## 79版百度网盘授权与录课直传
 
 授权回调固定为 `https://zhibenwang.com/touping/baidu/callback`，在百度应用控制台填写完整地址。官方依据：[OAuth](https://openauth.baidu.com/doc/doc.html)、[网盘官方SDK上传接口](https://github.com/baidu-netdisk/baidu-drive-sdk-go/tree/main/baidudriver/api)。新增 `baidu_oauth.py` 仅交换/刷新授权，不接收文件或媒体；应用凭据从 `/srv/apps/touping/secrets/baidu-oauth.json` 只读挂载，字段只有 `client_id`、`client_secret`，禁止写入仓库/镜像/网页。SignKey等不用于此流程。官方登录页可复用系统浏览器登录状态，不读取或保存用户Cookie；令牌在Mac钥匙串，服务器不持久保存用户令牌。

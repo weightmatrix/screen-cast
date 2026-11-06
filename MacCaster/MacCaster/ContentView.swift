@@ -151,9 +151,25 @@ private struct SessionRow: View {
     @State private var showSettings = false
     @State private var showConnections = false
 
+    @State private var controlsCollapsed = false
     var body: some View {
+        VStack(spacing: 12) {
+            if controlsCollapsed {
+                HStack {
+                    Text(session.contentName).lineLimit(1)
+                    Spacer()
+                    Text("\(session.clientCount) 台已连接").font(.caption).foregroundStyle(.secondary)
+                    Button("展开") { controlsCollapsed = false }
+                    Button(action: onStop) { Image(systemName: "stop.fill").foregroundStyle(.red) }
+                }.padding(12).background(AppPaperBackground())
+            } else { expandedControls }
+            RoomChatPanel().padding(22).appPanelStyle()
+        }.onReceive(session.server.$pendingConnections) { if !$0.isEmpty { controlsCollapsed = false; showConnections = true } }
+    }
+    private var expandedControls: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top) {
+                Button { controlsCollapsed = true } label: { Image(systemName: "chevron.up") }.help("收成一行")
                 VStack(alignment: .leading, spacing: 10) {
                     Text(session.contentName).font(.system(size: 20, weight: .semibold)).lineLimit(2)
                     if case .failed(let message) = session.phase {

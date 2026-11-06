@@ -35,10 +35,10 @@ struct RootView: View {
         .tint(AppSkin.victorian(skin) ? AppSkin.ink : .blue)
         .overlay(alignment: .topTrailing) {
             Button { showSettings = true } label: {
-                Image(systemName: "gearshape").padding(12)
+                Image(systemName: "gearshape").font(.system(size: 17)).frame(width: 32, height: 32)
             }
             .accessibilityLabel("设置")
-            .background(.regularMaterial, in: Circle()).padding(12)
+            .buttonStyle(.plain).foregroundStyle(.secondary).padding(8)
         }
         .sheet(isPresented: $showSettings) {
             NavigationView {
@@ -51,7 +51,7 @@ struct RootView: View {
             }.navigationViewStyle(.stack)
                 .environment(\.locale, AppLanguage.locale(language))
         }
-        .overlay { RoomChatOverlay() }
+        .overlay { if appMode == "receive" { RoomChatOverlay() } }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in RoomSession.shared.pollBroadcast() }
         .onAppear { StartupTiming.rootVisible() }
         .task {

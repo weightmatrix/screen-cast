@@ -22,6 +22,7 @@ struct PendingConnection: Identifiable, Codable {
     let route: String
     let ip: String
     let application: String
+    var nickname: String? = nil
 }
 
 /// Invitation IDs locate a stream; passwords are separate and never part of an invitation.

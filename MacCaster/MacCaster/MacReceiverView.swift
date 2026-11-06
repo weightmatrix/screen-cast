@@ -15,6 +15,7 @@ struct MacReceiverView: View {
     @AppStorage("internetPort") private var internetPortText = "9318"
     @AppStorage("matchCode") private var matchCode = ""
     @AppStorage("appMode") private var appMode = "cast"
+    @AppStorage("room.nickname") private var nickname = ""
     @State private var connectionPassword = ""
     @State private var applicationText = ""
     @State private var drawerOpen = true
@@ -79,94 +80,52 @@ struct MacReceiverView: View {
 
     private var settingsPanel: some View {
         ScrollView {
-        VStack(alignment: .leading, spacing: 24) {
-            Text(AppPresentation.title).font(.system(size: 20, weight: .semibold))
-            Text(LocalizedStringKey(AppPresentation.receiveWorkbench)).font(.system(size: 26, weight: .semibold))
-            HStack {
-                Button {
-                    client.disconnect()
-                    appMode = "cast"
-                } label: {
-                    Label("投屏模式", systemImage: "arrow.up.circle")
-                        .font(.system(size: 16))
-                }
-                .buttonStyle(AppGlassButtonStyle())
-                .controlSize(.large)
-                Spacer()
-                Button { closeDrawer() } label: {
-                    Image(systemName: "xmark.circle.fill").font(.system(size: 23)).foregroundStyle(.secondary)
-                }
-                .buttonStyle(AppGlassButtonStyle())
-            }
-
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(ConnectionMode.allCases) { mode in
-                    Button { client.disconnect(); connectMode = mode.rawValue } label: {
-                        Text(LocalizedStringKey(mode.label)).font(.system(size: 16, weight: .medium))
-                            .frame(maxWidth: .infinity, minHeight: 44)
-                    }.buttonStyle(AppGlassButtonStyle(prominent: connectMode == mode.rawValue))
-                }
-            }
-            if connectMode == "ip" || connectMode == "wanIP" {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(connectMode == "wanIP" ? "对方公网地址" : "对方局域网地址").font(.system(size: 16)).foregroundStyle(.secondary)
-                    TextField(connectMode == "wanIP" ? "公网 IP 或域名" : "192.168.x.x", text: connectMode == "wanIP" ? $internetHost : $host)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("端口").font(.system(size: 16)).foregroundStyle(.secondary)
-                    TextField(connectMode == "wanIP" ? "9318" : "8318", text: connectMode == "wanIP" ? $internetPortText : $portText)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 100)
-                }
-            }
-
-            if connectMode == "code" || connectMode == "wanCode" {
-            VStack(alignment: .leading, spacing: 6) {
-                TextField("邀请链接或编号", text: $matchCode)
-                    .accessibilityLabel("邀请链接或编号")
-                    .textFieldStyle(.roundedBorder)
-                    .frame(width: 180)
-            }
-
-            }
-            RoomAudioControls(receiver: true)
-            VStack(alignment: .leading, spacing: 8) {
-                SecureField("连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
-                TextField("申请文字（必填，最多200字）", text: $applicationText, axis: .vertical)
-                    .textFieldStyle(.roundedBorder).lineLimit(2...5)
-            }
-            VStack(alignment: .leading, spacing: 12) {
-                    Toggle("接收页面声音", isOn: $client.receivesPageAudio)
-                    Toggle("接收话筒声音", isOn: $client.receivesMicrophone)
-                }.toggleStyle(.switch)
-                Button(action: toggleConnection) {
-                Text(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty ? "断开" : "连接").frame(maxWidth: .infinity)
-            }
-            .buttonStyle(AppGlassButtonStyle(prominent: true))
-            .tint(isConnected ? .red : .blue)
-
-            Divider()
-
-            LocalRecordingControls(recorder: client.recorder)
-
-            Divider()
-
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 18) {
                 HStack {
-                    Circle().fill(statusColor).frame(width: 8, height: 8)
-                    Text(LocalizedStringKey(statusText)).font(.subheadline)
+                    Text(LocalizedStringKey(AppPresentation.receiveWorkbench)).font(.system(size: 22, weight: .medium, design: .serif))
+                    Spacer()
+                    Button { closeDrawer() } label: { Image(systemName: "xmark").frame(width: 28,height: 28) }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel("收起接收设置")
                 }
-                if isConnected {
-                    ReceiveTimingView(timing: client.receiveTiming).foregroundStyle(.secondary)
-                    Label(client.decoder.diagText, systemImage: "info.circle").font(.system(size: 16)).foregroundStyle(.green)
-                    Label("已接收 \(client.frameCount) 帧", systemImage: "arrow.down.circle").font(.system(size: 16)).foregroundStyle(.secondary)
+                Text(AppPresentation.title).font(.caption).foregroundStyle(.secondary)
+                Button { client.disconnect(); appMode = "cast" } label: { Label("投屏模式", systemImage: "arrow.up.right.video") }
+                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                    ForEach(ConnectionMode.allCases) { mode in
+                        Button { client.disconnect(); connectMode = mode.rawValue } label: {
+                            Text(LocalizedStringKey(mode.label)).font(.system(size: 13)).frame(maxWidth: .infinity)
+                        }.buttonStyle(AppGlassButtonStyle(prominent: connectMode == mode.rawValue))
+                    }
                 }
-            }
-            Spacer()
-        }
-        .padding(28)
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("昵称·选填").font(.caption)
+                    TextField("你的名字", text: $nickname).textFieldStyle(.roundedBorder).onChange(of: nickname) { _ in RoomSession.shared.refreshNickname() }
+                    if connectMode == "ip" || connectMode == "wanIP" {
+                        Text(connectMode == "wanIP" ? "公网地址" : "局域网地址").font(.caption)
+                        TextField("对方地址", text: connectMode == "wanIP" ? $internetHost : $host).textFieldStyle(.roundedBorder)
+                        Text("端口").font(.caption)
+                        TextField("端口", text: connectMode == "wanIP" ? $internetPortText : $portText).textFieldStyle(.roundedBorder)
+                    } else {
+                        Text("编号").font(.caption)
+                        TextField("邀请链接或编号", text: $matchCode).textFieldStyle(.roundedBorder)
+                    }
+                    Text("密码·必填").font(.caption)
+                    SecureField("填写连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
+                    Text("申请·必填").font(.caption)
+                    TextField("告诉投送者你是谁（最多200字）", text: $applicationText, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(2...4)
+                    HStack {
+                        Button("连接", action: toggleConnection).disabled(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty)
+                        Button("断开") { client.disconnect() }.disabled(!isConnected && client.status != .connecting && client.recoveryMessage.isEmpty)
+                    }
+                }.padding(16).appPanelStyle()
+                LocalRecordingControls(recorder: client.recorder)
+                ReceiverAudioControls(sound: Binding(get: { client.receivesPageAudio || client.receivesMicrophone }, set: { client.receivesPageAudio = $0; client.receivesMicrophone = $0 }))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("诊断").font(.headline)
+                    HStack { Circle().fill(statusColor).frame(width: 8,height: 8); Text(LocalizedStringKey(statusText)).font(.caption) }
+                    if !client.recoveryMessage.isEmpty { Text(client.recoveryMessage).font(.caption).foregroundStyle(.secondary) }
+                    if isConnected { ReceiveTimingView(timing: client.receiveTiming); Text(client.decoder.diagText).font(.caption); Text("已接收 \(client.frameCount) 帧").font(.caption) }
+                }.padding(16).appPanelStyle()
+                ConnectionPrivacyNotice()
+            }.font(.system(size: 15)).padding(.horizontal, 22).padding(.vertical, 18)
         }
     }
 

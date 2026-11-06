@@ -865,7 +865,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
 /// One lightweight registration, many independent applicants and native media peers.
 final class NativeVideoHost: @unchecked Sendable {
     var onRegistered: (() -> Void)?
-    var onRequest: ((String, String, String) -> Void)?
+    var onRequest: ((String, String, String, String) -> Void)?
     var onPeerCreated: ((String, NativeVideoPeer) -> Void)?
     var onChanged: (() -> Void)?
     var onEnded: ((String) -> Void)?
@@ -955,7 +955,7 @@ final class NativeVideoHost: @unchecked Sendable {
                         guard id.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil,
                               let text = object["application"] as? String, let application = AdmissionCredentials.application(text),
                               let ip = object["ip"] as? String, ip.utf8.count <= 64, self.pending.count < 64 else { self.send(["type":"reject","id":id]); break }
-                        self.pending.insert(id); self.onRequest?(id, application, ip)
+                        self.pending.insert(id); self.onRequest?(id, application, ip, RoomSession.name(object["nickname"] as? String ?? "", fallback: "访客"))
                     case "approved":
                         guard self.accepted.contains(id), self.peers[id] == nil else { break }
                         self.pending.remove(id)
@@ -1057,7 +1057,7 @@ final class NativeVideoRoom: @unchecked Sendable {
                     switch object["type"] as? String {
                     case "challenge":
                         guard let nonce = object["nonce"] as? String, nonce.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil else { self.fail("无效连接验证"); return }
-                        self.send(["type":"apply", "proof":AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: self.password, invitation: self.code), nonce: nonce), "application":self.application])
+                        self.send(["type":"apply", "proof":AdmissionCredentials.proof(verifier: AdmissionCredentials.verifier(password: self.password, invitation: self.code), nonce: nonce), "application":self.application, "nickname":RoomSession.shared.nickname])
                     case "waiting": self.onRegistered?()
                     case "waiting_approval": self.onWaitingApproval?()
                     case "approved":

@@ -11,7 +11,7 @@ final class ConnectionDiag: ObservableObject {
     private let fileQueue = DispatchQueue(label: "com.witten.touping.connectiondiag", qos: .utility)
     private let fmt: DateFormatter = {
         let f = DateFormatter()
-        f.dateFormat = "HH:mm:ss.SSS"
+        f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return f
     }()
     private let fileURL: URL

@@ -25,7 +25,7 @@ final class BrowserReceiverServer {
     }
     let port: UInt16
     var password: (() -> String)?
-    var requestApproval: ((String, String, String, @escaping (Bool) -> Void) -> Void)?
+    var requestApproval: ((String, String, String, String, @escaping (Bool) -> Void) -> Void)?
     var onRequestEnded: ((String) -> Void)?
     private var challenges: [String: (nonce: String, ip: String, created: Double)] = [:]
     var onReady: ((Bool) -> Void)?
@@ -144,7 +144,7 @@ final class BrowserReceiverServer {
             rates = rates.mapValues { $0.filter { now - $0 < 60 } }.filter { !$0.value.isEmpty }
             guard rates.count < 128 || rates[remote] != nil, (rates[remote]?.count ?? 0) < 20 else { reply(connection, status: 429, object: ["error":"连接过于频繁，请稍后重试"]); return }
             rates[remote, default: []].append(now)
-            guard Set(object.keys) == Set(["code", "challenge", "proof", "application"]),
+            guard Set(object.keys).subtracting(["nickname"]) == Set(["code", "challenge", "proof", "application"]),
                   let supplied = object["code"] as? String, supplied == code(),
                   let token = object["challenge"] as? String, let challenge = challenges.removeValue(forKey: token),
                   challenge.ip == remote, now - challenge.created < 15,
@@ -155,7 +155,7 @@ final class BrowserReceiverServer {
             let id = UUID().uuidString + UUID().uuidString
             let client = Client(id); clients[id] = client
             reply(connection, status: 200, object: ["id":id])
-            requestApproval?(id, application, remote) { [weak self, weak client] accepted in
+            requestApproval?(id, application, remote, RoomSession.name(object["nickname"] as? String ?? "", fallback: "访客")) { [weak self, weak client] accepted in
                 guard let self, let client, self.clients[id] === client else { return }
                 guard accepted, self.reserveSlot?(id) == true else {
                     client.events = [["type":"error", "message":"申请未获批准或连接名额已满"]]

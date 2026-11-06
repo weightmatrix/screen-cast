@@ -12,6 +12,7 @@ struct RoomMessage: Identifiable, Codable {
 final class RoomSession: ObservableObject {
     static let shared = RoomSession()
     @Published private(set) var messages: [RoomMessage] = []
+    @Published private(set) var peerNicknames: [String: String] = [:]
     @Published private(set) var receiverCanSpeak = false
     @Published private(set) var error = ""
     let participant: String = {
@@ -40,7 +41,7 @@ final class RoomSession: ObservableObject {
         return Self.name(value, fallback: "用户-" + participant.prefix(4))
     }
     static func name(_ text: String, fallback: String) -> String {
-        let value = String(text.filter { !$0.isNewline && !$0.isASCIIControl }.prefix(32)).trimmingCharacters(in: .whitespaces)
+        let value = String(String.UnicodeScalarView(text.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0) }.prefix(32))).trimmingCharacters(in: .whitespaces)
         return value.isEmpty ? fallback : value
     }
     func attach(_ id: String, host: Bool, send: @escaping ([String: Any]) -> Bool) {
@@ -51,7 +52,7 @@ final class RoomSession: ObservableObject {
         _ = links[id]?.send(["kind":"hello", "participant":participant, "nickname":nickname])
     }
     func detach(_ id: String) {
-        links.removeValue(forKey: id)
+        links.removeValue(forKey: id); peerNicknames.removeValue(forKey: id)
         receiverCanSpeak = links.values.contains { !$0.host && $0.ready }
         VoiceRoom.shared.remove(id)
         if links.isEmpty { messages.removeAll(); seen.removeAll(); error = "" }
@@ -62,7 +63,7 @@ final class RoomSession: ObservableObject {
             guard let value = object["participant"] as? String, UUID(uuidString: value) != nil else { return }
             link.participant = value.lowercased()
             link.nickname = Self.name(object["nickname"] as? String ?? "", fallback: "用户-" + id.prefix(4))
-            link.ready = true; links[id] = link
+            link.ready = true; links[id] = link; peerNicknames[id] = link.nickname
             receiverCanSpeak = links.values.contains { !$0.host && $0.ready }
             VoiceRoom.shared.identify(id, participant: link.participant)
             if link.host { _ = link.send(["kind":"host", "participant":participant, "nickname":nickname]) }

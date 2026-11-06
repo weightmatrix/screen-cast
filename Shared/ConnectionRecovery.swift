@@ -24,6 +24,9 @@ final class ConnectionRecovery {
     var waitingForApproval: (() -> Bool)?
     private var approvalWaiting = false
     var cancelTransport: (() -> Void)?
+    var onTransition: ((String) -> Void)?
+    private(set) var hasReceivedMedia = false
+    func noteMediaReceived() { if isActive { hasReceivedMedia = true } }
     var onMessage: ((String) -> Void)?
     var onExhausted: (() -> Void)?
     private(set) var isAttempting = false
@@ -69,7 +72,7 @@ final class ConnectionRecovery {
     }
 
     func stop() {
-        generation = UUID(); approvalWaiting = false; isActive = false; attempt = nil
+        generation = UUID(); hasReceivedMedia = false; approvalWaiting = false; isActive = false; attempt = nil
         timer?.cancel(); timer = nil; monitor?.cancel(); monitor = nil
         due = nil; attemptStarted = nil; pathSignature = nil
         wasConnected = false; suspended = false; online = true
@@ -77,6 +80,7 @@ final class ConnectionRecovery {
     }
 
     func suspend() {
+        onTransition?("application-suspended")
         suspended = true
         if wasConnected { wasConnected = false; budget.reset() }
         cancelTransport?(); attemptStarted = nil
@@ -102,7 +106,10 @@ final class ConnectionRecovery {
         guard isActive else { return }
         let changed = pathSignature != nil && pathSignature != signature
         pathSignature = signature; self.online = online
-        if changed, !suspended {
+        if changed { onTransition?("path-changed online=\(online) healthy=\(state?() == .connected)") }
+        // A satisfied path notification (VPN/cost/IPv6/interface metadata) does not
+        // prove the active ICE pair failed. Let WebRTC migrate it while still connected.
+        if changed, !suspended, !(online && state?() == .connected) {
             if wasConnected { wasConnected = false; budget.reset() }
             cancelTransport?(); attemptStarted = nil
             if due == nil { schedule(now: clock()) }

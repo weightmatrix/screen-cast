@@ -93,48 +93,90 @@ struct RoomAudioControls: View {
     }
 }
 
-struct RoomChatOverlay: View {
+struct RoomChatPanel: View {
     @ObservedObject private var room = RoomSession.shared
-    @AppStorage("room.chatCorner") private var corner = ChatCorner.bottomLeft.rawValue
-    @AppStorage("room.chatOpacity") private var opacity = 0.9
-    @State private var open = false
     @State private var draft = ""
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if open {
-                HStack { Text("共用聊天室").font(.headline); Text(verbatim: room.nickname).font(.caption) }
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 8) {
-                            ForEach(room.messages) { message in
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(verbatim: message.author).font(.caption.bold())
-                                    Text(verbatim: message.text).font(.body).textSelection(.enabled)
-                                }.id(message.id)
-                            }
-                        }.frame(maxWidth: .infinity, alignment: .leading)
-                    }.frame(height: 190)
-                        .onChange(of: room.messages.last?.id) { _ in if let id = room.messages.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
-                }
-                HStack {
-                    TextField("输入文字，所有人可见", text: $draft).textFieldStyle(.roundedBorder)
-                        .onSubmit { send() }
-                    Button("发送") { send() }.disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                if !room.error.isEmpty { Text(room.error).font(.caption).foregroundStyle(.red) }
+        VStack(alignment: .leading, spacing: 10) {
+            HStack { Text("共用聊天室").font(.headline); Spacer(); Text(verbatim: room.nickname).font(.caption).foregroundStyle(.secondary) }
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 8) {
+                        ForEach(room.messages) { message in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(verbatim: message.author).font(.caption.bold()).foregroundStyle(.secondary)
+                                Text(verbatim: message.text).font(.body).textSelection(.enabled)
+                            }.frame(maxWidth: .infinity, alignment: .leading).id(message.id)
+                        }
+                    }
+                }.frame(height: 145)
+                .onChange(of: room.messages.last?.id) { _ in if let id = room.messages.last?.id { proxy.scrollTo(id, anchor: .bottom) } }
             }
-            Button { open.toggle() } label: { Label(LocalizedStringKey(open ? "收起聊天" : "聊天"), systemImage: "text.bubble") }
+            HStack {
+                TextField("输入文字，所有人可见", text: $draft).textFieldStyle(.roundedBorder).onSubmit { send() }
+                Button("发送") { send() }.buttonStyle(.bordered).disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            if !room.error.isEmpty { Text(room.error).font(.caption).foregroundStyle(.red) }
         }
-        .padding(12).frame(width: 310)
-        .background(.regularMaterial.opacity(max(0.35, min(1, opacity))), in: RoundedRectangle(cornerRadius: 16))
-        .padding(12)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: (ChatCorner(rawValue: corner) ?? .bottomLeft).alignment)
     }
     private func send() { if room.send(draft) { draft = "" } }
 }
 
+struct RoomChatOverlay: View {
+    @State private var open = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if open {
+                RoomChatPanel().padding(14).frame(width: 290)
+                    .background(.regularMaterial.opacity(0.85), in: RoundedRectangle(cornerRadius: 12))
+            }
+            Button { open.toggle() } label: {
+                Image(systemName: open ? "xmark" : "text.bubble").font(.system(size: 15, weight: .medium))
+                    .frame(width: 30, height: 30).contentShape(Circle())
+            }.buttonStyle(.plain).foregroundStyle(.secondary)
+                .accessibilityLabel(open ? "收起聊天" : "聊天")
+        }.padding(8).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+    }
+}
+
+private struct AudioVine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var p = Path(); p.move(to: CGPoint(x: 0, y: rect.midY)); p.addLine(to: CGPoint(x: rect.maxX, y: rect.midY))
+        for x in stride(from: CGFloat(4), to: rect.width, by: 11) {
+            p.move(to: CGPoint(x: x, y: rect.midY))
+            p.addQuadCurve(to: CGPoint(x: x + 6, y: 0), control: CGPoint(x: x, y: 0))
+            p.addQuadCurve(to: CGPoint(x: x, y: rect.midY), control: CGPoint(x: x + 6, y: rect.midY))
+            p.addQuadCurve(to: CGPoint(x: x + 7, y: rect.maxY), control: CGPoint(x: x + 7, y: rect.midY))
+        }; return p
+    }
+}
+
+struct AudioActionButton: View {
+    let title: String
+    let active: Bool
+    var symbol: String? = nil
+    let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    if let symbol { Image(systemName: symbol) }
+                    if !title.isEmpty { Text(LocalizedStringKey(title)) }
+                }.font(.system(size: 14, weight: .medium))
+                AudioVine().trim(from: 0, to: active ? 1 : 0).stroke(Color.green, lineWidth: 1)
+                    .frame(height: 6).animation(reduceMotion ? nil : .easeInOut(duration: 0.45), value: active)
+            }.padding(.horizontal, 12).padding(.vertical, 8)
+                .foregroundStyle(active ? Color.green : Color.primary)
+                .background(Color.primary.opacity(0.025), in: RoundedRectangle(cornerRadius: 5))
+                .overlay(RoundedRectangle(cornerRadius: 5).stroke(active ? Color.green.opacity(0.7) : Color.secondary.opacity(0.25)))
+        }.buttonStyle(.plain).accessibilityAddTraits(active ? .isSelected : [])
+    }
+}
+
+
 #if os(iOS)
-private struct SystemAudioRoutePicker: UIViewRepresentable {
+struct SystemAudioRoutePicker: UIViewRepresentable {
     func makeUIView(context: Context) -> AVRoutePickerView { AVRoutePickerView() }
     func updateUIView(_ view: AVRoutePickerView, context: Context) {}
 }

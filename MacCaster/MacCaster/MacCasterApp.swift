@@ -7,6 +7,7 @@ struct MacCasterApp: App {
     @StateObject private var streamer = ScreenStreamer()
     @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     @AppStorage("appearance.colorScheme") private var appearance = "system"
+    @AppStorage("appMode") private var activeMode = "cast"
     @AppStorage(AppSkin.key) private var appSkin = "victorian"
 
     init() {
@@ -31,7 +32,7 @@ struct MacCasterApp: App {
                 .focusEffectDisabled()
                 .preferredColorScheme(AppSkin.victorian(appSkin) ? .light : AppAppearance.scheme(appearance))
                 .environmentObject(streamer)
-                .overlay { RoomChatOverlay() }
+                .overlay { if activeMode == "receive" { RoomChatOverlay() } }
                 .task {
                     _ = BaiduDrive.shared
                     #if DEBUG
@@ -87,7 +88,7 @@ private struct AppearanceSettingsView: View {
                     Text("固定浅色").tag("light")
                     Text("固定深色").tag("dark")
                 }.pickerStyle(.segmented).disabled(AppSkin.victorian(skin))
-                if AppSkin.victorian(skin) { Text("维多利亚主题使用浅色纸纹；深浅色设置适用于极简皮肤。").font(.caption).foregroundStyle(.secondary) }
+                if AppSkin.victorian(skin) { Text("装饰主题使用各自的浅色配色；深浅色设置适用于极简皮肤。").font(.caption).foregroundStyle(.secondary) }
             }
             Section("语言") {
                 AppLanguagePicker()
