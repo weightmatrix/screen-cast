@@ -25,9 +25,37 @@
     const address=candidate.split(/\s+/)[4] || '';
     if(address.endsWith('.local')) target.mdns++; else if(address.includes(':')) target.v6++; else if(/^\d+\./.test(address)) target.v4++;
   }
+  function connectionPath(stats) {
+    let transport;
+    stats.forEach(item=>{if(item.type==='transport' && item.selectedCandidatePairId)transport=item;});
+    const pair=transport && stats.get(transport.selectedCandidatePairId);
+    if(!pair)return '当前媒体路径：等待实际路径统计';
+    const local=stats.get(pair.localCandidateId)||{},remote=stats.get(pair.remoteCandidateId)||{};
+    const address=c=>c.address||c.ip||'';
+    const nonPublic=value=>{
+      const text=String(value).toLowerCase().split('%')[0];
+      if(text.endsWith('.local')||!text)return null;
+      if(text.startsWith('::ffff:'))return nonPublic(text.slice(7));
+      if(text.includes(':'))return /^(fc|fd|fe[89ab])/.test(text)||text==='::1'||text==='::'||text.startsWith('ff');
+      const parts=text.split('.').map(Number);
+      if(parts.length!==4||parts.some(x=>!Number.isInteger(x)||x<0||x>255))return null;
+      const [a,b]=parts;return [0,10,127].includes(a)||(a===172&&b>=16&&b<=31)||(a===192&&b===168)||(a===169&&b===254)||(a===100&&b>=64&&b<=127)||a>=224;
+    };
+    let route='直连（地址隐藏，USB/局域网未确认）';
+    if(local.candidateType==='relay'||remote.candidateType==='relay')route='中继路径';
+    else if(/^127\./.test(address(remote))||address(remote)==='::1')route='本机回环直连';
+    else if(local.networkType==='vpn')route='VPN/隧道直连（底层网络未知）';
+    else if(nonPublic(address(local))===true&&nonPublic(address(remote))===true)route='内网地址直连（USB/局域网介质未确认）';
+    else if(nonPublic(address(remote))===false)route='公网地址直连（可能同网回环）';
+    else if([local.candidateType,remote.candidateType].some(x=>['srflx','prflx'].includes(x)))route='公网候选直连（范围待确认）';
+    const network={wifi:'Wi-Fi',ethernet:'有线网络（USB未确认）',cellular:'蜂窝网络',vpn:'VPN/隧道'}[local.networkType]||'浏览器未公开（不能确认USB/Wi-Fi）';
+    const protocol=String(local.protocol||remote.protocol||'未知').toUpperCase();
+    const endpoint=c=>`${address(c)||'地址隐藏'}:${c.port??'—'}`;
+    return `当前媒体路径：${route}\n本机接口：${network}\n传输协议：${protocol}\n实际媒体：${endpoint(local)} → ${endpoint(remote)}\n候选类型：${local.candidateType||'未知'} → ${remote.candidateType||'未知'}`;
+  }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：82\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：83\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
@@ -72,6 +100,26 @@
       if(current!==s || s.closed)return;
       let inbound;
       stats.forEach(item=>{if(item.type==='inbound-rtp' && (item.kind||item.mediaType)==='video' && !item.isRemote)inbound=item;});
+      s.path=connectionPath(stats);
+      const counters=new Map(),flowing=[];
+      stats.forEach(item=>{
+        if(!['inbound-rtp','outbound-rtp'].includes(item.type)||!['video','audio'].includes(item.kind||item.mediaType))return;
+        const outbound=item.type==='outbound-rtp',count=item[outbound?'bytesSent':'bytesReceived']||0;
+        counters.set(item.id,count);
+        if(count<=(s.mediaCounters?.get(item.id)||0))return;
+        const codec=stats.get(item.codecId)?.mimeType||item.kind||item.mediaType;
+        const label=(outbound?'发送':'接收')+((item.kind||item.mediaType)==='video'?'画面':'声音')+`（${codec}）`;
+        if(!flowing.includes(label))flowing.push(label);
+      });
+      stats.forEach(item=>{
+        if(item.type!=='data-channel'||!['touping-room-text-v1','native-video-stats-v1'].includes(item.label))return;
+        for(const [key,direction] of [['bytesSent','发送'],['bytesReceived','接收']]) {
+          const id=item.id+key,count=item[key]||0;counters.set(id,count);
+          const label=direction+(item.label==='touping-room-text-v1'?'文字/控制':'诊断数据');
+          if(count>(s.mediaCounters?.get(id)||0)&&!flowing.includes(label))flowing.push(label);
+        }
+      });
+      s.mediaCounters=counters;s.flowing=flowing.length?flowing.sort().join('、'):'本次采样无新增可统计数据';
       s.media=inbound;s.statsError=false;
       const codec=inbound && stats.get(inbound.codecId);
       s.codec=codec && /^video\/(H264|VP8|VP9|AV1)$/i.test(codec.mimeType)?codec.mimeType:'';
@@ -146,7 +194,7 @@
       id=Array.from(crypto.getRandomValues(new Uint8Array(16)), x=>x.toString(16).padStart(2,'0')).join('');
       try { localStorage.setItem('touping-browser-id',id); } catch(_) {}
     }
-    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'82-web'};
+    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'83-web'};
   }
   function report(s, event) {
     if(local || !/^[a-f0-9]{32}$/.test(s.auditSession || '')) return;

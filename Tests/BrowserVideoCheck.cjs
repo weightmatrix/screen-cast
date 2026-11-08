@@ -46,7 +46,7 @@ const assert=require('node:assert/strict'),path=require('node:path');
         return {width:video.videoWidth,height:video.videoHeight,decoded:inbound.framesDecoded,codec:stats.get(inbound.codecId).mimeType,colors,diagnostics:document.getElementById('diagnostics').textContent};
       });
       assert.equal(result.codec,'video/H264');assert.ok(result.decoded>0);assert.ok(result.width>=640);assert.ok(result.colors.every(rgb=>Math.max(...rgb)>180));
-      assert.match(result.diagnostics,/网页版本：82/);assert.match(result.diagnostics,/已收到画面/);assert.deepEqual(errors,[]);
+      assert.match(result.diagnostics,/网页版本：83/);assert.match(result.diagnostics,/已收到画面/);assert.deepEqual(errors,[]);
       await page.click('#stop');assert.equal(await page.$eval('#play',e=>e.disabled),true);
       console.log(`PASS browser ${mode}: H264 ${result.width}x${result.height}, decoded=${result.decoded}, four visible color samples, disconnect cleanup`);
       await page.close();

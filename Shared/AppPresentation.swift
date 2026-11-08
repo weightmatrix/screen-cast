@@ -117,15 +117,15 @@ struct PeerDiagnosticsView: View {
             ForEach(peers) { peer in
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(room.peerNicknames[peer.id] ?? "等待昵称") · \(peer.id.prefix(8)) · \(peer.route)")
-                        Text("本机媒体 \(peer.localEndpoint) → 对方 \(peer.remoteEndpoint)")
-                            .textSelection(.enabled).foregroundStyle(.secondary)
+                        Text("\(room.peerNicknames[peer.id] ?? "等待昵称") · \(peer.id.prefix(8))")
+                        ConnectionPathView(info: peer)
                         Text("网络 RTT \(ReceiveTiming.text(peer.rttMS))")
                     }.font(.system(size: 14, design: .monospaced))
                     Spacer(minLength: 4)
                     Button("断开", role: .destructive) { disconnect(peer.id) }
                 }
             }
+            Text(MediaPath.preference).font(.caption).foregroundStyle(.secondary)
             Text("RTT 为网络往返时间，约每 2 秒更新；不是端到端画面延迟。")
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -316,5 +316,19 @@ struct ReceiverAudioControls: View {
             if !audio.error.isEmpty { Text(audio.error).font(.caption).foregroundStyle(.red) }
         }.onAppear { audio.beginMetering() }.onDisappear { audio.setTesting(false) }
             .onChange(of: input) { audio.selectInput($0) }.onChange(of: output) { audio.selectOutput($0) }
+    }
+}
+
+struct ConnectionPathView: View {
+    let info: PeerDiagnostic?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("当前媒体路径：" + (info?.route ?? "等待实际路径统计"))
+            if let value = info?.networkInterface { Text("本机接口：" + value) }
+            if let info { Text("媒体地址/协议：\(info.localEndpoint) → \(info.remoteEndpoint)").foregroundStyle(.secondary) }
+            if let value = info?.signals { Text("最近采样传输：" + value) }
+            Text("文字聊天及诊断也共用此直连；服务器不转发媒体。")
+                .font(.caption).foregroundStyle(.secondary)
+        }.font(.caption).textSelection(.enabled)
     }
 }

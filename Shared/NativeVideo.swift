@@ -431,6 +431,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var previousPackets: (count: Double, delay: Double, lost: Double, bytes: Double, time: Double)?
     private var remoteLost = 0.0
     private var selectedPath = ""
+    private var mediaCounters: [String: Double] = [:]
     private var firstFrameWork: DispatchWorkItem?
     private var disconnectedWork: DispatchWorkItem?
     var onConnected: (() -> Void)?
@@ -494,6 +495,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         config.sdpSemantics = .unifiedPlan
         config.iceServers = internet ? [RTCIceServer(urlStrings: [InternetSettings.stunURL, "stun:stun.cloudflare.com:3478"])] : []
         config.iceTransportPolicy = .all
+        config.candidateNetworkPolicy = .all
+        config.continualGatheringPolicy = .gatherContinually
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         _ = NativeVideo.initialize
         let audio = NativeAudioDevice(input: source?.audio, roomPeer: diagnosticID, hosting: source != nil)
@@ -692,7 +695,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     self.onReceiveTiming?(self.receiveTimingSampler.sample(rtt: rtt, jitter: jitter, emitted: emitted, decode: decode, decoded: decoded))
                 }
             }
-            if self.sending, let pair {
+            if let pair {
                 func endpoint(_ key: String) -> String {
                     guard let cid = pair.values[key] as? String, let candidate = report.statistics[cid] else { return "—" }
                     let address = (candidate.values["address"] as? String) ?? (candidate.values["ip"] as? String) ?? "隐藏地址"
@@ -702,11 +705,40 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 }
                 let rtt = (pair.values["currentRoundTripTime"] as? NSNumber)?.doubleValue
                 let local = endpoint("localCandidateId"), remote = endpoint("remoteCandidateId")
+                let lc = (pair.values["localCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
+                let rc = (pair.values["remoteCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
+                let interface = MediaPath.interface(local: lc, remote: rc)
+                let route = MediaPath.route(local: lc, remote: rc, interface: interface)
+                let interfaceText = MediaPath.interfaceText(interface, candidate: lc)
+                var counters: [String: Double] = [:], flowing: [String] = []
+                for stat in report.statistics.values where stat.type == "outbound-rtp" || stat.type == "inbound-rtp" {
+                    guard let kind = (stat.values["kind"] ?? stat.values["mediaType"]) as? String, ["video", "audio"].contains(kind) else { continue }
+                    let outbound = stat.type == "outbound-rtp"
+                    let count = (stat.values[outbound ? "bytesSent" : "bytesReceived"] as? NSNumber)?.doubleValue ?? 0
+                    counters[stat.id] = count
+                    guard count > (self.mediaCounters[stat.id] ?? 0) else { continue }
+                    let codec = (stat.values["codecId"] as? String).flatMap { report.statistics[$0]?.values["mimeType"] as? String } ?? kind
+                    let label = (outbound ? "发送" : "接收") + (kind == "video" ? "画面" : "声音") + "（" + String(codec.prefix(32)) + "）"
+                    if !flowing.contains(label) { flowing.append(label) }
+                }
+                for stat in report.statistics.values where stat.type == "data-channel" {
+                    guard let label = stat.values["label"] as? String, ["touping-room-text-v1", "native-video-stats-v1"].contains(label) else { continue }
+                    for (key, direction) in [("bytesSent", "发送"), ("bytesReceived", "接收")] {
+                        let id = stat.id + key, count = (stat.values[key] as? NSNumber)?.doubleValue ?? 0
+                        counters[id] = count
+                        if count > (self.mediaCounters[id] ?? 0) {
+                            let text = direction + (label == "touping-room-text-v1" ? "文字/控制" : "诊断数据")
+                            if !flowing.contains(text) { flowing.append(text) }
+                        }
+                    }
+                }
+                self.mediaCounters = counters
+                let signals = flowing.isEmpty ? "本次采样无新增可统计数据" : flowing.sorted().joined(separator: "、")
                 DispatchQueue.main.async { [weak self] in
                     guard let self, !self.closed else { return }
                     self.onDiagnostic?(PeerDiagnostic(id: self.diagnosticID, device: self.remoteDevice,
-                        route: self.internet ? "广域网" : "局域网", localEndpoint: local, remoteEndpoint: remote,
-                        rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }))
+                        route: route, localEndpoint: local, remoteEndpoint: remote,
+                        rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals))
                 }
             }
             let available = (pair?.values["availableOutgoingBitrate"] as? NSNumber)?.doubleValue ?? 0

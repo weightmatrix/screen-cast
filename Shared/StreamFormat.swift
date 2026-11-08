@@ -1,5 +1,8 @@
 import Foundation
 import CoreMedia
+#if os(macOS)
+import SystemConfiguration
+#endif
 
 /// Capture-side compensation for the inverse quarter-turns reported on iPad.
 /// Keep this separate from presentation and the generic pixel rotation API.
@@ -419,6 +422,8 @@ struct PeerDiagnostic: Codable, Identifiable {
     var localEndpoint: String
     var remoteEndpoint: String
     var rttMS: Double?
+    var networkInterface: String? = nil
+    var signals: String? = nil
 }
 
 enum HostIdentity {
@@ -427,5 +432,98 @@ enum HostIdentity {
         uname(&info)
         let model = withUnsafeBytes(of: &info.machine) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
         return model + " · " + ProcessInfo.processInfo.operatingSystemVersionString
+    }
+}
+
+/// Describes only the selected ICE pair; the invitation mode is deliberately ignored.
+enum MediaPath {
+    static let preference = "优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准"
+    struct Interface {
+        var name: String
+        var detail: String
+        var deviceUSB = false
+        var tunnel = false
+        var sameSubnet = false
+    }
+    static func bytes(_ address: String) -> [UInt8]? {
+        let text = address.replacingOccurrences(of: "[", with: "").replacingOccurrences(of: "]", with: "").split(separator: "%").first.map(String.init) ?? ""
+        var v4 = in_addr(), v6 = in6_addr()
+        if inet_pton(AF_INET, text, &v4) == 1 { return withUnsafeBytes(of: &v4) { Array($0) } }
+        if inet_pton(AF_INET6, text, &v6) == 1 {
+            let bytes = withUnsafeBytes(of: &v6) { Array($0) }
+            if bytes.prefix(10).allSatisfy({ $0 == 0 }), bytes[10] == 255, bytes[11] == 255 { return Array(bytes.suffix(4)) }
+            return bytes
+        }
+        return nil
+    }
+    static func nonPublic(_ address: String) -> Bool? {
+        guard let ip = bytes(address) else { return nil }
+        if ip.count == 4 {
+            return ip[0] == 10 || ip[0] == 127 || ip[0] == 0 || (ip[0] == 172 && (16...31).contains(ip[1])) || (ip[0] == 192 && ip[1] == 168) || (ip[0] == 169 && ip[1] == 254) || (ip[0] == 100 && (64...127).contains(ip[1])) || ip[0] >= 224
+        }
+        return ip.allSatisfy { $0 == 0 } || (ip.dropLast().allSatisfy { $0 == 0 } && ip.last == 1) || ip[0] & 0xfe == 0xfc || (ip[0] == 0xfe && ip[1] & 0xc0 == 0x80) || ip[0] == 0xff
+    }
+    static func address(_ candidate: [String: Any]) -> String {
+        candidate["address"] as? String ?? candidate["ip"] as? String ?? ""
+    }
+    static func route(local: [String: Any], remote: [String: Any], interface: Interface?) -> String {
+        let lt = local["candidateType"] as? String, rt = remote["candidateType"] as? String
+        if lt == "relay" || rt == "relay" { return "中继路径" }
+        if let ip = bytes(address(remote)), (ip.count == 4 && ip[0] == 127) || (ip.count == 16 && ip.dropLast().allSatisfy({ $0 == 0 }) && ip.last == 1) { return "本机回环直连" }
+        if interface?.tunnel == true || local["networkType"] as? String == "vpn" { return "VPN/隧道直连（底层网络未知）" }
+        if lt == "host", rt == "host", interface?.sameSubnet == true {
+            return interface?.deviceUSB == true ? "USB设备网络直连" : "局域网直连（同子网）"
+        }
+        if nonPublic(address(local)) == true && nonPublic(address(remote)) == true { return "内网直连（局域网/VPN待确认）" }
+        if nonPublic(address(remote)) == false { return "公网地址直连（可能同网回环）" }
+        if lt == "srflx" || rt == "srflx" || lt == "prflx" || rt == "prflx" { return "公网候选直连（范围待确认）" }
+        return "直连（地址隐藏或接口未确认）"
+    }
+    static func interface(local: [String: Any], remote: [String: Any]) -> Interface? {
+        guard let localIP = bytes(address(local)) else { return nil }
+        let remoteIP = bytes(address(remote))
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0 else { return nil }
+        defer { freeifaddrs(list) }
+        var item = list
+        while let current = item {
+            defer { item = current.pointee.ifa_next }
+            let value = current.pointee
+            guard let addr = value.ifa_addr, addr.pointee.sa_family == AF_INET || addr.pointee.sa_family == AF_INET6 else { continue }
+            func numeric(_ pointer: UnsafePointer<sockaddr>) -> String? {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                guard getnameinfo(pointer, socklen_t(pointer.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0 else { return nil }
+                return String(cString: host)
+            }
+            guard let text = numeric(UnsafePointer(addr)), bytes(text) == localIP else { continue }
+            let name = String(cString: value.ifa_name)
+            var result = Interface(name: name, detail: name, tunnel: name.hasPrefix("utun") || name.hasPrefix("ipsec") || name.hasPrefix("tun"))
+            if let mask = value.ifa_netmask, let maskText = numeric(UnsafePointer(mask)), let maskIP = bytes(maskText), let remoteIP, maskIP.count == localIP.count, remoteIP.count == localIP.count, maskIP.contains(where: { $0 != 0 }) {
+                result.sameSubnet = zip(zip(localIP, remoteIP), maskIP).allSatisfy { ($0.0.0 & $0.1) == ($0.0.1 & $0.1) }
+            }
+            #if os(macOS)
+            if let interfaces = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface],
+               let found = interfaces.first(where: { (SCNetworkInterfaceGetBSDName($0) as String?) == name }) {
+                let label = (SCNetworkInterfaceGetLocalizedDisplayName(found) as String?) ?? name
+                let type = (SCNetworkInterfaceGetInterfaceType(found) as String?) ?? ""
+                result.detail = "\(label)（\(name)）"
+                // USB Ethernet dongles do not prove a direct USB connection to the receiver.
+                result.deviceUSB = label.localizedCaseInsensitiveContains("USB") && (label.localizedCaseInsensitiveContains("iPhone") || label.localizedCaseInsensitiveContains("iPad"))
+                if type == (kSCNetworkInterfaceTypeIEEE80211 as String) { result.detail = "Wi-Fi · " + result.detail }
+            }
+            #endif
+            return result
+        }
+        return nil
+    }
+    static func interfaceText(_ interface: Interface?, candidate: [String: Any]) -> String {
+        if let interface { return interface.detail }
+        switch candidate["networkType"] as? String {
+        case "wifi": return "Wi-Fi（统计报告）"
+        case "ethernet": return "有线网络（USB未确认）"
+        case "cellular": return "蜂窝网络（统计报告）"
+        case "vpn": return "VPN/隧道"
+        default: return "接口未公开（不能确认USB/Wi-Fi）"
+        }
     }
 }

@@ -41,6 +41,7 @@ final class StreamClient: ObservableObject {
     @Published var receivesMicrophone = true { didSet { updateAudio() } }
     private func updateAudio() { nativePeer?.receiveAudio(page: receivesPageAudio, microphone: receivesMicrophone) }
     @Published private(set) var receiveTiming = ReceiveTiming()
+    @Published private(set) var connectionInfo: PeerDiagnostic?
     private var nativePeer: NativeVideoPeer?
     private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
@@ -82,6 +83,10 @@ final class StreamClient: ObservableObject {
     private func configureNativePeer(_ video: NativeVideoPeer) {
         nativePeer = video
         updateAudio()
+        video.onDiagnostic = { [weak self, weak video] value in
+            guard let self, self.nativePeer === video else { return }
+            self.connectionInfo = value
+        }
         video.onReceiveTiming = { [weak self, weak video] timing in
             guard let self, self.nativePeer === video else { return }
             self.receiveTiming = timing
@@ -263,7 +268,7 @@ final class StreamClient: ObservableObject {
         RoomAudioSettings.shared.setMicrophone(false)
         waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
-        receiveTiming = ReceiveTiming()
+        receiveTiming = ReceiveTiming(); connectionInfo = nil
         nativeRoom?.stop(); nativeRoom = nil
         nativePeer?.stop(); nativePeer = nil
         internetDirect = false

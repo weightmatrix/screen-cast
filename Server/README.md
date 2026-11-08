@@ -1,3 +1,7 @@
+## 83版实际媒体路径诊断
+
+receiver.js按WebRTC transport.selectedCandidatePairId显示真正被选中的路径、接口（可用时）、UDP/TCP及端点，按RTP/DataChannel字节增量显示采样传输。mDNS或浏览器未公开接口时不猜测USB；公网候选可能同网回环。网页不能强制USB接口择路；实际由ICE决定，不改变服务器职责或审计结构。ops/deploy_receiver83.py仅原子发布两份静态文件，回滚backups/before83-web，无服务重启。
+
 ## 81版状态纹样与百度回调排查
 
 网页声音按钮使用对称SVG卷草，与原生状态控件统一，减少动态效果设置下关闭动画。ops/deploy_receiver81.py只替换两份静态文件，回滚backups/before81-web，无服务重启。

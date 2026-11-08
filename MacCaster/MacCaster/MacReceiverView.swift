@@ -119,7 +119,9 @@ struct MacReceiverView: View {
                 LocalRecordingControls(recorder: client.recorder)
                 ReceiverAudioControls(sound: Binding(get: { client.receivesPageAudio || client.receivesMicrophone }, set: { client.receivesPageAudio = $0; client.receivesMicrophone = $0 }))
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("诊断").font(.headline)
+                    Text("连接信息与诊断").font(.headline)
+                    ConnectionPathView(info: client.connectionInfo)
+                    Text(MediaPath.preference).font(.caption).foregroundStyle(.secondary)
                     HStack { Circle().fill(statusColor).frame(width: 8,height: 8); Text(LocalizedStringKey(statusText)).font(.caption) }
                     if !client.recoveryMessage.isEmpty { Text(client.recoveryMessage).font(.caption).foregroundStyle(.secondary) }
                     if isConnected { ReceiveTimingView(timing: client.receiveTiming); Text(client.decoder.diagText).font(.caption); Text("已接收 \(client.frameCount) 帧").font(.caption) }

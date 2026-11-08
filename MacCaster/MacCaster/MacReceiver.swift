@@ -426,6 +426,7 @@ final class MacReceiverClient: ObservableObject {
     @Published var receivesMicrophone = true { didSet { updateAudio() } }
     private func updateAudio() { nativePeer?.receiveAudio(page: receivesPageAudio, microphone: receivesMicrophone) }
     @Published private(set) var receiveTiming = ReceiveTiming()
+    @Published private(set) var connectionInfo: PeerDiagnostic?
     private var nativePeer: NativeVideoPeer?
     private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
@@ -451,6 +452,10 @@ final class MacReceiverClient: ObservableObject {
         nativePeer = video
         updateAudio()
         video.recordPlayback { [weak recorder] samples, time in recorder?.appendAudio(samples, time: time) }
+        video.onDiagnostic = { [weak self, weak video] value in
+            guard let self, self.nativePeer === video else { return }
+            self.connectionInfo = value
+        }
         video.onReceiveTiming = { [weak self, weak video] timing in
             guard let self, self.nativePeer === video else { return }
             self.receiveTiming = timing
@@ -613,7 +618,7 @@ final class MacReceiverClient: ObservableObject {
         waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
         recorder.endSegment()
-        receiveTiming = ReceiveTiming()
+        receiveTiming = ReceiveTiming(); connectionInfo = nil
         nativeRoom?.stop(); nativeRoom = nil
         nativePeer?.stop(); nativePeer = nil
         internetDirect = false
