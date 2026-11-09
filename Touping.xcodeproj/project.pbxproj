@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B91110000000000000000004 /* MacIcon-Night-1024.png in Resources */ = {isa = PBXBuildFile; fileRef = B91110000000000000000002 /* MacIcon-Night-1024.png */; };
+		B91110000000000000000003 /* MacIcon-1024.png in Resources */ = {isa = PBXBuildFile; fileRef = B91110000000000000000001 /* MacIcon-1024.png */; };
         CD7900000000000000000011 = {isa = PBXBuildFile; fileRef = CD7900000000000000000001; };
         CD7200000000000000000043 = {isa = PBXBuildFile; fileRef = CD7200000000000000000004; };
         CD7200000000000000000042 = {isa = PBXBuildFile; fileRef = CD7200000000000000000004; };
@@ -126,6 +128,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B91110000000000000000002 /* MacIcon-Night-1024.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "MacIcon-Night-1024.png"; sourceTree = "<group>"; };
+		B91110000000000000000001 /* MacIcon-1024.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "MacIcon-1024.png"; sourceTree = "<group>"; };
         CD7900000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaiduDrive.swift; sourceTree = "<group>"; };
         CD7200000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; name = receiver-room.js; path = Server/Web/receiver-room.js; sourceTree = SOURCE_ROOT; };
         CD7200000000000000000003 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RoomControls.swift; path = Shared/RoomControls.swift; sourceTree = SOURCE_ROOT; };
@@ -298,6 +302,8 @@
 				BF0000000000000000000001,
 				AB0000000000000000000104 /* CastingServer.swift */,
 				AB0000000000000000000105 /* Info.plist */,
+				B91110000000000000000001 /* MacIcon-1024.png */,
+				B91110000000000000000002 /* MacIcon-Night-1024.png */,
 				AB9D03DD6324E546D2A3D6DC /* AppIcon.icns */,
 			);
 			name = macOS;
@@ -464,6 +470,8 @@
                 CD7200000000000000000043,
                 CD5100000000000000000023,
                 CD5100000000000000000033,
+				B91110000000000000000003 /* MacIcon-1024.png in Resources */,
+				B91110000000000000000004 /* MacIcon-Night-1024.png in Resources */,
 				ABE2DD6D8C5949456087B68D /* AppIcon.icns in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

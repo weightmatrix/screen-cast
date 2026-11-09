@@ -287,6 +287,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
 
 final class RecordingAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        CastingAppearanceIcon.shared.start()
         DispatchQueue.main.async {
             guard let services = NSApp.servicesMenu,
                   let appMenu = NSApp.mainMenu?.items.first?.submenu,
@@ -397,5 +398,34 @@ struct RecordingFolderSettings: View {
                 .font(.caption).foregroundStyle(.secondary)
             if !preferences.errorMessage.isEmpty { Text(preferences.errorMessage).font(.caption).foregroundStyle(.red) }
         }
+    }
+}
+
+
+@MainActor
+final class CastingAppearanceIcon {
+    static let shared = CastingAppearanceIcon()
+    private var appearanceObserver: NSObjectProtocol?
+    private var activationObserver: NSObjectProtocol?
+
+    func start() {
+        guard appearanceObserver == nil else { return }
+        appearanceObserver = DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.refresh() } }
+        activationObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in Task { @MainActor in self?.refresh() } }
+        refresh()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.refresh() }
+    }
+
+    func refresh() {
+        let style = UserDefaults.standard.persistentDomain(forName: UserDefaults.globalDomain)?["AppleInterfaceStyle"] as? String
+        let name = style == "Dark" ? "MacIcon-Night-1024" : "MacIcon-1024"
+        guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
+              let image = NSImage(contentsOf: url), image.isValid else { return }
+        NSApp.applicationIconImage = image
+        NSLog("Casting appearance icon: %@", name)
     }
 }

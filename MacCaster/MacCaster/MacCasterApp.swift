@@ -27,6 +27,7 @@ struct MacCasterApp: App {
     var body: some Scene {
         WindowGroup("投屏") {
             RootView()
+                .onAppear { CastingAppearanceIcon.shared.start() }
                 .background(NativeWindowCapabilities().frame(width: 0, height: 0))
                 .environment(\.locale, AppLanguage.locale(language))
                 .focusEffectDisabled()
