@@ -62,7 +62,7 @@ final class DiagLog { static func log(_ tag: String, _ text: String) {} }
             try await Task.sleep(nanoseconds: 50_000_000)
         }
         let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }
-        precondition(files.count >= 2, "Reconnect must finalize and resume product recording: \(recorder.message)")
+        precondition(files.count == 1, "Reconnect must keep one whole lesson: \(recorder.message)")
         let asset = AVURLAsset(url: files[0])
         let audio = try await asset.loadTracks(withMediaType: .audio)
         let video = try await asset.loadTracks(withMediaType: .video)

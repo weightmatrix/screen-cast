@@ -58,13 +58,34 @@ enum BaiduTransport {
         }
         guard size > 0 else { throw DriveError.message("录课文件为空") }; return (size, list)
     }
+    struct LocalFileStamp: Equatable {
+        let size: Int64
+        let modified: Date
+        let inode: UInt64
+    }
+    static func localStamp(_ file: URL) throws -> LocalFileStamp {
+        let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
+        guard attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = attributes[.size] as? NSNumber, let date = attributes[.modificationDate] as? Date,
+              let inode = attributes[.systemFileNumber] as? NSNumber else { throw DriveError.message("本地录课文件不可用") }
+        return LocalFileStamp(size: size.int64Value, modified: date, inode: inode.uint64Value)
+    }
+    static func removeUploadedFile(_ file: URL, matching stamp: LocalFileStamp) throws {
+        guard try localStamp(file) == stamp else { throw DriveError.message("本地文件上传后发生变化，已保留") }
+        try FileManager.default.removeItem(at: file)
+    }
     static func upload(_ file: URL, directory: String, token: String) async throws {
         let (size, hashes) = try await Task.detached(priority: .utility) { try self.hashes(file) }.value
         let remote = (directory == "/" ? "" : directory) + "/" + file.lastPathComponent
         let blockList = String(data: try JSONSerialization.data(withJSONObject: hashes), encoding: .utf8)!
         var values = ["path": remote, "size": String(size), "isdir": "0", "block_list": blockList, "rtype": "0", "autoinit": "1"]
         let pre = try await request(url("/rest/2.0/xpan/file", token: token, parameters: ["method": "precreate"]), form: values)
-        if pre["return_type"] as? Int == 2 { return }
+        if pre["return_type"] as? Int == 2 {
+            guard pre["size"] as? Int64 == size, pre["path"] as? String == remote else {
+                throw DriveError.message("网盘秒传结果未能确认文件大小和路径，本地录课已保留")
+            }
+            return
+        }
         guard let uploadID = pre["uploadid"] as? String, !uploadID.isEmpty,
               let missing = pre["block_list"] as? [Int], missing.allSatisfy({ hashes.indices.contains($0) }) else { throw DriveError.message("百度预上传响应无效，本地文件已保留") }
         let handle = try FileHandle(forReadingFrom: file); defer { try? handle.close() }
@@ -257,12 +278,18 @@ enum BaiduTransport {
                     let file = root.appendingPathComponent(job.file)
                     let values = try file.resourceValues(forKeys: [.isSymbolicLinkKey, .isRegularFileKey])
                     guard values.isSymbolicLink != true, values.isRegularFile == true else { throw DriveError.message("本地待传文件不可用，已暂停") }
+                    let stamp = try BaiduTransport.localStamp(file)
                     let access = try await token(); status = "正在上传：" + job.file
                     try await BaiduTransport.upload(file, directory: job.directory, token: access)
                     try Task.checkCancellation(); guard workerID == id else { return }
                     jobs.removeFirst()
                     do { try persistQueue() } catch { jobs.insert(job, at: 0); throw DriveError.message("上传完成但本地待传状态未能保存，请检查磁盘") }
-                    status = "百度网盘已保存：" + job.file
+                    do {
+                        try BaiduTransport.removeUploadedFile(file, matching: stamp)
+                        status = "百度网盘已保存，本地文件已删除：" + job.file
+                    } catch {
+                        status = "百度网盘已保存，本地删除失败，请手动清理：" + job.file
+                    }
                 } catch {
                     guard workerID == id, !Task.isCancelled, !jobs.isEmpty, jobs[0].file == job.file else { return }
                     jobs[0].attempts += 1; try? persistQueue(); status = error.localizedDescription
@@ -292,11 +319,11 @@ struct BaiduDriveSettings: View {
                 Button("复制回调地址") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(BaiduDrive.callback, forType: .string) }
                 Text("出现 redirect_uri_mismatch 时，请在百度网盘开放平台对应应用的安全设置中保存上面的完整地址；普通登录和二维码登录使用同一地址。").font(.caption).foregroundStyle(.secondary)
             }
-            Toggle("录课分段完成后上传百度网盘", isOn: $drive.enabled).disabled(!drive.loggedIn)
+            Toggle("录课完成后上传百度网盘", isOn: $drive.enabled).disabled(!drive.loggedIn)
             HStack { Text("网盘目录：" + drive.destination).lineLimit(2); Button("选择网盘目录") { choosing = true; drive.browse(drive.destination) }.disabled(!drive.loggedIn) }
             Text(drive.status).font(.caption).foregroundStyle(.secondary)
             if drive.pendingCount > 0 { HStack { Text("待传 \(drive.pendingCount) 个录课文件"); Button("重试上传") { drive.retryUploads() }; Button("清除待传") { confirmClear = true } } }
-            Text("录课从本机直接上传百度网盘，不经过投屏服务器。每10分钟完成一段后上传，原文件保留；授权有效期内自动续期。")
+            Text("录课从本机直接上传百度网盘，不经过投屏服务器。停止录课并保存完整文件后上传；确认上传成功自动删除本地文件，失败则保留。当前单文件最多4GB；授权有效期内自动续期。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("清除待传记录？本地录像和网盘文件均保留。", isPresented: $confirmClear) {

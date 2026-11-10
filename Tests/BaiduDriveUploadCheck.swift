@@ -30,6 +30,8 @@ final class DriveFixtureProtocol: URLProtocol, @unchecked Sendable {
             precondition(form["path"] == "/课程/" + Self.name && form["rtype"] == "0")
             precondition(form["size"] == String(4 * 1024 * 1024 + 17))
             result = Self.mode == "conflict" ? ["errno": -8] : ["errno": 0, "uploadid": "fixture-upload", "block_list": [0, 1], "return_type": 1]
+                    if Self.mode == "rapid" { result = ["errno": 0, "return_type": 2, "size": 4 * 1024 * 1024 + 17, "path": "/课程/" + Self.name] }
+            if Self.mode == "unverified-rapid" { result = ["errno": 0, "return_type": 2] }
         } else if params["method"] == "upload" {
             precondition(url.host == "d.pcs.baidu.com")
             let index = Int(params["partseq"]!)!, boundary = request.value(forHTTPHeaderField: "Content-Type")!.components(separatedBy: "boundary=").last!
@@ -63,11 +65,20 @@ final class DriveFixtureProtocol: URLProtocol, @unchecked Sendable {
         DriveFixtureProtocol.hashes = try BaiduTransport.hashes(file).1
         try await BaiduTransport.upload(file, directory: "/课程", token: "fixture+token=only")
         precondition(FileManager.default.fileExists(atPath: file.path))
-        for mode in ["conflict", "bad-md5"] {
+        DriveFixtureProtocol.mode = "rapid"
+        try await BaiduTransport.upload(file, directory: "/课程", token: "fixture+token=only")
+        for mode in ["conflict", "bad-md5", "unverified-rapid"] {
             DriveFixtureProtocol.mode = mode; DriveFixtureProtocol.parts = 0; DriveFixtureProtocol.bytes = 0
             do { try await BaiduTransport.upload(file, directory: "/课程", token: "fixture+token=only"); preconditionFailure("Must reject \(mode)") } catch {}
             precondition(FileManager.default.fileExists(atPath: file.path))
         }
-        print("PASS direct-to-Baidu hosts, unchanged unified name, 4MiB bounded multipart slices, MD5 verification, no overwrite and retained local file on failure")
+        let stamp = try BaiduTransport.localStamp(file)
+        try Data("changed after upload".utf8).write(to: file)
+        do { try BaiduTransport.removeUploadedFile(file, matching: stamp); preconditionFailure("Changed file must survive") } catch {}
+        precondition(FileManager.default.fileExists(atPath: file.path))
+        let current = try BaiduTransport.localStamp(file)
+        try BaiduTransport.removeUploadedFile(file, matching: current)
+        precondition(!FileManager.default.fileExists(atPath: file.path))
+        print("PASS deletion only for unchanged local file; direct-to-Baidu hosts, unchanged unified name, 4MiB bounded multipart slices, MD5 verification, no overwrite and retained local file on failure")
     }
 }

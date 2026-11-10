@@ -28,6 +28,14 @@ struct RecordingNameFormat {
     }
 }
 
+enum RecordingQuality: String, CaseIterable {
+    case compact, high, ultra
+    var title: String { switch self { case .compact: return "省空间 · 720p"; case .high: return "高清 · 1080p"; case .ultra: return "超清 · 原始画面（最高4K）" } }
+    var edge: Double { switch self { case .compact: return 1280; case .high: return 1920; case .ultra: return 3840 } }
+    var bitrate: Int { switch self { case .compact: return 3_000_000; case .high: return 8_000_000; case .ultra: return 20_000_000 } }
+    static var current: Self { Self(rawValue: UserDefaults.standard.string(forKey: "lesson.quality") ?? "") ?? .high }
+}
+
 /// Records the received picture and the locally selected audio mix. Writer work
 /// never blocks WebRTC or the audio render thread; only two pictures are retained.
 final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
@@ -54,11 +62,13 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     private var segment: Segment?
     private var outputFolder: URL?
     private var outputNaming = RecordingNameFormat()
+    private var outputQuality = RecordingQuality.high
     private let namingOverride: RecordingNameFormat?
     private let cloudEligible: Bool
     private var finishing = 0
     private var folderSubscription: AnyCancellable?
     private var lastVideoTime = -Double.infinity
+    private var lastSpaceCheck = -Double.infinity
     private let segmentDuration: TimeInterval
     private static let instances = NSHashTable<LocalLessonRecorder>.weakObjects()
 
@@ -72,7 +82,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         let folder: URL
         let stem: String
         var audioTime = -Double.infinity
-        init(folder: URL, size: CGSize, time: Double, naming: RecordingNameFormat) throws {
+        init(folder: URL, size: CGSize, time: Double, naming: RecordingNameFormat, quality: RecordingQuality) throws {
             self.size = size; started = time
             stem = naming.name(at: Date()); self.folder = folder
             let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
@@ -80,7 +90,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
             writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
             video = AVAssetWriterInput(mediaType: .video, outputSettings: [AVVideoCodecKey: AVVideoCodecType.h264,
                 AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
-                AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 8_000_000,
+                AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: quality.bitrate,
                     AVVideoExpectedSourceFrameRateKey: 30, AVVideoMaxKeyFrameIntervalKey: 60]])
             audio = AVAssetWriterInput(mediaType: .audio, outputSettings: [AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: 48000, AVNumberOfChannelsKey: 1, AVEncoderBitRateKey: 128000])
@@ -114,7 +124,7 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
     }
 
-    init(folder: URL? = nil, segmentDuration: TimeInterval = 600, automaticKey: String = "lessonAutomatic.receive", naming: RecordingNameFormat? = nil) {
+    init(folder: URL? = nil, segmentDuration: TimeInterval = .infinity, automaticKey: String = "lessonAutomatic.receive", naming: RecordingNameFormat? = nil) {
         self.namingOverride = naming; self.cloudEligible = folder == nil
         self.automaticKey = automaticKey
         self.segmentDuration = segmentDuration
@@ -136,11 +146,12 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         guard folder != nil else { message = "请先在设置中选择录课文件夹"; return }
         guard let folder, !isArmed, !isSaving else { return }
         let naming = namingOverride ?? RecordingNameFormat.current()
+        let quality = RecordingQuality.current
         let token = UUID()
         lock.lock(); generation = token; accepting = true; lock.unlock()
         isArmed = true; message = "等待接收画面，连接后自动录课"
         queue.async {
-            self.outputFolder = folder; self.outputNaming = naming; self.lastVideoTime = -.infinity
+            self.outputFolder = folder; self.outputNaming = naming; self.outputQuality = quality; self.lastSpaceCheck = -.infinity; self.lastVideoTime = -.infinity
         }
     }
 
@@ -154,8 +165,9 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// A reconnect/rotation starts a new independently playable file.
+    /// Whole-lesson mode keeps its writer across transport interruptions.
     func endSegment() {
+        guard segmentDuration.isFinite else { return }
         queue.async {
             self.finishSegment(); self.lastVideoTime = -.infinity
             if self.ticket() != nil { self.publish("等待接收画面，恢复连接后继续录课") }
@@ -179,23 +191,33 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
             do {
                 let extent = image.extent
                 guard extent.width.isFinite, extent.height.isFinite, extent.width > 1, extent.height > 1 else { return }
-                let scale = min(1, 1920 / max(extent.width, extent.height))
-                let size = CGSize(width: max(2, floor(extent.width * scale / 2) * 2), height: max(2, floor(extent.height * scale / 2) * 2))
-                if let current = self.segment, current.size != size || time - current.started >= self.segmentDuration { self.finishSegment() }
+                let scale = min(1, self.outputQuality.edge / max(extent.width, extent.height))
+                let requestedSize = CGSize(width: max(2, floor(extent.width * scale / 2) * 2), height: max(2, floor(extent.height * scale / 2) * 2))
+                if let current = self.segment, self.segmentDuration.isFinite, current.size != requestedSize || time - current.started >= self.segmentDuration { self.finishSegment() }
+                let size = self.segment?.size ?? requestedSize
+                if time - self.lastSpaceCheck >= 10 {
+                    self.lastSpaceCheck = time
+                    let free = (try FileManager.default.attributesOfFileSystem(forPath: folder.path)[.systemFreeSize] as? NSNumber)?.int64Value
+                    if let free, free <= 200 * 1024 * 1024 {
+                        self.finishSegment()
+                        throw RecordingError.message("剩余空间不足 200 MB，录课已停止")
+                    }
+                }
                 if self.segment == nil {
                     guard self.finishing < 2 else { throw RecordingError.message("磁盘保存过慢，录课已停止") }
-                    let free = (try FileManager.default.attributesOfFileSystem(forPath: folder.path)[.systemFreeSize] as? NSNumber)?.int64Value
-                    if let free, free <= 200 * 1024 * 1024 { throw RecordingError.message("剩余空间不足 200 MB，录课已停止") }
-                    self.segment = try Segment(folder: folder, size: size, time: time, naming: self.outputNaming)
-                    self.publish("正在录课 · 每 10 分钟自动分段")
+                    self.segment = try Segment(folder: folder, size: size, time: time, naming: self.outputNaming, quality: self.outputQuality)
+                    self.publish("正在录课 · " + self.outputQuality.title)
                 }
                 guard let segment = self.segment else { return }
                 guard segment.writer.status == .writing else { throw segment.writer.error ?? RecordingError.message("录课写入失败") }
                 guard segment.video.isReadyForMoreMediaData, let pool = segment.pixels.pixelBufferPool else { return }
                 var buffer: CVPixelBuffer?
                 guard CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer) == kCVReturnSuccess, let buffer else { return }
-                let normalized = image.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
-                    .transformed(by: CGAffineTransform(scaleX: size.width / extent.width, y: size.height / extent.height))
+                let fit = min(size.width / extent.width, size.height / extent.height)
+                let picture = image.transformed(by: CGAffineTransform(translationX: -extent.minX, y: -extent.minY))
+                    .transformed(by: CGAffineTransform(scaleX: fit, y: fit))
+                    .transformed(by: CGAffineTransform(translationX: (size.width - extent.width * fit) / 2, y: (size.height - extent.height * fit) / 2))
+                let normalized = picture.composited(over: CIImage(color: .black).cropped(to: CGRect(origin: .zero, size: size)))
                 self.context.render(normalized, to: buffer, bounds: CGRect(origin: .zero, size: size), colorSpace: CGColorSpaceCreateDeviceRGB())
                 guard segment.pixels.append(buffer, withPresentationTime: CMTime(seconds: time - segment.started, preferredTimescale: 60000)) else {
                     throw segment.writer.error ?? RecordingError.message("录课视频写入失败")
@@ -318,7 +340,7 @@ struct LocalRecordingControls: View {
             if !recorder.isArmed && recorder.message != "未录课" && recorder.message != "录课已保存" && recorder.message != "已停止录课" {
                 Text(recorder.message).font(.caption).foregroundStyle(.secondary)
             }
-            if let url = recorder.lastFile {
+            if let url = recorder.lastFile, FileManager.default.fileExists(atPath: url.path) {
                 Button("显示最近录课") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
             }
         }
@@ -379,12 +401,17 @@ final class RecordingFolderPreferences: ObservableObject {
 
 struct RecordingFolderSettings: View {
     @ObservedObject private var preferences = RecordingFolderPreferences.shared
+    @AppStorage("lesson.quality") private var quality = RecordingQuality.high.rawValue
     @AppStorage("lesson.namePrefix") private var prefix = "录课"
     @AppStorage("lesson.nameYear") private var year = true
     @AppStorage("lesson.nameMonth") private var month = true
     @AppStorage("lesson.nameTime") private var time = true
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Picker("录课清晰度", selection: $quality) {
+                ForEach(RecordingQuality.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+            }
+            Text("下次录课生效；不放大原画面。整节保存为一个文件，停止录课后上传；上传成功自动删除本地文件，失败保留。百度上传当前支持单文件最多4GB。").font(.caption).foregroundStyle(.secondary)
             TextField("录课名字前缀", text: $prefix)
             HStack {
                 Toggle("年份", isOn: $year).toggleStyle(OrnamentalToggleStyle())
@@ -394,7 +421,7 @@ struct RecordingFolderSettings: View {
             Text("示例：" + RecordingNameFormat(prefix: prefix, year: year, month: month, time: time).name(at: Date()) + ".mp4").font(.caption)
             Button("选择录课文件夹") { preferences.chooseFolder() }
             Text(preferences.folder?.path ?? "尚未选择录课文件夹").font(.caption).textSelection(.enabled)
-            Text("录课中的分段缓存在此目录的tmp子文件夹；保存完成后移到主目录。更换目录前请先停止所有录课并等待保存完成。")
+            Text("录课中的文件缓存在此目录的tmp子文件夹；保存完成后移到主目录。更换目录前请先停止所有录课并等待保存完成。")
                 .font(.caption).foregroundStyle(.secondary)
             if !preferences.errorMessage.isEmpty { Text(preferences.errorMessage).font(.caption).foregroundStyle(.red) }
         }

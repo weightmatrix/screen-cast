@@ -14,15 +14,17 @@ import CoreImage
         let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
         let retained = cache.appendingPathComponent("retained-from-previous-session.txt")
         try Data("preserve".utf8).write(to: retained)
-        let recorder = LocalLessonRecorder(folder: folder, segmentDuration: 1, naming: RecordingNameFormat(prefix: "课程", year: true, month: true, time: true))
+        let whole = CommandLine.arguments.contains("--whole")
+        let recorder = LocalLessonRecorder(folder: folder, segmentDuration: whole ? .infinity : 1, naming: RecordingNameFormat(prefix: "课程", year: true, month: true, time: true))
         recorder.start()
         let start = CACurrentMediaTime()
         for n in 0..<100 {
             let size = n < 70 ? CGSize(width: 640, height: 480) : CGSize(width: 480, height: 640)
             let image = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: size))
-            recorder.appendVideo(image, time: start + Double(n) / 30)
+            let pause = whole && n >= 55 ? 601.0 : 0
+            recorder.appendVideo(image, time: start + Double(n) / 30 + pause)
             for block in 0..<3 {
-                let offset = Double(n) / 30 + Double(block) / 100
+                let offset = Double(n) / 30 + Double(block) / 100 + pause
                 let samples = (0..<480).map { Float(sin((offset + Double($0) / 48000) * 440 * 2 * .pi) * 0.2) }
                 recorder.appendAudio(samples, time: start + offset)
             }
@@ -48,7 +50,7 @@ import CoreImage
         precondition(!recorder.isSaving && !recorder.isArmed)
         precondition(!recorder.isRecording)
         let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }
-        precondition(files.count >= 4, "Timed rollover, reconnect and rotation must produce separate files: \(recorder.message)")
+        precondition(whole ? files.count == 1 : files.count >= 4, "Timed rollover, reconnect and rotation must produce separate files: \(recorder.message)")
         var totalVideo = 0, totalAudio = 0
         var sizes = Set<String>()
         for file in files {
@@ -60,7 +62,7 @@ import CoreImage
             let size = try await videos[0].load(.naturalSize)
             sizes.insert("\(Int(size.width))x\(Int(size.height))")
             let duration = try await asset.load(.duration).seconds
-            precondition(duration > 0 && duration < 1.2)
+            precondition(duration > 0 && (whole ? duration > 600 : duration < 1.2))
             let reader = try AVAssetReader(asset: asset)
             let output = AVAssetReaderTrackOutput(track: videos[0], outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
             reader.add(output); precondition(reader.startReading())
@@ -82,7 +84,7 @@ import CoreImage
             while let sample = audio.copyNextSampleBuffer() { totalAudio += CMSampleBufferGetNumSamples(sample) }
             precondition(audioReader.status == .completed)
         }
-        precondition(sizes.count == 2 && totalVideo > 30 && totalAudio > 48000)
+        precondition(sizes.count == (whole ? 1 : 2) && totalVideo > 30 && totalAudio > 48000)
         // No received picture must create no empty/corrupt MP4.
         let count = files.count
         recorder.start(); recorder.stop()
@@ -99,6 +101,6 @@ import CoreImage
         try FileManager.default.createSymbolicLink(at: invalid.appendingPathComponent("tmp"), withDestinationURL: cache)
         do { _ = try RecordingFolderPreferences.cacheDirectory(in: invalid); preconditionFailure("Symlink cache must be rejected") } catch {}
 
-        print("PASS playable H264/AAC MP4, red pixels, \(totalVideo) frames, \(totalAudio) audio samples, timed/reconnect/rotation segments, stop/drain and empty session; files=\(folder.path)")
+        print("PASS playable H264/AAC MP4, red pixels, \(totalVideo) frames, \(totalAudio) audio samples, whole=\(whole), reconnect/rotation, stop/drain and empty session; files=\(folder.path)")
     }
 }
