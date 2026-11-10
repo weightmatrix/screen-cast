@@ -9,6 +9,9 @@ final class RoomAudioSettings {
 @main enum RoomSessionCheck {
     static func main() {
         let room = RoomSession.shared
+        var arrivals: [String] = []
+        let subscription = room.receiverConnected.sink { arrivals.append($0) }
+        defer { subscription.cancel() }
         var first: [[String: Any]] = [], second: [[String: Any]] = []
         room.attach("first", host: true) { first.append($0); return true }
         room.attach("second", host: true) { second.append($0); return true }
@@ -18,6 +21,7 @@ final class RoomAudioSettings {
         precondition(room.peerOrigins["first"] == "公网网页" && room.peerOrigins["second"] == "app局域网邀请码")
         room.receive(["kind":"hello", "participant":bob, "nickname":"Bob", "origin":"not-allowed"], from:"second")
         precondition(room.peerOrigins["second"] == "app局域网邀请码")
+        precondition(arrivals == ["Alice", "Bob"], "One notice per actual sender-side hello, not repeated hello")
         let id = UUID().uuidString
         room.receive(["kind":"chat", "id":id, "author":"Spoofed owner", "text":"Synthetic group message"], from:"first")
         precondition(room.messages.count == 1 && room.messages[0].author == "Alice")
@@ -36,6 +40,15 @@ final class RoomAudioSettings {
         let guest = UUID().uuidString
         room.receive(["kind":"hello", "participant":guest, "nickname":""], from:"unnamed")
         precondition(room.peerNicknames["unnamed"] == "访客·" + guest.prefix(4).uppercased())
+        room.detach("unnamed")
+        let afterGuest = arrivals.count
+        room.attach("receiving", host: false) { _ in true }
+        room.receive(["kind":"hello", "participant":guest, "nickname":"Sender"], from:"receiving")
+        precondition(arrivals.count == afterGuest, "Receiving a sender hello must not show a receiver-joined notice")
+        room.detach("receiving")
+        room.attach("unnamed", host: true) { _ in true }
+        room.receive(["kind":"hello", "participant":guest, "nickname":"Returned"], from:"unnamed")
+        precondition(arrivals.count == afterGuest + 1 && arrivals.last == "Returned", "A new connection after detach must notify again")
         room.detach("unnamed")
 
         let mixer = VoiceRoom.shared

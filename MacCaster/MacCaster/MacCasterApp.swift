@@ -168,6 +168,7 @@ struct RootView: View {
     @EnvironmentObject private var streamer: ScreenStreamer
     @State private var showAddSheet = false
     @State private var sessionsBeforeAdding = Set<UUID>()
+    @State private var connectedNames: [String] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -189,6 +190,15 @@ struct RootView: View {
         .controlSize(.large)
         .tint(AppSkin.victorian(skin) ? AppSkin.ink : CastStyle.accent)
         .preferredColorScheme(AppSkin.victorian(skin) ? .light : nil)
+        .onReceive(RoomSession.shared.receiverConnected) { nickname in
+            if connectedNames.count < 20 { connectedNames.append(nickname) }
+            if !NSApp.isActive { NSApp.requestUserAttention(.informationalRequest) }
+        }
+        .alert("有接收者已连接", isPresented: Binding(get: { !connectedNames.isEmpty }, set: { if !$0 { connectedNames.removeAll() } })) {
+            Button("知道了", role: .cancel) { connectedNames.removeAll() }
+        } message: {
+            Text(connectedNames.joined(separator: "、") + " 已连接你的投屏。")
+        }
         .sheet(isPresented: $showAddSheet, onDismiss: {
             if streamer.sessions.contains(where: { !sessionsBeforeAdding.contains($0.id) }) { appMode = "cast" }
         }) {

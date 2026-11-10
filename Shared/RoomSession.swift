@@ -11,6 +11,8 @@ struct RoomMessage: Identifiable, Codable {
 /// No history is uploaded or written to disk; at most 200 messages remain in memory.
 final class RoomSession: ObservableObject {
     static let shared = RoomSession()
+    /// First authenticated hello for a sender-side link; repeated hellos do not notify.
+    let receiverConnected = PassthroughSubject<String, Never>()
     @Published private(set) var messages: [RoomMessage] = []
     @Published private(set) var peerNicknames: [String: String] = [:]
     @Published private(set) var peerOrigins: [String: String] = [:]
@@ -71,12 +73,14 @@ final class RoomSession: ObservableObject {
         guard var link = links[id], let kind = object["kind"] as? String else { return }
         if kind == "hello" {
             guard let value = object["participant"] as? String, UUID(uuidString: value) != nil else { return }
+            let shouldNotify = link.host && !link.ready
             link.participant = value.lowercased()
             link.nickname = Self.name(object["nickname"] as? String ?? "", fallback: "访客·" + value.prefix(4).uppercased())
             if let key = object["origin"] as? String, let origin = ConnectionOrigin(rawValue: key) { peerOrigins[id] = origin.title }
             link.ready = true; links[id] = link; peerNicknames[id] = link.nickname
             receiverCanSpeak = links.values.contains { !$0.host && $0.ready }
             VoiceRoom.shared.identify(id, participant: link.participant)
+            if shouldNotify { receiverConnected.send(link.nickname) }
             if link.host { _ = link.send(["kind":"host", "participant":participant, "nickname":nickname]) }
             return
         }
