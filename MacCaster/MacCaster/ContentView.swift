@@ -252,6 +252,7 @@ private struct SessionRow: View {
                 VStack(spacing: 10) {
                     SharingIllustration(compact: true)
                     SenderAudioQuickControls(microphone: $session.sendsMicrophone, microphoneActive: session.microphoneActive)
+                        .padding(.top, 24)
                 }
             }
             .padding(.vertical, 8)
