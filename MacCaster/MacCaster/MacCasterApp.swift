@@ -171,7 +171,7 @@ struct RootView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if AppSkin.victorian(skin) { VictorianHeading(title: "李知本·投屏自由").padding(.horizontal, 40).padding(.top, 14).background(AppPaperBackground()) }
+            if AppSkin.victorian(skin) { VictorianHeading(title: "李知本·投屏自由").padding(.horizontal, 40).padding(.top, 14) }
             modeBar
             Group {
             if appMode == "receive" { MacReceiverView() }
@@ -179,7 +179,10 @@ struct RootView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(AppPaperBackground().ignoresSafeArea())
+        .background {
+            if AppSkin.victorian(skin) { AppSkin.paper.ignoresSafeArea() }
+            else { AppPaperBackground().ignoresSafeArea() }
+        }
         .toggleStyle(OrnamentalToggleStyle())
         .font(.system(size: 16))
         .buttonStyle(AppGlassButtonStyle())
@@ -216,7 +219,6 @@ struct RootView: View {
                     .labelStyle(.iconOnly).buttonStyle(AppGlassButtonStyle()).help("添加投屏").padding(.trailing, 24)
             }
             .padding(.horizontal, 24).padding(.vertical, 10)
-            .background(AppPaperBackground())
     }
 
     private func beginAdding() {

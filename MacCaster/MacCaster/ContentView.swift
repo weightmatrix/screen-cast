@@ -19,8 +19,7 @@ struct ContentView: View {
         .padding(24)
         .frame(minWidth: 700, minHeight: 500).frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
-            AppPaperBackground()
-
+            Color.clear.contentShape(Rectangle())
                 .onTapGesture { NSApp.keyWindow?.makeFirstResponder(nil) }
         }
         .task { streamer.loadShareableContent() }
@@ -43,10 +42,11 @@ private struct SharingIllustration: View {
     var body: some View {
         ZStack {
             if AppSkin.victorian(skin) {
-                VStack(spacing: 12) {
-                    Text("❦").font(.system(size: 38, design: .serif)).foregroundStyle(AppSkin.brass)
+                VStack(spacing: compact ? 8 : 12) {
+                    Text("❦").font(.system(size: compact ? 28 : 38, design: .serif)).foregroundStyle(AppSkin.brass)
                     Image(systemName: "display.2").font(.system(size: compact ? 28 : 36, weight: .ultraLight)).foregroundStyle(AppSkin.ink)
-                }.frame(maxWidth: .infinity, maxHeight: .infinity).appPanelStyle()
+                }.frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AppPaperBackground()).overlay { VictorianFrame() }
             } else {
             RoundedRectangle(cornerRadius: compact ? 22 : 30, style: .continuous)
                 .fill(LinearGradient(colors: [Color.blue.opacity(0.14), Color.indigo.opacity(0.06)], startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -165,7 +165,7 @@ private struct SessionRow: View {
         }.onReceive(session.server.$pendingConnections) { if !$0.isEmpty { controlsCollapsed = false; showConnections = true } }
     }
     private var expandedControls: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 Button { controlsCollapsed = true } label: { Image(systemName: "chevron.up") }.help("收成一行")
                 VStack(alignment: .leading, spacing: 10) {
@@ -216,88 +216,62 @@ private struct SessionRow: View {
                     }
                 }
             }
-            HStack(spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("邀请编号 · 邀请设备连接").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                    if editingCode {
-                        HStack {
-                            TextField("6–36 位数字", text: $codeDraft).textFieldStyle(.roundedBorder)
-                                .font(.system(size: 24, design: .monospaced)).frame(width: 230)
-                                .onChange(of: codeDraft) { _, newValue in
-                                    codeError = !streamer.canChangeCode(session, to: codeDraft) && codeDraft != session.code
-                                }.focused($codeFocused)
-                                .background(GeometryReader { proxy in
-                                    Color.clear.preference(key: CodeEditorFrameKey.self, value: proxy.frame(in: .named("code-card")))
-                                })
-                                .onAppear { codeFocused = true }
-                                .onSubmit { commitCode() }
-                                .onExitCommand { editingCode = false; codeError = false }
+            HStack(alignment: .top, spacing: 20) {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("邀请编号 · 邀请设备连接").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                        if editingCode {
+                            HStack {
+                                TextField("6–36 位数字", text: $codeDraft).textFieldStyle(.roundedBorder)
+                                    .font(.system(size: 24, design: .monospaced)).frame(width: 230)
+                                    .onChange(of: codeDraft) { _, newValue in
+                                        codeError = !streamer.canChangeCode(session, to: codeDraft) && codeDraft != session.code
+                                    }.focused($codeFocused)
+                                    .background(GeometryReader { proxy in
+                                        Color.clear.preference(key: CodeEditorFrameKey.self, value: proxy.frame(in: .named("code-card")))
+                                    })
+                                    .onAppear { codeFocused = true }
+                                    .onSubmit { commitCode() }
+                                    .onExitCommand { editingCode = false; codeError = false }
+                            }
+                        } else {
+                            Button { codeDraft = session.code; editingCode = true } label: {
+                                Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
+                                    .lineLimit(1).minimumScaleFactor(0.35)
+                                    .tracking(3).foregroundStyle(.primary)
+                            }.buttonStyle(AppGlassButtonStyle()).help("修改邀请编号")
                         }
-                    } else {
-                        Button { codeDraft = session.code; editingCode = true } label: {
-                            Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
-                                .lineLimit(1).minimumScaleFactor(0.35)
-                                .tracking(3).foregroundStyle(.primary)
-                        }.buttonStyle(AppGlassButtonStyle()).help("修改邀请编号")
-                    }
-                    if codeError {
-                        Text("邀请编号已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
-                        if let candidate = localCodeSuggestion {
-                            Button("采用本机未使用的新码 \(candidate)") { codeDraft = candidate; commitCode() }
-                                .font(.system(size: 13))
+                        if codeError {
+                            Text("邀请编号已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
+                            if let candidate = localCodeSuggestion {
+                                Button("采用本机未使用的新码 \(candidate)") { codeDraft = candidate; commitCode() }
+                                    .font(.system(size: 13))
+                            }
                         }
                     }
-                }
-                Spacer()
-                VStack(spacing: 10) {
+                    Text(AdmissionCredentials.validPassword(streamer.connectionPassword) ? "邀请链接不含密码；请另行告知接收者连接密码" : "请先在设置中设置连接密码")
+                        .font(.caption).foregroundStyle(.secondary)
+                    BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
+                }.frame(maxWidth: .infinity, alignment: .topLeading)
+                VStack(spacing: 14) {
                     SharingIllustration(compact: true)
                     SenderAudioQuickControls(microphone: $session.sendsMicrophone, microphoneActive: session.microphoneActive)
-                        .padding(.top, 24)
                 }
             }
-            .padding(.vertical, 8)
-            Text(AdmissionCredentials.validPassword(streamer.connectionPassword) ? "邀请链接不含密码；请另行告知接收者连接密码" : "请先在设置中设置连接密码")
-                .font(.caption).foregroundStyle(.secondary)
-            BrowserSenderAddresses(server: session.server, code: session.code, internet: session.internetEnabled && session.internetMatchingEnabled)
             Divider()
             HStack(spacing: 12) {
-                Button { showSettings.toggle() } label: { Label("投屏设置", systemImage: "slider.horizontal.3") }
-                    .popover(isPresented: $showSettings) {
-                        ScrollView {
-                        VStack(alignment: .leading, spacing: 18) {
-                            Text("投屏设置").font(.headline)
-                            RoomAudioControls(senderMicrophone: $session.sendsMicrophone)
-                            AudioActionButton(title: session.showsCursor ? "光标已开启" : "光标已关闭", active: session.showsCursor) { session.showsCursor.toggle() }
-                            Divider()
-                            AudioActionButton(title: session.internetEnabled ? "公网ip直连已开启" : "公网ip直连已关闭", active: session.internetEnabled) { session.internetEnabled.toggle() }
-                            AudioActionButton(title: session.internetEnabled && session.internetMatchingEnabled ? "公网邀请码连已开启" : "公网邀请码连已关闭", active: session.internetEnabled && session.internetMatchingEnabled) { session.internetMatchingEnabled.toggle() }.disabled(!session.internetEnabled)
-                            Divider()
-                            Text("\(session.encWidth) × \(session.encHeight) · \(Int(session.currentFPS)) fps")
-                                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                            HStack {
-                                Text("码率")
-                                Spacer()
-                                Text("\(session.bitrate / 1_000_000) Mbps").monospacedDigit().foregroundStyle(.secondary)
-                            }
-                            Slider(value: Binding(get: { Double(session.bitrate) / 1_000_000 },
-                                      set: { session.updateQuality(bitrate: Int($0 * 1_000_000)) }),
-                                   in: 8...100, step: 2).accessibilityLabel("投屏码率")
-                            Picker("帧率", selection: Binding(get: { session.fps }, set: { session.updateQuality(fps: $0) })) {
-                                Text("30 fps").tag(30)
-                                Text("60 fps").tag(60)
-                            }.pickerStyle(.segmented)
-                            Text(session.internetStatus).font(.caption).foregroundStyle(.secondary)
-                            ConnectionPrivacyNotice()
-                            Divider()
-                            LocalRecordingControls(recorder: session.recorder)
-                        }.toggleStyle(.switch).padding(20).frame(width: 480)
-                        }.frame(maxHeight: 680)
-                    }
+                Button { withAnimation(.easeInOut(duration: 0.2)) { showSettings.toggle() } } label: {
+                    Label(showSettings ? "收起投屏设置" : "投屏设置", systemImage: showSettings ? "chevron.up" : "slider.horizontal.3")
+                }.accessibilityValue(showSettings ? "已展开" : "已折叠")
                 Spacer()
                 Button { session.refresh() } label: { Label("刷新", systemImage: "arrow.clockwise") }
                     .help("刷新画面").accessibilityLabel("刷新画面")
                 Button(action: onEdit) { Label("换源", systemImage: "rectangle.2.swap") }
                 Button(action: onStop) { Label("停止", systemImage: "stop.fill").foregroundStyle(.red.opacity(0.85)) }
+            }
+            if showSettings {
+                Divider()
+                inlineSettings
             }
         }
         .onReceive(session.server.$pendingConnections) { if !$0.isEmpty { showConnections = true } }
@@ -312,9 +286,39 @@ private struct SessionRow: View {
             if codeFocused && !codeEditorFrame.contains(event.location) { codeFocused = false }
         })
         .coordinateSpace(name: "code-card")
-        .padding(28)
+        .padding(.horizontal, 24).padding(.vertical, 16)
         .appPanelStyle()
         .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
+    }
+
+    private var inlineSettings: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("投屏设置").font(.headline)
+            RoomAudioControls(senderMicrophone: $session.sendsMicrophone)
+            AudioActionButton(title: session.showsCursor ? "光标已开启" : "光标已关闭", active: session.showsCursor) { session.showsCursor.toggle() }
+            Divider()
+            AudioActionButton(title: session.internetEnabled ? "公网ip直连已开启" : "公网ip直连已关闭", active: session.internetEnabled) { session.internetEnabled.toggle() }
+            AudioActionButton(title: session.internetEnabled && session.internetMatchingEnabled ? "公网邀请码连已开启" : "公网邀请码连已关闭", active: session.internetEnabled && session.internetMatchingEnabled) { session.internetMatchingEnabled.toggle() }.disabled(!session.internetEnabled)
+            Divider()
+            Text("\(session.encWidth) × \(session.encHeight) · \(Int(session.currentFPS)) fps")
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+            HStack {
+                Text("码率")
+                Spacer()
+                Text("\(session.bitrate / 1_000_000) Mbps").monospacedDigit().foregroundStyle(.secondary)
+            }
+            Slider(value: Binding(get: { Double(session.bitrate) / 1_000_000 },
+                      set: { session.updateQuality(bitrate: Int($0 * 1_000_000)) }),
+                   in: 8...100, step: 2).accessibilityLabel("投屏码率")
+            Picker("帧率", selection: Binding(get: { session.fps }, set: { session.updateQuality(fps: $0) })) {
+                Text("30 fps").tag(30)
+                Text("60 fps").tag(60)
+            }.pickerStyle(.segmented)
+            Text(session.internetStatus).font(.caption).foregroundStyle(.secondary)
+            ConnectionPrivacyNotice()
+            Divider()
+            LocalRecordingControls(recorder: session.recorder)
+        }.toggleStyle(OrnamentalToggleStyle())
     }
 
     private func commitCode() {

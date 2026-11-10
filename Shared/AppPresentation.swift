@@ -361,11 +361,20 @@ struct CompactAudioButton: View {
     let title: String
     var active = false
     var showsOff = false
+    var level: Float = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let action: () -> Void
     var body: some View {
         Button(action: action) {
             AudioGlyph(kind: kind, off: showsOff).stroke(style: StrokeStyle(lineWidth: 1.15, lineCap: .round, lineJoin: .round))
-                .frame(width: 21, height: 21).frame(width: 34, height: 34)
+                .frame(width: 21, height: 21)
+                .overlay {
+                    AudioGlyph(kind: kind, off: showsOff)
+                        .stroke(Color(red: 0.24, green: 0.72, blue: 0.37), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                        .mask(alignment: .bottom) { Rectangle().frame(height: 21 * CGFloat(active ? min(1, max(0, level) * 4) : 0)) }
+                        .animation(reduceMotion ? nil : .linear(duration: 0.1), value: level)
+                }
+                .frame(width: 34, height: 34)
                 .foregroundStyle(active ? Color(red: 0.17, green: 0.40, blue: 0.25) : AppSkin.ink)
                 .background { StateOrnament(active: active) }
                 .background { AppPaperBackground().clipShape(RoundedRectangle(cornerRadius: 4)) }
@@ -423,16 +432,16 @@ struct SenderAudioQuickControls: View {
     var body: some View {
         VStack(spacing: 7) {
             HStack(spacing: 7) {
-                CompactAudioButton(kind: .microphone, title: microphone ? ((microphoneActive ?? microphone) ? "话筒已开启" : "话筒待开启") : "话筒已关闭", active: microphoneActive ?? microphone, showsOff: !microphone) { microphone.toggle() }
+                CompactAudioButton(kind: .microphone, title: microphone ? ((microphoneActive ?? microphone) ? "话筒已开启" : "话筒待开启") : "话筒已关闭", active: microphoneActive ?? microphone, showsOff: !microphone, level: audio.inputLevel) { microphone.toggle() }
                 CompactAudioButton(kind: .devices, title: "选择话筒设备") { inputDevices = true }
                     .popover(isPresented: $inputDevices) { AudioDeviceSelectionPanel(input: true) }
             }
             HStack(spacing: 7) {
-                CompactAudioButton(kind: .speaker, title: audio.receivesVoices ? "回传声音已开启" : "回传声音已关闭", active: audio.receivesVoices, showsOff: !audio.receivesVoices) { audio.receivesVoices.toggle() }
+                CompactAudioButton(kind: .speaker, title: audio.receivesVoices ? "回传声音已开启" : "回传声音已关闭", active: audio.receivesVoices, showsOff: !audio.receivesVoices, level: audio.outputLevel) { audio.receivesVoices.toggle() }
                 CompactAudioButton(kind: .devices, title: "选择喇叭设备") { outputDevices = true }
                     .popover(isPresented: $outputDevices) { AudioDeviceSelectionPanel(input: false) }
             }
-        }
+        }.onAppear { audio.beginMetering() }
     }
 }
 
