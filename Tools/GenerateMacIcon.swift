@@ -46,13 +46,13 @@ for size in [16, 32, 128, 256, 512] {
 }
 let process = Process()
 process.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
-process.arguments = ["-c", "icns", iconset.path, "-o", staging.appendingPathComponent("AppIcon.icns").path]
+process.arguments = ["-c", "icns", iconset.path, "-o", staging.appendingPathComponent("AppIcon-Fold.icns").path]
 try process.run(); process.waitUntilExit()
 guard process.terminationStatus == 0 else {
     fputs("iconutil failed; existing source assets were not replaced. Run with normal system image-encoding access.\n", stderr)
     exit(1)
 }
-try Data(contentsOf: staging.appendingPathComponent("AppIcon.icns")).write(to: root.appendingPathComponent("MacCaster/MacCaster/AppIcon.icns"), options: .atomic)
+try Data(contentsOf: staging.appendingPathComponent("AppIcon-Fold.icns")).write(to: root.appendingPathComponent("MacCaster/MacCaster/AppIcon-Fold.icns"), options: .atomic)
 let master = render(1024)
 for name in ["MacCaster/MacCaster/MacIcon-1024.png", "icons/MacCaster-1024.png"] {
     try master.write(to: root.appendingPathComponent(name))

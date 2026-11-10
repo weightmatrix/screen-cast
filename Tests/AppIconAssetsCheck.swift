@@ -7,7 +7,7 @@ import AppKit
         let decoded = FileManager.default.temporaryDirectory.appendingPathComponent("touping-icon-check-\(UUID().uuidString).iconset")
         defer { try? FileManager.default.removeItem(at: decoded) }
         let tool = Process(); tool.executableURL = URL(fileURLWithPath: "/usr/bin/iconutil")
-        tool.arguments = ["-c", "iconset", root.appendingPathComponent("MacCaster/MacCaster/AppIcon.icns").path, "-o", decoded.path]
+        tool.arguments = ["-c", "iconset", root.appendingPathComponent("MacCaster/MacCaster/AppIcon-Fold.icns").path, "-o", decoded.path]
         try tool.run(); tool.waitUntilExit(); precondition(tool.terminationStatus == 0)
         let master = NSBitmapImageRep(data: try Data(contentsOf: root.appendingPathComponent("MacCaster/MacCaster/MacIcon-1024.png")))!
         for size in [16, 32, 128, 256, 512] {

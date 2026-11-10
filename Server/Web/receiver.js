@@ -88,7 +88,7 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：92\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：96\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
@@ -349,5 +349,22 @@
     } catch(_) {status('请使用视频系统控制栏的全屏按钮；画面就绪后再试。');}
   };
   $('fullscreen').onclick=maximize;
+  // Keep a visible entry even when native media controls hide their route button.
+  const castVideo=$('cast-video'), video=$('video');
+  const syncCast=()=>{
+    const active=!!video.webkitCurrentPlaybackTargetIsWireless || video.remote?.state==='connected';
+    castVideo.setAttribute('aria-pressed',String(active));
+    castVideo.setAttribute('data-active',String(active));
+  };
+  castVideo.onclick=async()=>{
+    try {
+      if(typeof video.webkitShowPlaybackTargetPicker==='function') {video.webkitShowPlaybackTargetPicker();return;}
+      if(video.remote && typeof video.remote.prompt==='function') {await video.remote.prompt();return;}
+      status('当前浏览器未开放视频投屏选择，请使用系统的屏幕镜像。');
+    } catch(_) {status('未能选择投屏设备；请检查系统设备是否可用，当前视频也可能不支持转投。');}
+  };
+  video.addEventListener('webkitcurrentplaybacktargetiswirelesschanged',syncCast);
+  if(video.remote)for(const event of ['connect','disconnect'])video.remote.addEventListener(event,syncCast);
+  syncCast();
   window.addEventListener('pagehide',()=>stop(current));
 })();
