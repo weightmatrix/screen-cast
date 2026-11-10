@@ -1,3 +1,7 @@
+## 92版默认昵称与网页来源
+
+网页本地保留默认访客昵称，申请/hello采用一致昵称；hello在既有P2P文字通道增加publicWeb/localWeb来源白名单字段，无服务器聊天/媒体中继变化。ops/deploy_receiver92.py发布四份静态资源，回滚backups/before92-web-publish，无服务重启；来源仅客户端自报，实际媒体路径仍以ICE统计为准。
+
 ## 89版本地接收记忆
 
 receiver.js按邀请码本地保存最多32组密码/申请和最后邀请码，receiver-room.js保存话筒意向/设备，播放器保存静音/音量。使用浏览器localStorage而非Cookie，记忆功能不额外向服务器发送填写内容；不同origin不共享，密码受同源脚本安全边界约束。ops/deploy_receiver89.py只发布4份静态资源，回滚backups/before89-web-publish，无服务重启，不改变配对审计或媒体边界。

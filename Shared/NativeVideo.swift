@@ -425,6 +425,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var id: String { String(diagnosticID.prefix(8)) }
     private var remoteDevice = "接收设备"
     var onDiagnostic: ((PeerDiagnostic) -> Void)?
+    var connectionOrigin: ConnectionOrigin = .appLocalIP
     private let sending: Bool
     private let internet: Bool
     private var budget = NativeVideoBudget()
@@ -488,6 +489,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     let directAudit: DirectConnectionAudit?
     init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60, auditDirect: Bool = false, auditSessionID: String? = nil) {
         self.bitrate = bitrate; self.fps = fps; self.internet = internet; sending = source != nil
+        connectionOrigin = internet ? .appPublicIP : .appLocalIP
         directAudit = auditDirect ? DirectConnectionAudit(sessionID: auditSessionID, sending: source != nil) : nil
         super.init()
         captureSource = source
@@ -521,7 +523,10 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         conversation?.delegate = self
         RoomSession.shared.attach(diagnosticID, host: sending) { [weak self] packet in
             guard let self, !self.closed, let channel = self.conversation, channel.readyState == .open,
-                  channel.bufferedAmount < 32768, let data = try? JSONSerialization.data(withJSONObject: packet), data.count <= 4096 else { return false }
+                  channel.bufferedAmount < 32768 else { return false }
+            var packet = packet
+            if packet["kind"] as? String == "hello" { packet["origin"] = self.connectionOrigin.rawValue }
+            guard let data = try? JSONSerialization.data(withJSONObject: packet), data.count <= 4096 else { return false }
             return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
         }
         if let source {
@@ -738,7 +743,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     guard let self, !self.closed else { return }
                     self.onDiagnostic?(PeerDiagnostic(id: self.diagnosticID, device: self.remoteDevice,
                         route: route, localEndpoint: local, remoteEndpoint: remote,
-                        rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals))
+                        rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals,
+                        source: RoomSession.shared.peerOrigins[self.diagnosticID], nickname: RoomSession.shared.peerNicknames[self.diagnosticID]))
                 }
             }
             let available = (pair?.values["availableOutgoingBitrate"] as? NSNumber)?.doubleValue ?? 0
@@ -1035,6 +1041,7 @@ final class NativeVideoRoom: @unchecked Sendable {
         self.password = password; self.application = application
         self.code = code; sending = source != nil
         video = NativeVideoPeer(source: source, internet: true, bitrate: bitrate, fps: fps)
+        video.connectionOrigin = .appPublicCode
     }
     func start() {
         guard !sending, MatchingCode.isValid(code), AdmissionCredentials.validPassword(password), AdmissionCredentials.application(application) != nil else { fail("请填写连接密码和1至200字申请文字"); return }

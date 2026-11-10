@@ -117,7 +117,8 @@ struct PeerDiagnosticsView: View {
             ForEach(peers) { peer in
                 HStack(alignment: .top, spacing: 16) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(room.peerNicknames[peer.id] ?? "等待昵称") · \(peer.id.prefix(8))")
+                        Text(room.peerNicknames[peer.id] ?? peer.nickname ?? "访客·" + peer.id.prefix(4).uppercased())
+                        ConnectionEntryView(peer: peer)
                         ConnectionPathView(info: peer)
                         Text("网络 RTT \(ReceiveTiming.text(peer.rttMS))")
                     }.font(.system(size: 14, design: .monospaced))
@@ -432,5 +433,17 @@ struct SenderAudioQuickControls: View {
                     .popover(isPresented: $outputDevices) { AudioDeviceSelectionPanel(input: false) }
             }
         }
+    }
+}
+
+struct ConnectionEntryView: View {
+    @ObservedObject private var room = RoomSession.shared
+    let peer: PeerDiagnostic
+    var body: some View {
+        HStack(spacing: 7) {
+            Text(room.peerOrigins[peer.id] ?? peer.source ?? "来源待识别")
+            Text("❦").foregroundStyle(AppSkin.brass).accessibilityHidden(true)
+            Text(peer.connectionLabel)
+        }.font(.system(size: 13)).foregroundStyle(.secondary)
     }
 }

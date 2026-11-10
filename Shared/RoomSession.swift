@@ -13,6 +13,7 @@ final class RoomSession: ObservableObject {
     static let shared = RoomSession()
     @Published private(set) var messages: [RoomMessage] = []
     @Published private(set) var peerNicknames: [String: String] = [:]
+    @Published private(set) var peerOrigins: [String: String] = [:]
     @Published private(set) var receiverCanSpeak = false {
         didSet { if receiverCanSpeak && !oldValue { RoomAudioSettings.shared.restoreReceiverMicrophone() } }
     }
@@ -37,10 +38,17 @@ final class RoomSession: ObservableObject {
     private var seen = Set<String>()
     var nickname: String {
         #if os(iOS)
-        if Bundle.main.bundleURL.pathExtension == "appex" { return Self.name(BroadcastSettings.store.string(forKey: "room.nickname") ?? "", fallback: "用户-" + participant.prefix(4)) }
+        if Bundle.main.bundleURL.pathExtension == "appex" { return Self.name(BroadcastSettings.store.string(forKey: "room.nickname") ?? "", fallback: BroadcastSettings.store.string(forKey: "room.defaultNickname") ?? "访客·" + participant.prefix(4).uppercased()) }
         #endif
-        let value = UserDefaults.standard.string(forKey: "room.nickname") ?? ""
-        return Self.name(value, fallback: "用户-" + participant.prefix(4))
+        let store = UserDefaults.standard
+        let fallback: String
+        if let saved = store.string(forKey: "room.defaultNickname") { fallback = saved }
+        else { fallback = "访客·" + participant.prefix(4).uppercased(); store.set(fallback, forKey: "room.defaultNickname") }
+        #if os(iOS)
+        if BroadcastSettings.store.string(forKey: "room.defaultNickname") != fallback { BroadcastSettings.store.set(fallback, forKey: "room.defaultNickname") }
+        #endif
+        let value = store.string(forKey: "room.nickname") ?? ""
+        return Self.name(value, fallback: fallback)
     }
     static func name(_ text: String, fallback: String) -> String {
         let value = String(String.UnicodeScalarView(text.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0) }.prefix(32))).trimmingCharacters(in: .whitespaces)
@@ -54,7 +62,7 @@ final class RoomSession: ObservableObject {
         _ = links[id]?.send(["kind":"hello", "participant":participant, "nickname":nickname])
     }
     func detach(_ id: String) {
-        links.removeValue(forKey: id); peerNicknames.removeValue(forKey: id)
+        links.removeValue(forKey: id); peerNicknames.removeValue(forKey: id); peerOrigins.removeValue(forKey: id)
         receiverCanSpeak = links.values.contains { !$0.host && $0.ready }
         VoiceRoom.shared.remove(id)
         if links.isEmpty { messages.removeAll(); seen.removeAll(); error = "" }
@@ -64,7 +72,8 @@ final class RoomSession: ObservableObject {
         if kind == "hello" {
             guard let value = object["participant"] as? String, UUID(uuidString: value) != nil else { return }
             link.participant = value.lowercased()
-            link.nickname = Self.name(object["nickname"] as? String ?? "", fallback: "用户-" + id.prefix(4))
+            link.nickname = Self.name(object["nickname"] as? String ?? "", fallback: "访客·" + value.prefix(4).uppercased())
+            if let key = object["origin"] as? String, let origin = ConnectionOrigin(rawValue: key) { peerOrigins[id] = origin.title }
             link.ready = true; links[id] = link; peerNicknames[id] = link.nickname
             receiverCanSpeak = links.values.contains { !$0.host && $0.ready }
             VoiceRoom.shared.identify(id, participant: link.participant)

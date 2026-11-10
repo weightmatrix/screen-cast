@@ -515,6 +515,7 @@ final class MacReceiverClient: ObservableObject {
             recovery.begin { [weak self] in self?.connectInternetIP(host: host, port: port, code: code) }; return
         }
         disconnect(userInitiated: false)
+        lastMatchCode = nil
         internetDirect = true
         isDisconnecting = false
         lastHost = host; lastPort = port; authenticationCode = code
@@ -527,6 +528,7 @@ final class MacReceiverClient: ObservableObject {
             recovery.begin { [weak self] in self?.connect(host: host, port: port, code: code) }; return
         }
         disconnect(userInitiated: false)
+        lastMatchCode = nil
         isDisconnecting = false
         lastHost = host
         lastPort = port
@@ -683,6 +685,7 @@ final class MacReceiverClient: ObservableObject {
         var msg = Data(); msg.append(uint32: payload.count); msg.append(UInt8(5)); msg.append(payload)
         conn.send(content: msg, completion: .idempotent)
         let video = NativeVideoPeer(internet: internetDirect, auditDirect: internetDirect)
+        video.connectionOrigin = internetDirect ? .appPublicIP : (lastMatchCode == nil ? .appLocalIP : .appLocalCode)
         configureNativePeer(video)
         video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
         var hello: [String: Any] = ["type":"hello", "version":3]

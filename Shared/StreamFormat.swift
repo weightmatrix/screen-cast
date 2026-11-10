@@ -424,6 +424,9 @@ struct PeerDiagnostic: Codable, Identifiable {
     var rttMS: Double?
     var networkInterface: String? = nil
     var signals: String? = nil
+    var source: String? = nil
+    var nickname: String? = nil
+    var connectionLabel: String { MediaPath.connectionLabel(route: route, interface: networkInterface ?? "") }
 }
 
 enum HostIdentity {
@@ -525,5 +528,36 @@ enum MediaPath {
         case "vpn": return "VPN/隧道"
         default: return "接口未公开（不能确认USB/Wi-Fi）"
         }
+    }
+}
+
+/// Client-declared entry point, distinct from the selected ICE media path.
+enum ConnectionOrigin: String, CaseIterable {
+    case publicWeb, localWeb, appPublicIP, appPublicCode, appLocalIP, appLocalCode
+    var title: String {
+        switch self {
+        case .publicWeb: return "公网网页"
+        case .localWeb: return "局域网网页"
+        case .appPublicIP: return "app公网直连"
+        case .appPublicCode: return "app公网邀请码"
+        case .appLocalIP: return "app局域网直连"
+        case .appLocalCode: return "app局域网邀请码"
+        }
+    }
+}
+extension MediaPath {
+    static func connectionLabel(route: String, interface: String) -> String {
+        if route.contains("USB设备") { return "USB电缆" }
+        if route.contains("回环") && !route.contains("公网") { return "本机回环" }
+        if route.contains("VPN") && !route.contains("待确认") { return "VPN/隧道" }
+        if route.contains("中继") { return "中继路径" }
+        if route.contains("局域网直连（同子网）") {
+            if interface.localizedCaseInsensitiveContains("wi-fi") || interface.localizedCaseInsensitiveContains("wifi") { return "Wi-Fi局域网" }
+            if interface.localizedCaseInsensitiveContains("ethernet") || interface.contains("以太") || interface.contains("有线") { return "有线局域网" }
+            return "局域网（介质未确认）"
+        }
+        if route.contains("公网") { return "公网直连" }
+        if route.contains("内网") { return "内网（介质未确认）" }
+        return "连接方式待确认"
     }
 }

@@ -7,11 +7,12 @@
   const key=/^zh-(tw|hk|mo|hant)/.test(language)?'zh-Hant':language.split('-')[0], locale=window.ToupingI18n?.languages.indexOf(key)??-1;
   const t=text=>window.ToupingI18n?.strings[text]?.[locale]||text;
   const controlText=(node,text)=>{(node.querySelector?.('.control-label')||node).textContent=t(text);};
-  const participant=random(), fallback='访客-'+participant.slice(0,4);
+  const participant=random(), fallback=read('touping-default-nickname','')||'访客·'+participant.slice(0,4).toUpperCase();
+  store('touping-default-nickname',fallback);
   let active=null, microphone=null, context=null, analyser=null, meter=null, testing=false, generation=0, micAction=0;
   el('voice-toggle').checked=read('touping-microphone-enabled','true')==='true';
   el('voice-input').value=read('touping-input-device','');el('voice-output').value=read('touping-output-device','');
-  el('nickname').value=read('touping-nickname','');
+  el('nickname').value=read('touping-nickname',fallback);
   el('nickname').oninput=()=>{store('touping-nickname',el('nickname').value); hello(active);};
   const name=()=>el('nickname').value.replace(/[\p{Cc}]/gu,'').trim().slice(0,32)||fallback;
   el('nickname').placeholder='你的名字（选填）';
@@ -31,7 +32,7 @@
     const raw=JSON.stringify(packet); if(new TextEncoder().encode(raw).length>4096) return false;
     s.chat.send(raw); return true;
   }
-  function hello(s) {send(s,{kind:'hello',participant,nickname:name()});}
+  function hello(s) {send(s,{kind:'hello',participant,nickname:name(),origin:location.protocol==='http:'?'localWeb':'publicWeb'});}
   function showMessage(s,packet) {
     if(typeof packet.id!=='string' || !/^[a-f0-9-]{36}$/i.test(packet.id) || typeof packet.text!=='string' || !packet.text.trim() || Array.from(packet.text).length>500 || new TextEncoder().encode(packet.text).length>2000 || s.seen.has(packet.id)) return;
     const now=performance.now(); s.arrivals=s.arrivals.filter(x=>now-x<10000); if(s.arrivals.length>=160)return; s.arrivals.push(now);
@@ -144,7 +145,7 @@
     replaceMic().catch(error=>{if(active===s && action===micAction){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}).finally(()=>{s.micStarting=false;});
   }
   globalThis.ToupingRoom={
-    ready,
+    ready, nickname:name,
     attach(s) {
       const output=el('voice-output').value||read('touping-output-device','');
       if(output && el('video').setSinkId)el('video').setSinkId(output).catch(()=>notes('上次喇叭设备不可用，请重新选择或使用系统默认。'));

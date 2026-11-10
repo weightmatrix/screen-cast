@@ -788,6 +788,7 @@ private struct pickerRow: View {
 
 
 private struct SessionDiagnosticsView: View {
+    @ObservedObject private var room = RoomSession.shared
     @ObservedObject var session: StreamSession
     @ObservedObject var server: CastingServer
     var body: some View {
@@ -816,13 +817,13 @@ private struct SessionDiagnosticsView: View {
                     ForEach(server.diagnostics) { peer in
                         VStack(alignment: .leading, spacing: 12) {
                             HStack(spacing: 14) {
-                                Image(systemName: peer.device.lowercased().contains("browser") ? "globe" : "display")
+                                Image(systemName: (room.peerOrigins[peer.id] ?? peer.source ?? "").contains("网页") ? "globe" : "display")
                                     .font(.system(size: 26, weight: .medium)).foregroundStyle(.blue)
                                     .frame(width: 48, height: 48)
                                     .background(.blue.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
                                 VStack(alignment: .leading, spacing: 5) {
-                                    Text(peer.device).font(.system(size: 18, weight: .semibold)).lineLimit(2)
-                                    Text("\(peer.route) · \(peer.id.prefix(8))").font(.system(size: 13)).foregroundStyle(.secondary)
+                                    Text(room.peerNicknames[peer.id] ?? peer.nickname ?? "访客·" + peer.id.prefix(4).uppercased()).font(.system(size: 18, weight: .semibold)).lineLimit(2)
+                                    ConnectionEntryView(peer: peer)
                                 }
                                 Spacer()
                                 Button("断开", role: .destructive) { server.disconnectPeer(peer.id) }

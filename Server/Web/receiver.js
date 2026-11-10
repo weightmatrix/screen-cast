@@ -88,7 +88,7 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：89\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：92\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
@@ -192,7 +192,7 @@
     if ((s.received += JSON.stringify(packet).length) > 65536) throw Error('连接响应超过限制');
     if(packet.type === 'challenge') {
       if(!/^[a-f0-9]{32}$/.test(packet.nonce || '')) throw Error('无效连接验证');
-      send(s,{type:'apply',proof:ToupingAuth.proof(s.verifier,packet.nonce),application:s.application,nickname:$('nickname').value.trim().slice(0,32)||'访客'});
+      send(s,{type:'apply',proof:ToupingAuth.proof(s.verifier,packet.nonce),application:s.application,nickname:window.ToupingRoom?.nickname?.()||$('nickname').value.trim().slice(0,32)||'访客'});
     } else if(packet.type === 'waiting_approval') {
       status('接入申请已提交，等待投送者接受…');
       s.awaitingApproval = true;
@@ -227,7 +227,7 @@
       id=Array.from(crypto.getRandomValues(new Uint8Array(16)), x=>x.toString(16).padStart(2,'0')).join('');
       try { localStorage.setItem('touping-browser-id',id); } catch(_) {}
     }
-    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'89-web'};
+    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'92-web'};
   }
   function report(s, event) {
     if(local || !/^[a-f0-9]{32}$/.test(s.auditSession || '')) return;
@@ -254,7 +254,7 @@
   }
   async function localJoin(s, code) {
     const challenge=await fetch('./challenge',{cache:'no-store',signal:s.abort.signal}).then(response=>response.json());
-    const joined=await request('join',{code,challenge:challenge.id,proof:ToupingAuth.proof(s.verifier,challenge.nonce),application:s.application,nickname:$('nickname').value.trim().slice(0,32)||'访客'},s); s.id=joined.id;
+    const joined=await request('join',{code,challenge:challenge.id,proof:ToupingAuth.proof(s.verifier,challenge.nonce),application:s.application,nickname:window.ToupingRoom?.nickname?.()||$('nickname').value.trim().slice(0,32)||'访客'},s); s.id=joined.id;
     s.awaitingApproval=true; status('接入申请已提交，等待投送者接受…');
     while(current===s && !s.closed && !s.connected) {
       const batch=await request('poll',{id:s.id},s);

@@ -76,7 +76,10 @@ struct ContentView: View {
                 }
         )
         .onChange(of: credentialTarget) { value in formMemory.select(value) }
-        .onAppear { formMemory.select(credentialTarget) }
+        .onAppear {
+            formMemory.select(credentialTarget)
+            if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { nickname = RoomSession.shared.nickname }
+        }
         .task {
             DiscoveryListener.shared.start()
             client.discoveryLookup = { code in

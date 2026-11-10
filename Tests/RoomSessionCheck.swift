@@ -1,5 +1,11 @@
 import Foundation
 
+// Isolated room-state check: never requests hardware microphone capture.
+final class RoomAudioSettings {
+    static let shared = RoomAudioSettings()
+    func restoreReceiverMicrophone() {}
+}
+
 @main enum RoomSessionCheck {
     static func main() {
         let room = RoomSession.shared
@@ -7,8 +13,11 @@ import Foundation
         room.attach("first", host: true) { first.append($0); return true }
         room.attach("second", host: true) { second.append($0); return true }
         let alice = UUID().uuidString, bob = UUID().uuidString
-        room.receive(["kind":"hello", "participant":alice, "nickname":"Alice"], from:"first")
-        room.receive(["kind":"hello", "participant":bob, "nickname":"Bob"], from:"second")
+        room.receive(["kind":"hello", "participant":alice, "nickname":"Alice", "origin":"publicWeb"], from:"first")
+        room.receive(["kind":"hello", "participant":bob, "nickname":"Bob", "origin":"appLocalCode"], from:"second")
+        precondition(room.peerOrigins["first"] == "公网网页" && room.peerOrigins["second"] == "app局域网邀请码")
+        room.receive(["kind":"hello", "participant":bob, "nickname":"Bob", "origin":"not-allowed"], from:"second")
+        precondition(room.peerOrigins["second"] == "app局域网邀请码")
         let id = UUID().uuidString
         room.receive(["kind":"chat", "id":id, "author":"Spoofed owner", "text":"Synthetic group message"], from:"first")
         precondition(room.messages.count == 1 && room.messages[0].author == "Alice")
@@ -21,6 +30,13 @@ import Foundation
         precondition(room.messages.count == 9, "At most eight messages per peer per ten seconds")
         precondition(room.send("Synthetic owner message")); precondition(room.messages.last?.author == room.nickname)
         room.detach("first"); room.detach("second"); precondition(room.messages.isEmpty)
+
+        precondition(room.peerOrigins.isEmpty && room.peerNicknames.isEmpty)
+        room.attach("unnamed", host: true) { _ in true }
+        let guest = UUID().uuidString
+        room.receive(["kind":"hello", "participant":guest, "nickname":""], from:"unnamed")
+        precondition(room.peerNicknames["unnamed"] == "访客·" + guest.prefix(4).uppercased())
+        room.detach("unnamed")
 
         let mixer = VoiceRoom.shared
         mixer.setEnabled(true)

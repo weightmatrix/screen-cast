@@ -58,14 +58,14 @@ final class CastingServer: ObservableObject {
     var listeningPort: UInt16? { isRunning ? listener?.port?.rawValue : nil }
     private var diagnosticValues: [String: PeerDiagnostic] = [:]
     private func watch(_ video: NativeVideoPeer, route: String) {
-        diagnosticValues[video.diagnosticID] = PeerDiagnostic(id: video.diagnosticID, device: "接收设备", route: route, localEndpoint: "—", remoteEndpoint: "—", rttMS: nil)
+        diagnosticValues[video.diagnosticID] = PeerDiagnostic(id: video.diagnosticID, device: "接收设备", route: "等待实际路径统计", localEndpoint: "—", remoteEndpoint: "—", rttMS: nil, source: route)
         video.onDiagnostic = { [weak self, weak video] value in
             guard let self, let video,
                 self.nativePeers.values.contains(where: { $0 === video }) ||
                 self.nativeHost?.videos.contains(where: { $0 === video }) == true ||
                 self.browserServer?.videos.contains(where: { $0 === video }) == true else { return }
             var snapshot = value
-            snapshot.route = route
+            snapshot.source = value.source ?? route
             self.diagnosticValues[value.id] = snapshot
             self.publishDiagnostics()
         }
@@ -174,7 +174,7 @@ final class CastingServer: ObservableObject {
         let host = NativeVideoHost(code: accessCode, password: connectionPassword) { [weak self] in
             guard let self else { return NativeVideoPeer(internet: true) }
             let video = NativeVideoPeer(source: self.nativeSource, internet: true, bitrate: self.nativeBitrate, fps: self.nativeFPS)
-            self.watch(video, route: "公网邀请")
+            self.watch(video, route: "公网入口（待识别）")
             video.onSendingFPS = { [weak self] in self?.onNativeFPS?($0) }
             return video
         }
@@ -490,7 +490,7 @@ final class CastingServer: ObservableObject {
                     let video = NativeVideoPeer(source: nativeSource, internet: internetConnections.contains(key), bitrate: nativeBitrate, fps: nativeFPS,
                                                 auditDirect: internetConnections.contains(key), auditSessionID: auditID)
                     nativePeers[key] = video
-                    watch(video, route: internetConnections.contains(key) ? "广域网 IP" : "局域网")
+                    watch(video, route: internetConnections.contains(key) ? "app公网直连" : "app局域网接入")
                     video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
                     video.sendSignal = { [weak conn] object in if let conn { NativeVideo.send(object, over: conn) } }
                     video.onError = { [weak self, weak conn] _ in if let conn { self?.drop(conn) } }
@@ -559,7 +559,7 @@ final class CastingServer: ObservableObject {
         let browser = BrowserReceiverServer(port: port + 2000, code: { [weak self] in self?.accessCode ?? "" }, addresses: { Self.localIPs }) { [weak self] in
             guard let self else { return NativeVideoPeer(internet: false) }
             let video = NativeVideoPeer(source: self.nativeSource, internet: false, bitrate: self.nativeBitrate, fps: self.nativeFPS)
-            self.watch(video, route: "局域网页")
+            self.watch(video, route: "局域网网页")
             video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
             return video
         }

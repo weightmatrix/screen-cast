@@ -58,7 +58,10 @@ struct MacReceiverView: View {
                 }
         )
         .onChange(of: credentialTarget) { value in formMemory.select(value) }
-        .onAppear { formMemory.select(credentialTarget) }
+        .onAppear {
+            formMemory.select(credentialTarget)
+            if nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { nickname = RoomSession.shared.nickname }
+        }
         .onAppear {
             MacDiscoveryListener.shared.start()
             client.discoveryLookup = { code in
