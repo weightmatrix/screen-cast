@@ -137,32 +137,97 @@ struct RoomChatOverlay: View {
     }
 }
 
-/// Four corner tendrils curl inward; left-hand paths are drawn before right-hand paths.
-struct StateFlourish: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        for (right, bottom) in [(false, false), (false, true), (true, false), (true, true)] {
-            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-                CGPoint(x: rect.minX + (right ? 100 - x : x) * rect.width / 100,
-                        y: rect.minY + (bottom ? 40 - y : y) * rect.height / 40)
-            }
-            path.move(to: pt(1, 2))
-            path.addCurve(to: pt(48, 19), control1: pt(9, 0), control2: pt(19, 31))
-            path.addCurve(to: pt(33, 12), control1: pt(59, 8), control2: pt(34, 2))
-            path.addCurve(to: pt(43, 14), control1: pt(30, 22), control2: pt(48, 22))
-            path.move(to: pt(4, 5))
-            path.addCurve(to: pt(23, 8), control1: pt(15, -1), control2: pt(27, 0))
-            path.addCurve(to: pt(15, 7), control1: pt(19, 16), control2: pt(10, 13))
-            path.addCurve(to: pt(21, 7), control1: pt(13, 1), control2: pt(23, 2))
-            path.move(to: pt(10, 11))
-            path.addCurve(to: pt(9, 23), control1: pt(0, 9), control2: pt(1, 25))
-            path.addCurve(to: pt(13, 16), control1: pt(17, 28), control2: pt(19, 15))
-            path.addQuadCurve(to: pt(10, 21), control: pt(6, 16))
-            path.move(to: pt(25, 17))
-            path.addQuadCurve(to: pt(31, 25), control: pt(20, 27))
-            path.addQuadCurve(to: pt(25, 17), control: pt(36, 19))
+/// A rooted vine graph: a main stem, secondary scrolls and tertiary tendrils.
+/// Each child starts only after the drawing front reaches its attachment point.
+private enum VineTopology {
+    struct Branch {
+        let path: Path
+        let start: Double
+        let duration: Double
+        let width: CGFloat
+        let depth: Int
+    }
+    static func point(_ path: Path, _ fraction: CGFloat) -> CGPoint {
+        path.trimmedPath(from: 0, to: max(0.001, min(1, fraction))).currentPoint ?? .zero
+    }
+    static func scroll(from root: CGPoint, centre: CGPoint, radius: CGFloat, direction: CGFloat) -> Path {
+        var path = Path(); path.move(to: root)
+        let entry = CGPoint(x: centre.x + radius * direction, y: centre.y)
+        path.addCurve(to: entry,
+            control1: CGPoint(x: root.x + (centre.x - root.x) * 0.35, y: root.y - radius * 1.4),
+            control2: CGPoint(x: entry.x, y: entry.y - radius * 1.3))
+        // A tapering spiral, not a row of identical circular ornaments.
+        for step in 1...44 {
+            let phase = CGFloat(step) / 44
+            let angle = phase * .pi * 2.7
+            let r = radius * (1 - phase * 0.94)
+            path.addLine(to: CGPoint(x: centre.x + cos(angle) * r * direction, y: centre.y + sin(angle) * r))
         }
         return path
+    }
+    static let branches: [Branch] = {
+        var trunk = Path(); trunk.move(to: CGPoint(x: 101, y: 80))
+        trunk.addCurve(to: CGPoint(x: 106, y: 43), control1: CGPoint(x: 87, y: 67), control2: CGPoint(x: 119, y: 58))
+        trunk.addCurve(to: CGPoint(x: 98, y: 5), control1: CGPoint(x: 80, y: 27), control2: CGPoint(x: 116, y: 16))
+        var result = [Branch(path: trunk, start: 0, duration: 0.54, width: 2.4, depth: 0)]
+        for (tier, fraction) in [CGFloat(0.19), 0.39, 0.60, 0.80].enumerated() {
+            let root = point(trunk, fraction)
+            // Both sides sprout from the same growing stem, without a left-to-right sweep.
+            for direction: CGFloat in [-1, 1] {
+                let reach = CGFloat([55, 68, 58, 43][tier])
+                let centre = CGPoint(x: min(181, max(19, root.x + direction * reach)), y: min(63, max(17, root.y - CGFloat(tier * 2 + 4))))
+                let branch = Branch(path: scroll(from: root, centre: centre, radius: CGFloat(15 - tier), direction: direction),
+                    start: 0.54 * Double(fraction) + 0.015, duration: 0.30, width: 1.45, depth: 1)
+                result.append(branch)
+                for (index, attachment) in [CGFloat(0.28), 0.57].enumerated() {
+                    let joint = point(branch.path, attachment)
+                    let centre = CGPoint(x: min(190, max(10, joint.x + direction * CGFloat(index == 0 ? -13 : 16))),
+                                         y: min(70, max(10, joint.y + CGFloat(index == 0 ? -12 : 10))))
+                    result.append(Branch(path: scroll(from: joint, centre: centre, radius: CGFloat(index == 0 ? 7 : 5), direction: -direction),
+                        start: branch.start + branch.duration * Double(attachment) + 0.015, duration: 0.21, width: 0.85, depth: 2))
+                }
+            }
+        }
+        return result
+    }()
+    static func leaf(at point: CGPoint, angle: CGFloat, length: CGFloat, opening: CGFloat) -> Path {
+        let side = length * 0.38 * opening
+        var path = Path(); path.move(to: .zero)
+        path.addQuadCurve(to: CGPoint(x: length, y: 0), control: CGPoint(x: length * 0.4, y: -side))
+        path.addQuadCurve(to: .zero, control: CGPoint(x: length * 0.65, y: side))
+        return path.applying(CGAffineTransform(rotationAngle: angle).concatenating(CGAffineTransform(translationX: point.x, y: point.y)))
+    }
+}
+
+/// One reversible animation clock keeps every child attached, including rapid toggles.
+private struct VineGrowth: View, Animatable {
+    var progress: Double
+    var animatableData: Double {
+        get { progress }
+        set { progress = newValue }
+    }
+    var body: some View {
+        Canvas { context, size in
+            guard size.width > 0, size.height > 0 else { return }
+            context.scaleBy(x: size.width / 200, y: size.height / 80)
+            let ink = Color(red: 0.16, green: 0.43, blue: 0.25)
+            for branch in VineTopology.branches {
+                let grown = max(0, min(1, (progress - branch.start) / branch.duration))
+                guard grown > 0 else { continue }
+                context.stroke(branch.path.trimmedPath(from: 0, to: grown), with: .color(ink),
+                               style: StrokeStyle(lineWidth: branch.width, lineCap: .round, lineJoin: .round))
+                guard branch.depth > 0 else { continue }
+                for (index, attachment) in [CGFloat(0.34), 0.72].enumerated() {
+                    let opening = max(0, min(1, (grown - attachment) / 0.18))
+                    guard opening > 0 else { continue }
+                    let joint = VineTopology.point(branch.path, attachment)
+                    let before = VineTopology.point(branch.path, attachment - 0.025)
+                    let angle = atan2(joint.y - before.y, joint.x - before.x) + (index == 0 ? -0.9 : 0.9)
+                    let leaf = VineTopology.leaf(at: joint, angle: angle, length: branch.depth == 1 ? 9 : 6, opening: opening)
+                    context.fill(leaf, with: .color(ink.opacity(opening)))
+                }
+            }
+        }
     }
 }
 
@@ -170,10 +235,9 @@ struct StateOrnament: View {
     let active: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        StateFlourish().trim(from: 0, to: active ? 1 : 0)
-            .stroke(Color(red: 0.20, green: 0.48, blue: 0.30), style: StrokeStyle(lineWidth: 0.9, lineCap: .round, lineJoin: .round))
-            .padding(3).opacity(0.36)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.65), value: active)
+        VineGrowth(progress: active ? 1 : 0)
+            .padding(3).opacity(0.40).clipped()
+            .animation(reduceMotion ? nil : .easeInOut(duration: 1.65), value: active)
             .allowsHitTesting(false).accessibilityHidden(true)
     }
 }
