@@ -154,27 +154,41 @@ struct ContentView: View {
                     }
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("昵称·选填").font(.caption)
-                    TextField("你的名字", text: $nickname).textFieldStyle(.roundedBorder).onChange(of:nickname) { _ in RoomSession.shared.refreshNickname() }
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("昵称·选填").font(.caption)
+                            TextField("你的名字", text: $nickname).textFieldStyle(.roundedBorder).onChange(of: nickname) { _ in RoomSession.shared.refreshNickname() }
+                        }.frame(maxWidth: .infinity)
+                        VStack(alignment: .leading, spacing: 6) {
+                            if connectMode == "ip" || connectMode == "wanIP" {
+                                Text(connectMode == "wanIP" ? "公网地址" : "局域网地址").font(.caption)
+                                TextField("对方地址", text: connectMode == "wanIP" ? $internetHost : $host).textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            } else {
+                                Text("编号").font(.caption)
+                                TextField("邀请链接或编号", text: $matchCode).textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
+                            }
+                        }.frame(maxWidth: .infinity)
+                    }
                     if connectMode == "ip" || connectMode == "wanIP" {
-                        Text(connectMode == "wanIP" ? "公网地址" : "局域网地址").font(.caption)
-                        TextField("对方地址", text: connectMode == "wanIP" ? $internetHost : $host).textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
                         Text("端口").font(.caption)
                         TextField("端口", text: connectMode == "wanIP" ? $internetPortText : $portText).textFieldStyle(.roundedBorder)
-                    } else {
-                        Text("编号").font(.caption)
-                        TextField("邀请链接或编号", text: $matchCode).textFieldStyle(.roundedBorder).textInputAutocapitalization(.never).autocorrectionDisabled()
                     }
-                    Text("密码·必填").font(.caption)
-                    SecureField("填写连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
-                    Text("申请·必填").font(.caption)
-                    TextEditor(text: $applicationText).frame(height:76).overlay(RoundedRectangle(cornerRadius:5).stroke(.secondary.opacity(0.35)))
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("密码·必填").font(.caption)
+                            SecureField("填写连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
+                        }.frame(maxWidth: .infinity)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("申请·必填").font(.caption)
+                            TextField("告诉投送者你是谁（最多200字）", text: $applicationText).textFieldStyle(.roundedBorder)
+                        }.frame(maxWidth: .infinity)
+                    }
+                    ReceiverAudioControls(sound: Binding(get: { client.receivesPageAudio || client.receivesMicrophone }, set: { client.receivesPageAudio = $0; client.receivesMicrophone = $0 }))
                     HStack {
                         Button("连接", action: toggleConnection).disabled(isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty)
                         Button("断开") { client.disconnect() }.disabled(!isConnected && client.status != .connecting && client.recoveryMessage.isEmpty)
                     }.buttonStyle(.bordered)
                 }.padding(16).appPanelStyle()
-                ReceiverAudioControls(sound: Binding(get: { client.receivesPageAudio || client.receivesMicrophone }, set: { client.receivesPageAudio = $0; client.receivesMicrophone = $0 }))
                 VStack(alignment: .leading, spacing:10) {
                     Text("连接信息与诊断").font(.headline)
                     ConnectionPathView(info: client.connectionInfo)

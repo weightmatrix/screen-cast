@@ -18,10 +18,10 @@ struct iPadSenderView: View {
     @State private var signalPort = 0
     @State private var internetPort = 0
     @State private var browserPort = 0
-    @State private var pageAudio = false
-    @State private var micAudio = false
+    @State private var pageAudio = true
+    @State private var micAudio = true
     @State private var bitrate = 8_000_000
-    @State private var internetEnabled = false
+    @State private var internetEnabled = true
     @State private var internetMatchingEnabled = true
     @State private var internetStatus = ""
     @State private var fps = 30
@@ -143,6 +143,7 @@ struct iPadSenderView: View {
                             Text("点击左侧系统录屏按钮").foregroundStyle(.secondary)
                         }
                     }
+                    SenderAudioQuickControls(microphone: $micAudio, microphoneActive: active && micAudio)
                     Text(status).foregroundStyle(active ? .green : .secondary)
                 }.padding(compact ? 16 : 28).frame(maxWidth: .infinity, alignment: .leading)
                     .appPanelStyle()
@@ -299,13 +300,13 @@ struct iPadSenderView: View {
 
     private struct SenderInitialSettings {
         let password = BroadcastSettings.store.string(forKey: "broadcastPassword") ?? ""
-        let pageAudio = BroadcastSettings.store.bool(forKey: "broadcastPageAudio")
-        let micAudio = BroadcastSettings.store.bool(forKey: "broadcastMicAudio")
+        let pageAudio = BroadcastSettings.store.bool(forKey: "broadcastPageAudio", default: true)
+        let micAudio = BroadcastSettings.store.bool(forKey: "broadcastMicAudio", default: true)
         let code = BroadcastSettings.store.string(forKey: "broadcastCode")
         let bitrate = BroadcastSettings.store.integer(forKey: "broadcastBitrate")
         let fps = BroadcastSettings.store.integer(forKey: "broadcastFPS")
         let resolution = BroadcastSettings.store.string(forKey: "broadcastResolution")
-        let internetEnabled = BroadcastSettings.store.bool(forKey: "broadcastInternetEnabled")
+        let internetEnabled = BroadcastSettings.store.bool(forKey: "broadcastInternetEnabled", default: true)
         let internetMode = BroadcastSettings.store.string(forKey: "broadcastInternetMode")
     }
     private static func readSettings() async -> SenderInitialSettings {

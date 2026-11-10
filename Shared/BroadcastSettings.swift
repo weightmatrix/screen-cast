@@ -35,7 +35,8 @@ final class BroadcastStore {
     func string(forKey key: String) -> String? { value(key) as? String }
     func integer(forKey key: String) -> Int { (value(key) as? NSNumber)?.intValue ?? 0 }
     func double(forKey key: String) -> Double { (value(key) as? NSNumber)?.doubleValue ?? 0 }
-    func bool(forKey key: String) -> Bool { (value(key) as? NSNumber)?.boolValue ?? false }
+    func bool(forKey key: String) -> Bool { bool(forKey: key, default: false) }
+    func bool(forKey key: String, default fallback: Bool) -> Bool { (value(key) as? NSNumber)?.boolValue ?? fallback }
 }
 
 enum BroadcastSettings {

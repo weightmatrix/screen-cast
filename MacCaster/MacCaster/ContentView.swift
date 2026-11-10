@@ -249,7 +249,10 @@ private struct SessionRow: View {
                     }
                 }
                 Spacer()
-                SharingIllustration(compact: true)
+                VStack(spacing: 10) {
+                    SharingIllustration(compact: true)
+                    SenderAudioQuickControls(microphone: $session.sendsMicrophone, microphoneActive: session.microphoneActive)
+                }
             }
             .padding(.vertical, 8)
             Text(AdmissionCredentials.validPassword(streamer.connectionPassword) ? "邀请链接不含密码；请另行告知接收者连接密码" : "请先在设置中设置连接密码")

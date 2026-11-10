@@ -131,7 +131,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
         }
     }
 
-    func addSession(filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "", touchEnabled: Bool = false) {
+    func addSession(filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "", touchEnabled: Bool = false, pageAudio: Bool = true, microphone: Bool = true, internet: Bool = true, internetMatching: Bool = true) {
         let port = nextAvailablePort()
         let finalCode = uniqueCode(for: code)
         if #available(macOS 15.2, *) {
@@ -141,6 +141,8 @@ final class ScreenStreamer: NSObject, ObservableObject {
         let session = StreamSession(port: port, filter: filter, name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor, annotationEngine: annotation, screenOrigin: screenOrigin, code: finalCode)
         DiagLog.log("Stream", "addSession port=\(port) code=\(finalCode) name=\(name)")
         session.server.connectionPassword = connectionPassword
+        session.sendsPageAudio = pageAudio; session.sendsMicrophone = microphone
+        session.internetEnabled = internet; session.internetMatchingEnabled = internetMatching
         session.start()
         sessions.append(session)
         refreshBroadcast()
@@ -152,6 +154,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
                         displays: [(String, SCDisplay)]) {
         let bitrate = session.bitrate
         let fps = session.fps
+        let pageAudio = session.sendsPageAudio, microphone = session.sendsMicrophone
         let showsCursor = session.showsCursor
         let touchEnabled = session.touchEnabled
         let internetEnabled = session.internetEnabled
@@ -167,18 +170,18 @@ final class ScreenStreamer: NSObject, ObservableObject {
             if let display = bestDisplay(for: apps) {
                 for app in apps { recordUsage(bundleIdentifier: app.bundleIdentifier) }
                 addSession(filter: SCContentFilter(display: display, including: apps, exceptingWindows: []),
-                           name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: code, touchEnabled: touchEnabled)
+                           name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: code, touchEnabled: touchEnabled, pageAudio: pageAudio, microphone: microphone, internet: internetEnabled, internetMatching: internetMatchingEnabled)
             }
         }
         for (name, window) in windows {
             if let app = window.owningApplication { recordUsage(bundleIdentifier: app.bundleIdentifier) }
             addSession(filter: SCContentFilter(desktopIndependentWindow: window),
                        name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor,
-                       screenOrigin: window.frame.origin, code: code, touchEnabled: touchEnabled)
+                       screenOrigin: window.frame.origin, code: code, touchEnabled: touchEnabled, pageAudio: pageAudio, microphone: microphone, internet: internetEnabled, internetMatching: internetMatchingEnabled)
         }
         for (name, display) in displays {
             addSession(filter: SCContentFilter(display: display, excludingWindows: []),
-                       name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: code, touchEnabled: touchEnabled)
+                       name: name, bitrate: bitrate, fps: fps, showsCursor: showsCursor, code: code, touchEnabled: touchEnabled, pageAudio: pageAudio, microphone: microphone, internet: internetEnabled, internetMatching: internetMatchingEnabled)
         }
         for replacement in sessions where !previousIDs.contains(replacement.id) {
             replacement.pencilTapAction = tapAction
@@ -272,11 +275,14 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var clientCount: Int = 0
     @Published private(set) var bitrate: Int
     @Published var internetMatchingEnabled = true { didSet { server.setInternetMatchingEnabled(internetMatchingEnabled) } }
-    @Published var internetEnabled = false { didSet { server.setInternetEnabled(internetEnabled) } }
-    @Published var internetStatus = "广域网已关闭"
+    @Published var internetEnabled = true { didSet { server.setInternetEnabled(internetEnabled) } }
+    @Published var internetStatus = "正在准备公网连接"
     var internetCodeConflict: Bool { internetStatus.contains("邀请编号已占用") }
-    @Published var sendsPageAudio = false { didSet { updateAudio() } }
-    @Published var sendsMicrophone = false { didSet { updateAudio() } }
+    @Published var sendsPageAudio = true { didSet { updateAudio() } }
+    @Published var sendsMicrophone = true { didSet { updateAudio() } }
+    @Published private(set) var microphoneActive = false
+    private var audioActive = false
+    private var microphonePermissionPending = false
     private var captureConfiguration: SCStreamConfiguration?
     @Published var showsCursor: Bool
     // Remote touch is suspended; retained implementation cannot be enabled.
@@ -363,9 +369,13 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
             }
             recordingAudioTimer = timer; timer.resume()
         }
+        audioActive = true
         DiagLog.log("Stream", "start port \(port)")
         server.configureNative(bitrate: bitrate, fps: targetFPS)
         server.start()
+        server.setInternetMatchingEnabled(internetMatchingEnabled)
+        server.setInternetEnabled(internetEnabled)
+        updateAudio()
         server.onNativeFPS = { [weak self] fps in self?.currentFPS = fps }
         server.onClientCountChanged = { [weak self] count in
             DispatchQueue.main.async { self?.clientCount = count }
@@ -381,6 +391,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     func stop() {
+        audioActive = false; microphoneActive = false
         if let audioDeviceObserver { NotificationCenter.default.removeObserver(audioDeviceObserver); self.audioDeviceObserver = nil }
         RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: false)
         recorder.stop()
@@ -526,8 +537,10 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
         if #available(macOS 15.0, *) { config.captureMicrophone = false }
         captureConfiguration = config
         server.nativeSource.audio.useSharedMicrophone(true)
-        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: sendsMicrophone)
-        server.nativeSource.audio.configure(page: sendsPageAudio, microphone: sendsMicrophone)
+        let permittedMic = audioActive && sendsMicrophone && AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        microphoneActive = permittedMic
+        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: permittedMic)
+        server.nativeSource.audio.configure(page: sendsPageAudio, microphone: permittedMic)
         config.pixelFormat = annotationEngine.isActive ? kCVPixelFormatType_32BGRA : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
         encWidth = config.width
         encHeight = config.height
@@ -571,17 +584,25 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     }
 
     private func updateAudio() {
-        if sendsMicrophone {
-            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
-                AVCaptureDevice.requestAccess(for: .audio) { [weak self] allowed in
-                    DispatchQueue.main.async { if !allowed { self?.sendsMicrophone = false } else { self?.updateAudio() } }
-                }; return
+        guard audioActive else { return }
+        let permission = AVCaptureDevice.authorizationStatus(for: .audio)
+        if sendsMicrophone && permission == .notDetermined && !microphonePermissionPending {
+            microphonePermissionPending = true
+            AVCaptureDevice.requestAccess(for: .audio) { [weak self] allowed in
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.microphonePermissionPending = false
+                    guard self.audioActive else { return }
+                    if !allowed { self.sendsMicrophone = false } else { self.updateAudio() }
+                }
             }
-            if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized { sendsMicrophone = false; return }
         }
+        if sendsMicrophone && (permission == .denied || permission == .restricted) { sendsMicrophone = false; return }
+        let permittedMic = audioActive && sendsMicrophone && permission == .authorized
+        microphoneActive = permittedMic
         server.nativeSource.audio.useSharedMicrophone(true)
-        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: sendsMicrophone)
-        server.nativeSource.audio.configure(page: sendsPageAudio, microphone: sendsMicrophone)
+        RoomAudioSettings.shared.requestSenderMicrophone(id.uuidString, enabled: permittedMic)
+        server.nativeSource.audio.configure(page: sendsPageAudio, microphone: permittedMic)
         guard let config = captureConfiguration, let stream else { return }
         config.capturesAudio = sendsPageAudio
         if #available(macOS 15.0, *) { config.captureMicrophone = false }

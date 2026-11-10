@@ -1,3 +1,7 @@
+## 88版两列填写与说明居中
+
+接收模板说明居中，昵称/编号和密码/申请分两排，声音控制仍在连接前，默认声音与话筒意向保持。App内置局域网页共用源码。ops/deploy_receiver88.py更新四份静态资源，回滚backups/before88-web-publish，无服务重启；没有新增媒体转发、TURN或修改Safari权限机制。
+
 ## 87版线性接收与原生播放器
 
 接入表单包含单行申请和话筒/喇叭控制，默认系统设备、话筒开启意向仅在连接就绪后申请；拒绝不影响观看，断开停采集。video原生controls及媒体全屏取代自制浮层/CSS假全屏；实际控件显隐由UA负责。ops/deploy_receiver87.py更新4份静态资源，回滚backups/before87-web-publish，无服务重启；沿用固定usage脚本的精确HTML校验，不改代理。

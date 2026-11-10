@@ -286,36 +286,27 @@ struct ReceiverAudioControls: View {
     @ObservedObject private var audio = RoomAudioSettings.shared
     @ObservedObject private var room = RoomSession.shared
     @Binding var sound: Bool
-    @State private var input = UserDefaults.standard.string(forKey: "room.inputDevice") ?? ""
-    @State private var output = UserDefaults.standard.string(forKey: "room.outputDevice") ?? ""
+    @State private var inputDevices = false
+    @State private var outputDevices = false
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("话筒").font(.headline)
-                HStack {
-                    AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
-                    AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
-                    AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
-                }
-                Picker("话筒设备", selection: $input) { Text("系统默认").tag(""); ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) } }
-                if !room.receiverCanSpeak { Text("连接就绪后可开启话筒；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
-            }.padding(16).appPanelStyle()
-            VStack(alignment: .leading, spacing: 12) {
-                Text("喇叭").font(.headline)
-                HStack {
-                    AudioLevelIcon(symbol: "speaker.wave.2.fill", level: audio.outputLevel)
-                    AudioActionButton(title: sound ? "声音已开启" : "声音已关闭", active: sound) { sound.toggle() }
-                    AudioActionButton(title: "测试喇叭", active: false) { audio.testSpeaker() }
-                }
-                #if os(macOS)
-                Picker("声音输出设备", selection: $output) { Text("系统默认").tag(""); ForEach(audio.outputs) { Text(verbatim: $0.name).tag($0.id) } }
-                #else
-                HStack { Text("声音输出由系统选择").font(.caption); SystemAudioRoutePicker().frame(width: 30, height: 30) }
-                #endif
-            }.padding(16).appPanelStyle()
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Text("话筒").font(.caption).frame(width: 30, alignment: .leading)
+                AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
+                AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
+                CompactAudioButton(kind: .devices, title: "选择话筒设备") { inputDevices = true }
+                    .popover(isPresented: $inputDevices) { AudioDeviceSelectionPanel(input: true) }
+            }
+            HStack(spacing: 8) {
+                Text("喇叭").font(.caption).frame(width: 30, alignment: .leading)
+                AudioActionButton(title: sound ? "声音已开启" : "声音已关闭", active: sound) { sound.toggle() }
+                AudioActionButton(title: "测试喇叭", active: false) { audio.testSpeaker() }
+                CompactAudioButton(kind: .devices, title: "选择喇叭设备") { outputDevices = true }
+                    .popover(isPresented: $outputDevices) { AudioDeviceSelectionPanel(input: false) }
+            }
+            if !room.receiverCanSpeak { Text("连接就绪后可开启话筒；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
             if !audio.error.isEmpty { Text(audio.error).font(.caption).foregroundStyle(.red) }
         }.onAppear { audio.beginMetering() }.onDisappear { audio.setTesting(false) }
-            .onChange(of: input) { audio.selectInput($0) }.onChange(of: output) { audio.selectOutput($0) }
     }
 }
 
@@ -330,5 +321,116 @@ struct ConnectionPathView: View {
             Text("文字聊天及诊断也共用此直连；服务器不转发媒体。")
                 .font(.caption).foregroundStyle(.secondary)
         }.font(.caption).textSelection(.enabled)
+    }
+}
+
+enum AudioGlyphKind { case microphone, speaker, devices }
+
+/// Monochrome engraved outlines, using the same palette as the ornamental controls.
+struct AudioGlyph: Shape {
+    let kind: AudioGlyphKind
+    var off = false
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        switch kind {
+        case .microphone:
+            path.addRoundedRect(in: CGRect(x: 9, y: 2, width: 6, height: 12), cornerSize: CGSize(width: 3, height: 3))
+            path.move(to: CGPoint(x: 5, y: 10)); path.addCurve(to: CGPoint(x: 19, y: 10), control1: CGPoint(x: 4, y: 22), control2: CGPoint(x: 20, y: 22))
+            path.move(to: CGPoint(x: 12, y: 18)); path.addLine(to: CGPoint(x: 12, y: 22))
+            path.move(to: CGPoint(x: 8, y: 22)); path.addLine(to: CGPoint(x: 16, y: 22))
+        case .speaker:
+            path.move(to: CGPoint(x: 3, y: 9)); path.addLines([CGPoint(x: 7, y: 9), CGPoint(x: 12, y: 4), CGPoint(x: 12, y: 20), CGPoint(x: 7, y: 15), CGPoint(x: 3, y: 15)]); path.closeSubpath()
+            for x: CGFloat in [16, 20] {
+                path.move(to: CGPoint(x: x, y: x == 16 ? 8 : 5))
+                path.addQuadCurve(to: CGPoint(x: x, y: x == 16 ? 16 : 19), control: CGPoint(x: x + 5, y: 12))
+            }
+        case .devices:
+            path.addRoundedRect(in: CGRect(x: 3, y: 4, width: 18, height: 14), cornerSize: CGSize(width: 2, height: 2))
+            path.move(to: CGPoint(x: 8, y: 21)); path.addLine(to: CGPoint(x: 16, y: 21))
+            path.move(to: CGPoint(x: 12, y: 18)); path.addLine(to: CGPoint(x: 12, y: 21))
+            for x: CGFloat in [8, 12, 16] { path.addEllipse(in: CGRect(x: x - 0.6, y: 10.4, width: 1.2, height: 1.2)) }
+        }
+        if off && kind != .devices { path.move(to: CGPoint(x: 3, y: 3)); path.addLine(to: CGPoint(x: 21, y: 21)) }
+        return path.applying(CGAffineTransform(scaleX: rect.width / 24, y: rect.height / 24).concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
+    }
+}
+
+struct CompactAudioButton: View {
+    let kind: AudioGlyphKind
+    let title: String
+    var active = false
+    var showsOff = false
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            AudioGlyph(kind: kind, off: showsOff).stroke(style: StrokeStyle(lineWidth: 1.15, lineCap: .round, lineJoin: .round))
+                .frame(width: 21, height: 21).frame(width: 34, height: 34)
+                .foregroundStyle(active ? Color(red: 0.17, green: 0.40, blue: 0.25) : AppSkin.ink)
+                .background { StateOrnament(active: active) }
+                .background { AppPaperBackground().clipShape(RoundedRectangle(cornerRadius: 4)) }
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(active ? Color.green.opacity(0.6) : AppSkin.brass.opacity(0.6), lineWidth: 0.7))
+        }.buttonStyle(.plain).help(LocalizedStringKey(title)).accessibilityLabel(LocalizedStringKey(title))
+            .accessibilityAddTraits(active ? .isSelected : [])
+    }
+}
+
+struct AudioDeviceSelectionPanel: View {
+    let input: Bool
+    @ObservedObject private var audio = RoomAudioSettings.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var selected = ""
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(input ? "选择话筒设备" : "选择喇叭设备").font(.headline)
+            #if os(iOS)
+            if input { options }
+            else {
+                Text("当前输出：" + audio.outputs.map(\.name).joined(separator: "、")).font(.caption)
+                HStack { Text("打开系统音频设备列表").font(.caption); SystemAudioRoutePicker().frame(width: 32, height: 32) }
+            }
+            #else
+            options
+            #endif
+            if !audio.error.isEmpty { Text(audio.error).font(.caption).foregroundStyle(.red) }
+        }.padding(18).frame(minWidth: 240, idealWidth: 280, maxWidth: 320)
+            .background(AppPaperBackground()).onAppear {
+                audio.refreshDevices(); selected = input ? audio.inputID : audio.outputID
+            }
+    }
+    private var options: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 8) {
+                option("系统默认", id: "")
+                ForEach(input ? audio.inputs : audio.outputs) { device in option(device.name, id: device.id) }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }.frame(maxHeight: 280)
+    }
+    private func option(_ title: String, id: String) -> some View {
+        AudioActionButton(title: title, active: selected == id) {
+            if input { audio.selectInput(id) } else { audio.selectOutput(id) }
+            selected = id; dismiss()
+        }
+    }
+}
+
+struct SenderAudioQuickControls: View {
+    @Binding var microphone: Bool
+    var microphoneActive: Bool? = nil
+    @ObservedObject private var audio = RoomAudioSettings.shared
+    @State private var inputDevices = false
+    @State private var outputDevices = false
+    var body: some View {
+        VStack(spacing: 7) {
+            HStack(spacing: 7) {
+                CompactAudioButton(kind: .microphone, title: microphone ? ((microphoneActive ?? microphone) ? "话筒已开启" : "话筒待开启") : "话筒已关闭", active: microphoneActive ?? microphone, showsOff: !microphone) { microphone.toggle() }
+                CompactAudioButton(kind: .devices, title: "选择话筒设备") { inputDevices = true }
+                    .popover(isPresented: $inputDevices) { AudioDeviceSelectionPanel(input: true) }
+            }
+            HStack(spacing: 7) {
+                CompactAudioButton(kind: .speaker, title: audio.receivesVoices ? "回传声音已开启" : "回传声音已关闭", active: audio.receivesVoices, showsOff: !audio.receivesVoices) { audio.receivesVoices.toggle() }
+                CompactAudioButton(kind: .devices, title: "选择喇叭设备") { outputDevices = true }
+                    .popover(isPresented: $outputDevices) { AudioDeviceSelectionPanel(input: false) }
+            }
+        }
     }
 }
