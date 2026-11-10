@@ -12,16 +12,6 @@
         }
       }
     },
-    "%@ · %@ · %@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "%1$@ · %2$@ · %3$@"
-          }
-        }
-      }
-    },
     "%lld × %lld": {
       "localizations": {
         "zh-Hans": {
@@ -48,6 +38,7 @@
     "%lld 台已连接": {},
     "%lldM": {},
     "3D图标": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -155,7 +146,6 @@
     "30 fps": {},
     "60": {},
     "60 fps": {},
-    "192.168.x.x": {},
     "8318": {},
     "9318": {},
     "FPS": {},
@@ -477,6 +467,7 @@
       }
     },
     "允许公网直连": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -739,7 +730,6 @@
         }
       }
     },
-    "公网 IP 或域名": {},
     "公网地址": {
       "localizations": {
         "de": {
@@ -1055,6 +1045,7 @@
       }
     },
     "关闭设置": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1264,6 +1255,7 @@
       }
     },
     "切换到投屏": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1735,6 +1727,7 @@
       }
     },
     "发送话筒声音": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -1787,6 +1780,7 @@
       }
     },
     "发送页面声音": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -2311,9 +2305,8 @@
       }
     },
     "密码保存失败，请重试": {},
-    "对方公网地址": {},
-    "对方局域网地址": {},
     "将这台 iPad 的画面分享给 Mac 或另一台 iPad": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -2481,6 +2474,7 @@
       }
     },
     "局域网准备中…": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -3067,6 +3061,7 @@
       }
     },
     "开启自动录课": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -3118,7 +3113,6 @@
         }
       }
     },
-    "开始录课": {},
     "开始投屏": {
       "localizations": {
         "de": {
@@ -3955,6 +3949,7 @@
       }
     },
     "接入申请": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -4375,6 +4370,7 @@
       }
     },
     "接收话筒声音": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -4427,6 +4423,7 @@
       }
     },
     "接收页面声音": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -4687,6 +4684,7 @@
       }
     },
     "显示光标": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -5066,16 +5064,6 @@
           "stringUnit": {
             "state": "new",
             "value": "本机：%1$@\n对方：%2$@"
-          }
-        }
-      }
-    },
-    "本机媒体 %@ → 对方 %@": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "new",
-            "value": "本机媒体 %1$@ → 对方 %2$@"
           }
         }
       }
@@ -5656,6 +5644,7 @@
       }
     },
     "清空日志": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -5812,6 +5801,7 @@
       }
     },
     "申请文字（必填，最多200字）": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -6599,6 +6589,7 @@
       }
     },
     "话筒声音": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -7331,6 +7322,7 @@
       }
     },
     "连接诊断": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -7540,6 +7532,7 @@
     },
     "选择应用": {},
     "选择文件夹": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -8012,6 +8005,7 @@
       }
     },
     "需要发送端可达的公网地址和映射端口；不经过配对服务器。": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -8116,6 +8110,7 @@
       }
     },
     "页面声音": {
+      "extractionState": "stale",
       "localizations": {
         "de": {
           "stringUnit": {
@@ -8221,10 +8216,10 @@
     },
     "共用聊天室": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "共用聊天室"
+            "value": "Gemeinsamer Chat"
           }
         },
         "en": {
@@ -8237,12 +8232,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chat compartido"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gemeinsamer Chat"
           }
         },
         "fr": {
@@ -8268,15 +8257,21 @@
             "state": "translated",
             "value": "공용 채팅"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "共用聊天室"
+          }
         }
       }
     },
     "昵称（留空自动分配，最多32字）": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "暱稱（留空自動分配，最多32字）"
+            "value": "Spitzname (leer: automatisch, bis 32 Zeichen)"
           }
         },
         "en": {
@@ -8289,12 +8284,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apodo (vacío: automático, máximo 32)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spitzname (leer: automatisch, bis 32 Zeichen)"
           }
         },
         "fr": {
@@ -8320,15 +8309,21 @@
             "state": "translated",
             "value": "닉네임(비우면 자동, 최대 32자)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暱稱（留空自動分配，最多32字）"
+          }
         }
       }
     },
     "聊天位置": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "聊天位置"
+            "value": "Chatposition"
           }
         },
         "en": {
@@ -8341,12 +8336,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Posición del chat"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chatposition"
           }
         },
         "fr": {
@@ -8372,15 +8361,21 @@
             "state": "translated",
             "value": "채팅 위치"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聊天位置"
+          }
         }
       }
     },
     "透明度": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "透明度"
+            "value": "Deckkraft"
           }
         },
         "en": {
@@ -8393,12 +8388,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Opacidad"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Deckkraft"
           }
         },
         "fr": {
@@ -8424,15 +8413,21 @@
             "state": "translated",
             "value": "불투명도"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "透明度"
+          }
         }
       }
     },
     "左下角": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "左下角"
+            "value": "Unten links"
           }
         },
         "en": {
@@ -8445,12 +8440,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abajo a la izquierda"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unten links"
           }
         },
         "fr": {
@@ -8476,15 +8465,21 @@
             "state": "translated",
             "value": "왼쪽 아래"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左下角"
+          }
         }
       }
     },
     "右下角": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "右下角"
+            "value": "Unten rechts"
           }
         },
         "en": {
@@ -8497,12 +8492,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Abajo a la derecha"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unten rechts"
           }
         },
         "fr": {
@@ -8528,15 +8517,21 @@
             "state": "translated",
             "value": "오른쪽 아래"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右下角"
+          }
         }
       }
     },
     "左上角": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "左上角"
+            "value": "Oben links"
           }
         },
         "en": {
@@ -8549,12 +8544,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arriba a la izquierda"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oben links"
           }
         },
         "fr": {
@@ -8580,15 +8569,21 @@
             "state": "translated",
             "value": "왼쪽 위"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左上角"
+          }
         }
       }
     },
     "右上角": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "右上角"
+            "value": "Oben rechts"
           }
         },
         "en": {
@@ -8601,12 +8596,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Arriba a la derecha"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Oben rechts"
           }
         },
         "fr": {
@@ -8632,15 +8621,21 @@
             "state": "translated",
             "value": "오른쪽 위"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "右上角"
+          }
         }
       }
     },
     "声音设备与测试": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "聲音裝置與測試"
+            "value": "Audiogeräte und Tests"
           }
         },
         "en": {
@@ -8653,12 +8648,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dispositivos y pruebas de audio"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Audiogeräte und Tests"
           }
         },
         "fr": {
@@ -8684,15 +8673,22 @@
             "state": "translated",
             "value": "오디오 기기 및 테스트"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聲音裝置與測試"
+          }
         }
       }
     },
     "麦克风设备": {
+      "extractionState": "stale",
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "麥克風裝置"
+            "value": "Mikrofon"
           }
         },
         "en": {
@@ -8705,12 +8701,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Micrófono"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mikrofon"
           }
         },
         "fr": {
@@ -8736,15 +8726,21 @@
             "state": "translated",
             "value": "마이크 기기"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "麥克風裝置"
+          }
         }
       }
     },
     "声音输出设备": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "聲音輸出裝置"
+            "value": "Audioausgabe"
           }
         },
         "en": {
@@ -8757,12 +8753,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Salida de audio"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Audioausgabe"
           }
         },
         "fr": {
@@ -8788,15 +8778,21 @@
             "state": "translated",
             "value": "오디오 출력 기기"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聲音輸出裝置"
+          }
         }
       }
     },
     "系统默认": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "系統預設"
+            "value": "Systemstandard"
           }
         },
         "en": {
@@ -8809,12 +8805,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Predeterminado del sistema"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Systemstandard"
           }
         },
         "fr": {
@@ -8840,15 +8830,21 @@
             "state": "translated",
             "value": "시스템 기본값"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "系統預設"
+          }
         }
       }
     },
     "刷新设备": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "重新整理裝置"
+            "value": "Geräte aktualisieren"
           }
         },
         "en": {
@@ -8861,12 +8857,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Actualizar dispositivos"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Geräte aktualisieren"
           }
         },
         "fr": {
@@ -8892,15 +8882,21 @@
             "state": "translated",
             "value": "기기 새로 고침"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重新整理裝置"
+          }
         }
       }
     },
     "测试喇叭": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "測試喇叭"
+            "value": "Lautsprecher testen"
           }
         },
         "en": {
@@ -8913,12 +8909,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Probar altavoces"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lautsprecher testen"
           }
         },
         "fr": {
@@ -8944,15 +8934,22 @@
             "state": "translated",
             "value": "스피커 테스트"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試喇叭"
+          }
         }
       }
     },
     "向所有人发送麦克风": {
+      "extractionState": "stale",
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "向所有人傳送麥克風"
+            "value": "Mikrofon mit allen teilen"
           }
         },
         "en": {
@@ -8965,12 +8962,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Compartir micrófono con todos"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mikrofon mit allen teilen"
           }
         },
         "fr": {
@@ -8996,15 +8987,22 @@
             "state": "translated",
             "value": "모두에게 마이크 전송"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向所有人傳送麥克風"
+          }
         }
       }
     },
     "测试麦克风（仅看音量，不发送）": {
+      "extractionState": "stale",
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "測試麥克風（僅看音量，不傳送）"
+            "value": "Mikrofon testen (nur Pegel, keine zusätzliche Übertragung)"
           }
         },
         "en": {
@@ -9017,12 +9015,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Probar micrófono (solo nivel, sin envío adicional)"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mikrofon testen (nur Pegel, keine zusätzliche Übertragung)"
           }
         },
         "fr": {
@@ -9048,15 +9040,22 @@
             "state": "translated",
             "value": "마이크 테스트(음량만, 추가 전송 없음)"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "測試麥克風（僅看音量，不傳送）"
+          }
         }
       }
     },
     "接收接收方麦克风（全员共用）": {
+      "extractionState": "stale",
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "接收接收者麥克風（全員共用）"
+            "value": "Empfängermikrofone für alle zulassen"
           }
         },
         "en": {
@@ -9069,12 +9068,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Permitir micrófonos de receptores para todos"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Empfängermikrofone für alle zulassen"
           }
         },
         "fr": {
@@ -9100,15 +9093,21 @@
             "state": "translated",
             "value": "수신자 마이크를 모두와 공유"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接收接收者麥克風（全員共用）"
+          }
         }
       }
     },
     "聊天": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "聊天"
+            "value": "Chat"
           }
         },
         "en": {
@@ -9118,12 +9117,6 @@
           }
         },
         "es": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat"
-          }
-        },
-        "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Chat"
@@ -9152,15 +9145,21 @@
             "state": "translated",
             "value": "채팅"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聊天"
+          }
         }
       }
     },
     "收起聊天": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "收合聊天"
+            "value": "Chat ausblenden"
           }
         },
         "en": {
@@ -9173,12 +9172,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ocultar chat"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat ausblenden"
           }
         },
         "fr": {
@@ -9204,15 +9197,21 @@
             "state": "translated",
             "value": "채팅 접기"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收合聊天"
+          }
         }
       }
     },
     "输入文字，所有人可见": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "輸入文字，所有人可見"
+            "value": "Nachricht an alle"
           }
         },
         "en": {
@@ -9225,12 +9224,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mensaje para todos"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nachricht an alle"
           }
         },
         "fr": {
@@ -9256,15 +9249,21 @@
             "state": "translated",
             "value": "모두에게 메시지"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "輸入文字，所有人可見"
+          }
         }
       }
     },
     "发送": {
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "傳送"
+            "value": "Senden"
           }
         },
         "en": {
@@ -9277,12 +9276,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Enviar"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Senden"
           }
         },
         "fr": {
@@ -9308,15 +9301,22 @@
             "state": "translated",
             "value": "보내기"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "傳送"
+          }
         }
       }
     },
     "昵称": {
+      "extractionState": "stale",
       "localizations": {
-        "zh-Hant": {
+        "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "暱稱"
+            "value": "Spitzname"
           }
         },
         "en": {
@@ -9329,12 +9329,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apodo"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spitzname"
           }
         },
         "fr": {
@@ -9360,9 +9354,119 @@
             "state": "translated",
             "value": "닉네임"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暱稱"
+          }
         }
       }
-    }
+    },
+    "❦": {},
+    "❧  ❦  ❧": {},
+    "上一级": {},
+    "下次录课生效；不放大原画面。约3.5GB自动分段，同一课程放入同名网盘文件夹；完成的分段自动上传；上传成功自动删除本地文件，失败保留。百度上传当前支持单文件最多4GB。": {},
+    "二维码登录": {},
+    "你的名字": {},
+    "保存到此目录": {},
+    "停止屏幕广播": {},
+    "出现 redirect_uri_mismatch 时，请在百度网盘开放平台对应应用的安全设置中保存上面的完整地址；普通登录和二维码登录使用同一地址。": {},
+    "告诉投送者你是谁（最多200字）": {},
+    "喇叭": {},
+    "填写连接密码": {},
+    "声音已关闭": {},
+    "声音已开启": {},
+    "声音输出由系统选择": {},
+    "复制回调地址": {},
+    "复制局域网地址": {},
+    "媒体地址/协议：%@ → %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "媒体地址/协议：%1$@ → %2$@"
+          }
+        }
+      }
+    },
+    "密码·必填": {},
+    "对方地址": {},
+    "将这台设备的画面分享给 Mac、iPhone 或 iPad": {},
+    "局域网信令端口 %@ · 广域网 IP 信令端口 %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "局域网信令端口 %1$@ · 广域网 IP 信令端口 %2$@"
+          }
+        }
+      }
+    },
+    "局域网地址": {},
+    "局域网接收服务准备中，请稍候": {},
+    "展开": {},
+    "已关闭": {},
+    "已展开": {},
+    "已开启": {},
+    "已折叠": {},
+    "年份": {},
+    "开始屏幕广播": {},
+    "录课中的文件缓存在此目录的tmp子文件夹；保存完成后移到主目录。更换目录前请先停止所有录课并等待保存完成。": {},
+    "录课从本机直接上传百度网盘，不经过投屏服务器。约3.5GB自动分段；每次上传先创建或确认同名课程文件夹，把分段放入其中；确认上传成功自动删除本地文件，失败则保留。当前单文件最多4GB；授权有效期内自动续期。": {},
+    "录课名字前缀": {},
+    "录课存储": {},
+    "录课完成后上传百度网盘": {},
+    "录课清晰度": {},
+    "待传 %lld 个录课文件": {},
+    "投屏话筒请在对应投屏源的设置中开启。": {},
+    "接入申请 · 昵称由对方填写": {},
+    "接收设备选择邀请编号连接。投屏包含屏幕上的所有可采集内容，请先关闭不想分享的信息。": {},
+    "收成一行": {},
+    "收起投屏设置": {},
+    "收起接收设置": {},
+    "整屏投屏": {},
+    "文字聊天及诊断也共用此直连；服务器不转发媒体。": {},
+    "新建目录": {},
+    "新建目录名字": {},
+    "时间（小时和分）": {},
+    "昵称·选填": {},
+    "昵称由使用者自行填写，不代表真实身份。聊天仅保留当前会话最近200条，不上传服务器。": {},
+    "月份": {},
+    "未检测到局域网地址，请连接 Wi-Fi 或有线网络": {},
+    "本机地址：%@": {},
+    "正在投屏": {},
+    "浏览器打开地址后点击开始接收；公网须开启公网邀请，画面不经服务器。": {},
+    "清除待传": {},
+    "清除待传记录": {},
+    "清除待传记录？本地录像和网盘文件均保留。": {},
+    "申请·必填": {},
+    "登录百度网盘": {},
+    "百度应用的OAuth授权回调页地址": {},
+    "百度网盘录课": {},
+    "直接录课": {},
+    "维多利亚花饰": {},
+    "绿色音量图标表示当前音量。多人语音建议使用耳机，避免扬声器回声。": {},
+    "编号": {},
+    "装饰主题使用各自的浅色配色；深浅色设置适用于极简皮肤。": {},
+    "话筒": {},
+    "话筒已关闭": {},
+    "话筒已开启": {},
+    "话筒设备": {},
+    "该邀请编号发生冲突，建议修改。": {},
+    "请先通过系统录屏面板停止广播，再采用新码并重新开始。": {},
+    "这里控制共用语音的播放；投屏原声由接收页喇叭控制。": {},
+    "连接信息与诊断": {},
+    "连接就绪后可开启话筒；测试和设备选择无需连接。": {},
+    "退出登录": {},
+    "选择喇叭设备": {},
+    "选择录课文件夹": {},
+    "选择网盘目录": {},
+    "选择网盘目标目录": {},
+    "选择话筒设备": {},
+    "采用后请让接收端输入新码；服务器会在连接时再次检查占用。": {},
+    "重试上传": {},
+    "音量 %lld%%": {}
   },
   "version": "1.0"
 }
