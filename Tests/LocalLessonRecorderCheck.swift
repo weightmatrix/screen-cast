@@ -14,14 +14,16 @@ import CoreImage
         let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
         let retained = cache.appendingPathComponent("retained-from-previous-session.txt")
         try Data("preserve".utf8).write(to: retained)
-        let whole = CommandLine.arguments.contains("--whole")
-        let recorder = LocalLessonRecorder(folder: folder, segmentDuration: whole ? .infinity : 1, naming: RecordingNameFormat(prefix: "课程", year: true, month: true, time: true))
+        let bytes = CommandLine.arguments.contains("--bytes")
+        let whole = CommandLine.arguments.contains("--whole") || bytes
+        let recorder = LocalLessonRecorder(folder: folder, segmentDuration: whole ? .infinity : 1, naming: RecordingNameFormat(prefix: "课程", year: true, month: true, time: true), segmentByteLimit: bytes ? 100_000 : 3_500_000_000)
         recorder.start()
         let start = CACurrentMediaTime()
-        for n in 0..<100 {
+        for n in 0..<(bytes ? 240 : 100) {
             let size = n < 70 ? CGSize(width: 640, height: 480) : CGSize(width: 480, height: 640)
-            let image = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: size))
-            let pause = whole && n >= 55 ? 601.0 : 0
+            let solid = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: size))
+            let pause = whole && !bytes && n >= 55 ? 601.0 : 0
+            let image = bytes && n > 20 ? CIFilter(name: "CIRandomGenerator")!.outputImage!.cropped(to: CGRect(origin: .zero, size: size)) : solid
             recorder.appendVideo(image, time: start + Double(n) / 30 + pause)
             for block in 0..<3 {
                 let offset = Double(n) / 30 + Double(block) / 100 + pause
@@ -50,11 +52,11 @@ import CoreImage
         precondition(!recorder.isSaving && !recorder.isArmed)
         precondition(!recorder.isRecording)
         let files = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil).filter { $0.pathExtension == "mp4" }
-        precondition(whole ? files.count == 1 : files.count >= 4, "Timed rollover, reconnect and rotation must produce separate files: \(recorder.message)")
+        precondition(bytes ? files.count >= 2 : (whole ? files.count == 1 : files.count >= 4), "Timed rollover, reconnect and rotation must produce separate files: \(recorder.message)")
         var totalVideo = 0, totalAudio = 0
         var sizes = Set<String>()
         for file in files {
-            precondition(file.lastPathComponent.range(of: #"^课程·\d{10}( \(\d+\))?\.mp4$"#, options: .regularExpression) != nil)
+            precondition(file.lastPathComponent.range(of: #"^课程·\d{10}·\d{3}( \(\d+\))?\.mp4$"#, options: .regularExpression) != nil)
             let asset = AVURLAsset(url: file)
             let videos = try await asset.loadTracks(withMediaType: .video)
             let audios = try await asset.loadTracks(withMediaType: .audio)
@@ -62,14 +64,14 @@ import CoreImage
             let size = try await videos[0].load(.naturalSize)
             sizes.insert("\(Int(size.width))x\(Int(size.height))")
             let duration = try await asset.load(.duration).seconds
-            precondition(duration > 0 && (whole ? duration > 600 : duration < 1.2))
+            precondition(duration > 0 && (bytes ? true : (whole ? duration > 600 : duration < 1.2)))
             let reader = try AVAssetReader(asset: asset)
             let output = AVAssetReaderTrackOutput(track: videos[0], outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
             reader.add(output); precondition(reader.startReading())
             var count = 0
             while let sample = output.copyNextSampleBuffer() {
                 count += 1
-                if count == 1, let pixel = CMSampleBufferGetImageBuffer(sample) {
+                if !bytes && count == 1, let pixel = CMSampleBufferGetImageBuffer(sample) {
                     CVPixelBufferLockBaseAddress(pixel, .readOnly)
                     let pointer = CVPixelBufferGetBaseAddress(pixel)!.assumingMemoryBound(to: UInt8.self)
                     precondition(pointer[2] > 180 && pointer[0] < 60, "Recorded picture must be red")

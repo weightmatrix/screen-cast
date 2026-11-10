@@ -58,6 +58,27 @@ enum BaiduTransport {
         }
         guard size > 0 else { throw DriveError.message("录课文件为空") }; return (size, list)
     }
+    static func ensureLessonDirectory(parent: String, name: String, token: String) async throws -> String {
+        guard !name.isEmpty, !name.contains("/"), !name.contains("\\"), name != ".", name != "..", name.utf8.count <= 240 else {
+            throw DriveError.message("课程文件夹名字无效，本地录课已保留")
+        }
+        let path = (parent == "/" ? "" : parent) + "/" + name
+        do {
+            let result = try await request(url("/rest/2.0/xpan/file", token: token, parameters: ["method": "create"]),
+                form: ["path": path, "isdir": "1", "size": "0", "block_list": "[]", "rtype": "0"])
+            guard result["path"] as? String == path, result["isdir"] as? Int == 1 else {
+                throw DriveError.message("网盘课程文件夹未能确认，本地录课已保留")
+            }
+        } catch {
+            try Task.checkCancellation()
+            // A previous part/retry may already have created it. Listing this exact
+            // directory confirms it exists without accepting a same-name file.
+            let result = try await request(url("/rest/2.0/xpan/file", token: token,
+                parameters: ["method": "list", "dir": path, "start": "0", "limit": "1"]))
+            guard result["list"] is [[String: Any]] else { throw DriveError.message("网盘课程文件夹不可用，本地录课已保留") }
+        }
+        return path
+    }
     struct LocalFileStamp: Equatable {
         let size: Int64
         let modified: Date
@@ -121,7 +142,7 @@ enum BaiduTransport {
         didSet { UserDefaults.standard.set(destination, forKey: "lesson.baiduDirectory") }
     }
     private struct Credentials: Codable { var access: String; var refresh: String; var expires: Date; var account: String; var name: String }
-    private struct Job: Codable { var file: String; var account: String; var directory: String; var attempts = 0 }
+    private struct Job: Codable { var file: String; var account: String; var directory: String; var attempts = 0; var lesson: String? = nil }
     private var credentials: Credentials?
     private var jobs: [Job] = []
     private var webSession: ASWebAuthenticationSession?
@@ -250,13 +271,13 @@ enum BaiduTransport {
         try JSONEncoder().encode(jobs).write(to: url, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path); pendingCount = jobs.count
     }
-    func enqueue(_ file: URL) {
+    func enqueue(_ file: URL, lesson: String) {
         guard enabled else { return }
         guard let credentials else { status = "录课已在本机保存，请先登录百度网盘"; return }
         guard destination.hasPrefix("/"), destination.utf8.count <= 2048, jobs.count < 64, let root = RecordingFolderPreferences.shared.folder,
               file.deletingLastPathComponent().standardizedFileURL.path == root.standardizedFileURL.path else { status = "待传队列已满或目录已变，录课仍在本机"; return }
         guard !jobs.contains(where: { $0.file == file.lastPathComponent && $0.account == credentials.account }) else { return }
-        jobs.append(Job(file: file.lastPathComponent, account: credentials.account, directory: destination))
+        jobs.append(Job(file: file.lastPathComponent, account: credentials.account, directory: destination, lesson: lesson))
         do { try persistQueue(); startUploads() } catch { status = "待传状态保存失败，录课仍在本机" }
     }
     private func cancelUploads() { workerID = UUID(); worker?.cancel(); worker = nil }
@@ -280,7 +301,11 @@ enum BaiduTransport {
                     guard values.isSymbolicLink != true, values.isRegularFile == true else { throw DriveError.message("本地待传文件不可用，已暂停") }
                     let stamp = try BaiduTransport.localStamp(file)
                     let access = try await token(); status = "正在上传：" + job.file
-                    try await BaiduTransport.upload(file, directory: job.directory, token: access)
+                    var directory = job.directory
+                    if let lesson = job.lesson {
+                        directory = try await BaiduTransport.ensureLessonDirectory(parent: directory, name: lesson, token: access)
+                    }
+                    try await BaiduTransport.upload(file, directory: directory, token: access)
                     try Task.checkCancellation(); guard workerID == id else { return }
                     jobs.removeFirst()
                     do { try persistQueue() } catch { jobs.insert(job, at: 0); throw DriveError.message("上传完成但本地待传状态未能保存，请检查磁盘") }
@@ -323,7 +348,7 @@ struct BaiduDriveSettings: View {
             HStack { Text("网盘目录：" + drive.destination).lineLimit(2); Button("选择网盘目录") { choosing = true; drive.browse(drive.destination) }.disabled(!drive.loggedIn) }
             Text(drive.status).font(.caption).foregroundStyle(.secondary)
             if drive.pendingCount > 0 { HStack { Text("待传 \(drive.pendingCount) 个录课文件"); Button("重试上传") { drive.retryUploads() }; Button("清除待传") { confirmClear = true } } }
-            Text("录课从本机直接上传百度网盘，不经过投屏服务器。停止录课并保存完整文件后上传；确认上传成功自动删除本地文件，失败则保留。当前单文件最多4GB；授权有效期内自动续期。")
+            Text("录课从本机直接上传百度网盘，不经过投屏服务器。约3.5GB自动分段；每次上传先创建或确认同名课程文件夹，把分段放入其中；确认上传成功自动删除本地文件，失败则保留。当前单文件最多4GB；授权有效期内自动续期。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("清除待传记录？本地录像和网盘文件均保留。", isPresented: $confirmClear) {

@@ -23,7 +23,15 @@ final class DriveFixtureProtocol: URLProtocol, @unchecked Sendable {
         precondition(["pan.baidu.com", "d.pcs.baidu.com"].contains(url.host!))
         precondition(params["access_token"] == "fixture+token=only")
         var result: [String: Any] = [:]
-        if params["method"] == "precreate" {
+        if params["method"] == "create", String(decoding: requestBody(), as: UTF8.self).contains("isdir=1") {
+            let fields = URLComponents(string: "?" + String(decoding: requestBody(), as: UTF8.self))!.queryItems!
+            let form = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value ?? "") })
+            precondition(form["path"] == "/课程/课程名" && form["rtype"] == "0")
+            result = Self.mode == "existing-folder" || Self.mode == "folder-failure" ? ["errno": -8] : ["errno": 0, "path": "/课程/课程名", "isdir": 1]
+        } else if params["method"] == "list" {
+            precondition(params["dir"] == "/课程/课程名" && params["limit"] == "1")
+            result = Self.mode == "folder-failure" ? ["errno": -9] : ["errno": 0, "list": []]
+        } else if params["method"] == "precreate" {
             let body = requestBody()
             let fields = URLComponents(string: "?" + String(decoding: body, as: UTF8.self))!.queryItems!
             let form = Dictionary(uniqueKeysWithValues: fields.map { ($0.name, $0.value ?? "") })
@@ -62,6 +70,15 @@ final class DriveFixtureProtocol: URLProtocol, @unchecked Sendable {
         defer { try? FileManager.default.removeItem(at: folder) }
         let file = folder.appendingPathComponent(DriveFixtureProtocol.name)
         try Data(repeating: 0x5a, count: 4 * 1024 * 1024 + 17).write(to: file)
+        let directory = try await BaiduTransport.ensureLessonDirectory(parent: "/课程", name: "课程名", token: "fixture+token=only")
+        precondition(directory == "/课程/课程名")
+        DriveFixtureProtocol.mode = "existing-folder"
+        let existing = try await BaiduTransport.ensureLessonDirectory(parent: "/课程", name: "课程名", token: "fixture+token=only")
+        precondition(existing == directory)
+        DriveFixtureProtocol.mode = "folder-failure"
+        do { _ = try await BaiduTransport.ensureLessonDirectory(parent: "/课程", name: "课程名", token: "fixture+token=only"); preconditionFailure("Must reject unconfirmed folder") } catch {}
+        precondition(FileManager.default.fileExists(atPath: file.path))
+        DriveFixtureProtocol.mode = "normal"
         DriveFixtureProtocol.hashes = try BaiduTransport.hashes(file).1
         try await BaiduTransport.upload(file, directory: "/课程", token: "fixture+token=only")
         precondition(FileManager.default.fileExists(atPath: file.path))

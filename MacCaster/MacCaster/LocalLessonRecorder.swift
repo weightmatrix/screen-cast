@@ -61,8 +61,11 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var segment: Segment?
     private var outputFolder: URL?
-    private var outputNaming = RecordingNameFormat()
     private var outputQuality = RecordingQuality.high
+    private var lessonStem = "录课"
+    private var partNumber = 0
+    private let segmentByteLimit: Int64
+    private var recordingSize: CGSize?
     private let namingOverride: RecordingNameFormat?
     private let cloudEligible: Bool
     private var finishing = 0
@@ -82,9 +85,9 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         let folder: URL
         let stem: String
         var audioTime = -Double.infinity
-        init(folder: URL, size: CGSize, time: Double, naming: RecordingNameFormat, quality: RecordingQuality) throws {
+        init(folder: URL, size: CGSize, time: Double, stem: String, quality: RecordingQuality) throws {
             self.size = size; started = time
-            stem = naming.name(at: Date()); self.folder = folder
+            self.stem = stem; self.folder = folder
             let cache = try RecordingFolderPreferences.cacheDirectory(in: folder)
             let url = cache.appendingPathComponent(UUID().uuidString + ".mp4")
             writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
@@ -101,7 +104,8 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                     kCVPixelBufferIOSurfacePropertiesKey as String: [:]])
             guard writer.canAdd(video), writer.canAdd(audio) else { throw RecordingError.message("无法创建录课音视频轨道") }
             writer.add(video); writer.add(audio)
-            writer.shouldOptimizeForNetworkUse = true
+            writer.shouldOptimizeForNetworkUse = false
+            writer.directoryForTemporaryFiles = cache
             guard writer.startWriting() else { throw writer.error ?? RecordingError.message("无法开始写入录课") }
             writer.startSession(atSourceTime: .zero)
         }
@@ -124,10 +128,11 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         var errorDescription: String? { if case .message(let value) = self { return value }; return nil }
     }
 
-    init(folder: URL? = nil, segmentDuration: TimeInterval = .infinity, automaticKey: String = "lessonAutomatic.receive", naming: RecordingNameFormat? = nil) {
+    init(folder: URL? = nil, segmentDuration: TimeInterval = .infinity, automaticKey: String = "lessonAutomatic.receive", naming: RecordingNameFormat? = nil, segmentByteLimit: Int64 = 3_500_000_000) {
         self.namingOverride = naming; self.cloudEligible = folder == nil
         self.automaticKey = automaticKey
         self.segmentDuration = segmentDuration
+        self.segmentByteLimit = max(1, segmentByteLimit)
         Self.instances.add(self)
         if let folder { self.folder = folder; return }
         self.folder = RecordingFolderPreferences.shared.folder
@@ -151,7 +156,8 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
         lock.lock(); generation = token; accepting = true; lock.unlock()
         isArmed = true; message = "等待接收画面，连接后自动录课"
         queue.async {
-            self.outputFolder = folder; self.outputNaming = naming; self.outputQuality = quality; self.lastSpaceCheck = -.infinity; self.lastVideoTime = -.infinity
+            self.lessonStem = naming.name(at: Date()); self.partNumber = 0; self.recordingSize = nil
+            self.outputFolder = folder; self.outputQuality = quality; self.lastSpaceCheck = -.infinity; self.lastVideoTime = -.infinity
         }
     }
 
@@ -194,7 +200,12 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                 let scale = min(1, self.outputQuality.edge / max(extent.width, extent.height))
                 let requestedSize = CGSize(width: max(2, floor(extent.width * scale / 2) * 2), height: max(2, floor(extent.height * scale / 2) * 2))
                 if let current = self.segment, self.segmentDuration.isFinite, current.size != requestedSize || time - current.started >= self.segmentDuration { self.finishSegment() }
-                let size = self.segment?.size ?? requestedSize
+                if let current = self.segment {
+                    let bytes = (try FileManager.default.attributesOfItem(atPath: current.writer.outputURL.path)[.size] as? NSNumber)?.int64Value ?? 0
+                    let reserve = min(16 * 1024 * 1024, self.segmentByteLimit / 10)
+                    if bytes >= self.segmentByteLimit - reserve { self.finishSegment() }
+                }
+                let size = self.segmentDuration.isFinite ? requestedSize : (self.recordingSize ?? requestedSize)
                 if time - self.lastSpaceCheck >= 10 {
                     self.lastSpaceCheck = time
                     let free = (try FileManager.default.attributesOfFileSystem(forPath: folder.path)[.systemFreeSize] as? NSNumber)?.int64Value
@@ -205,7 +216,9 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                 }
                 if self.segment == nil {
                     guard self.finishing < 2 else { throw RecordingError.message("磁盘保存过慢，录课已停止") }
-                    self.segment = try Segment(folder: folder, size: size, time: time, naming: self.outputNaming, quality: self.outputQuality)
+                    self.partNumber += 1; self.recordingSize = size
+                    let stem = self.lessonStem + "·" + String(format: "%03d", self.partNumber)
+                    self.segment = try Segment(folder: folder, size: size, time: time, stem: stem, quality: self.outputQuality)
                     self.publish("正在录课 · " + self.outputQuality.title)
                 }
                 guard let segment = self.segment else { return }
@@ -273,9 +286,10 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
                 if current.writer.status == .completed {
                     do {
                         let saved = try current.publish()
+                        let lesson = self.lessonStem
                         DispatchQueue.main.async {
                             self.lastFile = saved
-                            if self.cloudEligible { BaiduDrive.shared.enqueue(saved) }
+                            if self.cloudEligible { BaiduDrive.shared.enqueue(saved, lesson: lesson) }
                         }
                         if self.ticket() == nil, self.finishing == 1 { self.publish("录课已保存") }
                     } catch { self.fail(error) }
@@ -411,7 +425,7 @@ struct RecordingFolderSettings: View {
             Picker("录课清晰度", selection: $quality) {
                 ForEach(RecordingQuality.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
             }
-            Text("下次录课生效；不放大原画面。整节保存为一个文件，停止录课后上传；上传成功自动删除本地文件，失败保留。百度上传当前支持单文件最多4GB。").font(.caption).foregroundStyle(.secondary)
+            Text("下次录课生效；不放大原画面。约3.5GB自动分段，同一课程放入同名网盘文件夹；完成的分段自动上传；上传成功自动删除本地文件，失败保留。百度上传当前支持单文件最多4GB。").font(.caption).foregroundStyle(.secondary)
             TextField("录课名字前缀", text: $prefix)
             HStack {
                 Toggle("年份", isOn: $year).toggleStyle(OrnamentalToggleStyle())
