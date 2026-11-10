@@ -266,13 +266,11 @@ private struct SessionRow: View {
                         ScrollView {
                         VStack(alignment: .leading, spacing: 18) {
                             Text("投屏设置").font(.headline)
-                            RoomAudioControls()
-                            Toggle("显示光标", isOn: $session.showsCursor)
-                            Toggle(session.sendsPageAudio ? "声音已开启" : "声音已关闭", isOn: $session.sendsPageAudio)
-                            Toggle(session.sendsMicrophone ? "话筒已开启" : "话筒已关闭", isOn: $session.sendsMicrophone)
+                            RoomAudioControls(senderMicrophone: $session.sendsMicrophone)
+                            AudioActionButton(title: session.showsCursor ? "光标已开启" : "光标已关闭", active: session.showsCursor) { session.showsCursor.toggle() }
                             Divider()
-                            Toggle("允许公网直连", isOn: $session.internetEnabled)
-                            Toggle("允许公网邀请", isOn: $session.internetMatchingEnabled).disabled(!session.internetEnabled)
+                            AudioActionButton(title: session.internetEnabled ? "公网ip直连已开启" : "公网ip直连已关闭", active: session.internetEnabled) { session.internetEnabled.toggle() }
+                            AudioActionButton(title: session.internetEnabled && session.internetMatchingEnabled ? "公网邀请码连已开启" : "公网邀请码连已关闭", active: session.internetEnabled && session.internetMatchingEnabled) { session.internetMatchingEnabled.toggle() }.disabled(!session.internetEnabled)
                             Divider()
                             Text("\(session.encWidth) × \(session.encHeight) · \(Int(session.currentFPS)) fps")
                                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)

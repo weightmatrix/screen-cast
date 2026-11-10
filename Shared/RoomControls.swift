@@ -50,13 +50,16 @@ struct RoomAudioControls: View {
     @State private var input = UserDefaults.standard.string(forKey: "room.inputDevice") ?? ""
     @State private var output = UserDefaults.standard.string(forKey: "room.outputDevice") ?? ""
     var receiver = false
+    var senderMicrophone: Binding<Bool>? = nil
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 12) {
                 Text("话筒").font(.headline)
                 HStack(spacing: 8) {
                     AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
-                    if receiver {
+                    if let senderMicrophone {
+                        AudioActionButton(title: senderMicrophone.wrappedValue ? "话筒已开启" : "话筒已关闭", active: senderMicrophone.wrappedValue) { senderMicrophone.wrappedValue.toggle() }
+                    } else if receiver {
                         AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setReceiverMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
                     }
                     AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
@@ -64,7 +67,7 @@ struct RoomAudioControls: View {
                 Picker("话筒设备", selection: $input) {
                     Text("系统默认").tag(""); ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) }
                 }
-                if !receiver { Text("投屏话筒请在对应投屏源的设置中开启。").font(.caption).foregroundStyle(.secondary) }
+                if !receiver && senderMicrophone == nil { Text("投屏话筒请在对应投屏源的设置中开启。").font(.caption).foregroundStyle(.secondary) }
                 if receiver && !room.receiverCanSpeak { Text("连接就绪后可开启话筒；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
             }.padding(16).overlay(RoundedRectangle(cornerRadius: 5).stroke(.secondary.opacity(0.25)))
             VStack(alignment: .leading, spacing: 12) {
