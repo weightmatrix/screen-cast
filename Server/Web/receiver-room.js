@@ -9,6 +9,8 @@
   const controlText=(node,text)=>{(node.querySelector?.('.control-label')||node).textContent=t(text);};
   const participant=random(), fallback='访客-'+participant.slice(0,4);
   let active=null, microphone=null, context=null, analyser=null, meter=null, testing=false, generation=0, micAction=0;
+  el('voice-toggle').checked=read('touping-microphone-enabled','true')==='true';
+  el('voice-input').value=read('touping-input-device','');el('voice-output').value=read('touping-output-device','');
   el('nickname').value=read('touping-nickname','');
   el('nickname').oninput=()=>{store('touping-nickname',el('nickname').value); hello(active);};
   const name=()=>el('nickname').value.replace(/[\p{Cc}]/gu,'').trim().slice(0,32)||fallback;
@@ -45,7 +47,7 @@
     try {
       const list=await navigator.mediaDevices.enumerateDevices();
       for(const [id,kind] of [['voice-input','audioinput'],['voice-output','audiooutput']]) {
-        const select=el(id), old=select.value; select.replaceChildren(new Option('系统默认',''));
+        const select=el(id), old=select.value||read(id==='voice-input'?'touping-input-device':'touping-output-device',''); select.replaceChildren(new Option('系统默认',''));
         list.filter(x=>x.kind===kind).forEach((x,i)=>select.add(new Option(x.label||'设备 '+(i+1),x.deviceId)));
         if(Array.from(select.options).some(x=>x.value===old)) select.value=old;
       }
@@ -86,7 +88,7 @@
   }
   // Stop tracks synchronously, including local testing and pending permission requests.
   function muteMicrophone() {
-    micAction++;
+    micAction++;store('touping-microphone-enabled','false');
     testing=false;el('voice-test').checked=false;el('voice-toggle').checked=false;
     stopCapture();
     for(const sender of active?.pc.getSenders()||[]) {
@@ -100,7 +102,7 @@
     return el('voice-toggle').onchange();
   };
   el('voice-toggle').onchange=async()=>{
-    const action=++micAction;syncMicrophoneButton();
+    const action=++micAction;store('touping-microphone-enabled',String(el('voice-toggle').checked));syncMicrophoneButton();
     try {
       if(el('voice-toggle').checked) await replaceMic();
       else {const sender=active?.pc.getSenders().find(x=>x.track?.kind==='audio'); if(sender)await sender.replaceTrack(null);if(!testing)stopCapture();notes('话筒已关闭。');}
@@ -113,9 +115,9 @@
     catch(error){testing=false;el('voice-test').checked=false;notes(error.message);}
   };
   el('voice-test-button').onclick=()=>{el('voice-test').checked=!el('voice-test').checked;return el('voice-test').onchange();};
-  el('voice-input').onchange=async()=>{try{if(el('voice-toggle').checked)await replaceMic();else if(testing)await startCapture();}catch(error){el('voice-toggle').checked=false;stopCapture();notes(error.message);}};
+  el('voice-input').onchange=async()=>{store('touping-input-device',el('voice-input').value);try{if(el('voice-toggle').checked)await replaceMic();else if(testing)await startCapture();}catch(error){el('voice-toggle').checked=false;stopCapture();notes(error.message);}};
   el('voice-input').onfocus=devices;
-  el('voice-output').onchange=async()=>{try{if(!el('video').setSinkId)throw Error('请在系统声音设置选择喇叭。');await el('video').setSinkId(el('voice-output').value);}catch(error){notes(error.message);}};
+  el('voice-output').onchange=async()=>{store('touping-output-device',el('voice-output').value);try{if(!el('video').setSinkId)throw Error('请在系统声音设置选择喇叭。');await el('video').setSinkId(el('voice-output').value);}catch(error){notes(error.message);}};
   el('speaker-test').onclick=async()=>{
     // Short, local test tone; nothing is transmitted to other participants.
     try {
@@ -144,6 +146,8 @@
   globalThis.ToupingRoom={
     ready,
     attach(s) {
+      const output=el('voice-output').value||read('touping-output-device','');
+      if(output && el('video').setSinkId)el('video').setSinkId(output).catch(()=>notes('上次喇叭设备不可用，请重新选择或使用系统默认。'));
       active=s;s.roomReady=false;s.seen=new Set();s.ids=[];s.arrivals=[];s.sent=[];el('chat-messages').replaceChildren();
       try{s.outputContext=new (window.AudioContext||window.webkitAudioContext)();s.outputAnalyser=s.outputContext.createAnalyser();s.outputAnalyser.fftSize=256;s.outputContext.resume().catch(()=>{});}catch(_){}
       s.chat=s.pc.createDataChannel('touping-room-text-v1',{negotiated:true,id:1,ordered:true});s.chat.onopen=()=>hello(s);

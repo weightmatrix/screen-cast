@@ -131,7 +131,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
         }
     }
 
-    func addSession(filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "", touchEnabled: Bool = false, pageAudio: Bool = true, microphone: Bool = true, internet: Bool = true, internetMatching: Bool = true) {
+    func addSession(filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "", touchEnabled: Bool = false, pageAudio: Bool = UserDefaults.standard.object(forKey: "sender.pageAudio") as? Bool ?? true, microphone: Bool = UserDefaults.standard.object(forKey: "sender.microphone") as? Bool ?? true, internet: Bool = true, internetMatching: Bool = true) {
         let port = nextAvailablePort()
         let finalCode = uniqueCode(for: code)
         if #available(macOS 15.2, *) {
@@ -278,8 +278,8 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     @Published var internetEnabled = true { didSet { server.setInternetEnabled(internetEnabled) } }
     @Published var internetStatus = "正在准备公网连接"
     var internetCodeConflict: Bool { internetStatus.contains("邀请编号已占用") }
-    @Published var sendsPageAudio = true { didSet { updateAudio() } }
-    @Published var sendsMicrophone = true { didSet { updateAudio() } }
+    @Published var sendsPageAudio = true { didSet { if audioActive { UserDefaults.standard.set(sendsPageAudio, forKey: "sender.pageAudio") }; updateAudio() } }
+    @Published var sendsMicrophone = true { didSet { if audioActive { UserDefaults.standard.set(sendsMicrophone, forKey: "sender.microphone") }; updateAudio() } }
     @Published private(set) var microphoneActive = false
     private var audioActive = false
     private var microphonePermissionPending = false

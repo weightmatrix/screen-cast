@@ -1,3 +1,7 @@
+## 89版本地接收记忆
+
+receiver.js按邀请码本地保存最多32组密码/申请和最后邀请码，receiver-room.js保存话筒意向/设备，播放器保存静音/音量。使用浏览器localStorage而非Cookie，记忆功能不额外向服务器发送填写内容；不同origin不共享，密码受同源脚本安全边界约束。ops/deploy_receiver89.py只发布4份静态资源，回滚backups/before89-web-publish，无服务重启，不改变配对审计或媒体边界。
+
 ## 88版两列填写与说明居中
 
 接收模板说明居中，昵称/编号和密码/申请分两排，声音控制仍在连接前，默认声音与话筒意向保持。App内置局域网页共用源码。ops/deploy_receiver88.py更新四份静态资源，回滚backups/before88-web-publish，无服务重启；没有新增媒体转发、TURN或修改Safari权限机制。

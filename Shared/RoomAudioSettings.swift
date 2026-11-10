@@ -87,6 +87,12 @@ final class RoomAudioSettings: ObservableObject {
         if let hostEngine { do { try Self.applyOutput(hostEngine) } catch { self.error = "切换共用语音输出失败，请选择系统默认" } }
         NotificationCenter.default.post(name: .roomAudioDevicesChanged, object: nil)
     }
+    func setReceiverMicrophone(_ value: Bool) {
+        UserDefaults.standard.set(value, forKey: "receiver.microphoneIntent"); setMicrophone(value)
+    }
+    func restoreReceiverMicrophone() {
+        if UserDefaults.standard.bool(forKey: "receiver.microphoneIntent") { setMicrophone(true) }
+    }
     func setMicrophone(_ value: Bool) { lock.lock(); uplink = value; lock.unlock(); microphoneEnabled = value; updateCapture() }
     func setTesting(_ value: Bool) { testing = value; updateCapture() }
     private func isCurrentCapture(_ value: UUID) -> Bool { lock.lock(); defer { lock.unlock() }; return captureGeneration == value }

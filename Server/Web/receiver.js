@@ -12,7 +12,39 @@
   document.title='李知本·投屏自由 · '+t('接收工作台');
   const local = location.protocol === 'http:';
   const initial = (new URLSearchParams(location.hash.slice(1)).get('invite') || new URLSearchParams(location.hash.slice(1)).get('code'));
-  if (/^\d{6,36}$/.test(initial || '')) $('code').value = initial;
+  // Per-origin, bounded local profiles. Never cookies or URL query parameters.
+  const readPreference=(key,fallback)=>{try{return localStorage.getItem(key)??fallback;}catch(_){return fallback;}};
+  const writePreference=(key,value)=>{try{localStorage.setItem(key,value);}catch(_){}};
+  let profiles={},profileOrder=[];
+  try {
+    const saved=JSON.parse(readPreference('touping-receiver-profiles','{}'));
+    if(saved && typeof saved==='object') {
+      const entries=Array.isArray(saved)?saved.filter(x=>x && typeof x==='object').map(x=>[x.code,x]):Object.entries(saved);
+      for(const [code,value] of entries.slice(-32))if(/^\d{6,36}$/.test(code) && value && typeof value==='object'){
+        profiles[code]={password:typeof value.password==='string'?value.password.slice(0,256):'',application:typeof value.application==='string'?value.application.slice(0,200):''};
+        profileOrder=profileOrder.filter(x=>x!==code);profileOrder.push(code);
+      }
+    }
+  } catch(_) {}
+  let profileCode='';
+  const rememberProfile=()=>{
+    if(!profileCode)return;
+    delete profiles[profileCode];profileOrder=profileOrder.filter(code=>code!==profileCode);
+    const password=$('password').value.slice(0,256),application=$('application').value.slice(0,200);
+    if(password||application){profiles[profileCode]={password,application};profileOrder.push(profileCode);}
+    while(profileOrder.length>32)delete profiles[profileOrder.shift()];
+    writePreference('touping-receiver-profiles',JSON.stringify(profileOrder.map(code=>({code,...profiles[code]}))));
+  };
+  const restoreProfile=()=>{
+    rememberProfile();
+    const code=ToupingAuth.code($('code').value);profileCode=/^\d{6,36}$/.test(code)?code:'';
+    $('password').value=profiles[profileCode]?.password||'';$('application').value=profiles[profileCode]?.application||'';
+    if(profileCode)writePreference('touping-receiver-last-code',profileCode);
+  };
+  $('code').value=/^\d{6,36}$/.test(initial||'')?initial:readPreference('touping-receiver-last-code','');
+  restoreProfile();
+  $('code').addEventListener('input',restoreProfile);
+  for(const id of ['password','application'])$(id).addEventListener('input',rememberProfile);
   // Codes stay in the fragment, never in HTTP requests, referrers or page titles.
   $('route').textContent = local ? '局域网接收 · 输入连接密码和申请文字，由投送者批准后接入。' : '公网邀请 · 输入连接密码和申请文字，由投送者批准后接入；画面不经过服务器。';
   $('notice').textContent += local ? ' 仅在可信局域网使用此 HTTP 地址。' : ' 公网连接记录来源 IP、浏览器类型及随机应用标识；网络无法直连时会失败，不使用视频中继。';
@@ -56,7 +88,7 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：88\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：89\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
@@ -195,7 +227,7 @@
       id=Array.from(crypto.getRandomValues(new Uint8Array(16)), x=>x.toString(16).padStart(2,'0')).join('');
       try { localStorage.setItem('touping-browser-id',id); } catch(_) {}
     }
-    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'88-web'};
+    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'89-web'};
   }
   function report(s, event) {
     if(local || !/^[a-f0-9]{32}$/.test(s.auditSession || '')) return;
@@ -233,6 +265,8 @@
   $('join').addEventListener('submit',async event=>{
     event.preventDefault(); if(current) stop(current);
     const code=ToupingAuth.code($('code').value); if(!/^\d{6,36}$/.test(code)) return status('请输入6至36位数字匹配码');
+    if(ToupingAuth.code($('code').value)!==profileCode)restoreProfile();
+    rememberProfile();
     const password=$('password').value.normalize('NFC'), application=$('application').value.trim();
     if(Array.from(password).length<6 || Array.from(password).length>64 || /[\p{Cc}]/u.test(password)) return status('请填写6至64位连接密码');
     if(!application || Array.from(application).length>200 || new TextEncoder().encode(application).length>800) return status('请填写1至200字申请文字');
@@ -294,8 +328,10 @@
     if(video.muted || video.volume===0) {video.muted=false;if(video.volume===0)video.volume=1;} else video.muted=true;
     syncSound();if(!video.muted && video.srcObject)video.play().catch(()=>status('请点击“播放画面”开启声音'));
   };
-  $('video').muted=false;
-  $('video').addEventListener('volumechange',syncSound);
+  $('video').muted=readPreference('touping-speaker-muted','false')==='true';
+  const rememberedVolume=Number(readPreference('touping-speaker-volume','1'));
+  $('video').volume=Number.isFinite(rememberedVolume)?Math.max(0,Math.min(1,rememberedVolume)):1;
+  $('video').addEventListener('volumechange',()=>{syncSound();writePreference('touping-speaker-muted',String($('video').muted));writePreference('touping-speaker-volume',String($('video').volume));});
   $('speaker-sound').onclick=toggleSound;syncSound();
   // Use the media element's native fullscreen player; no persistent page overlay.
   const maximize=async()=>{

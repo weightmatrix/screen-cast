@@ -292,7 +292,7 @@ struct ReceiverAudioControls: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Text("话筒").font(.caption).frame(width: 30, alignment: .leading)
-                AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
+                AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setReceiverMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
                 AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
                 CompactAudioButton(kind: .devices, title: "选择话筒设备") { inputDevices = true }
                     .popover(isPresented: $inputDevices) { AudioDeviceSelectionPanel(input: true) }

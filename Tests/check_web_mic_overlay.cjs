@@ -2,7 +2,7 @@
 // No network or device access: exercise production mute and pending capture cancellation.
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const nodes=new Map();
-const el=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},attrs:{},setAttribute(key,value){this.attrs[key]=value;},addEventListener(){},replaceChildren(){}});return nodes.get(id);};
+const el=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},attrs:{},setAttribute(key,value){this.attrs[key]=value;},events:{},addEventListener(name,handler){this.events[name]=handler;},replaceChildren(){}});return nodes.get(id);};
 // Real controls contain an SVG sibling: changing the label must preserve it.
 const decorated=['voice-button','voice-test-button','speaker-sound'];
 for(const id of decorated) {
@@ -14,7 +14,8 @@ let resolveCapture,stopped=0,detached=0;
 const track={kind:'audio',enabled:true,stop(){stopped++;}};
 const stream={getTracks:()=>[track],getAudioTracks:()=>[track]};
 const sender={track,replaceTrack(value){assert.equal(value,null);detached++;return Promise.resolve();}};
-const sandbox={document:{getElementById:el},window:{},navigator:{language:'zh-CN',mediaDevices:{getUserMedia:()=>new Promise(resolve=>{resolveCapture=resolve;})}},crypto:require('node:crypto').webcrypto,localStorage:{getItem(){return null;},setItem(){}},clearInterval(){},TextEncoder};
+const stored=new Map();
+const sandbox={document:{getElementById:el},window:{},navigator:{language:'zh-CN',mediaDevices:{getUserMedia:()=>new Promise(resolve=>{resolveCapture=resolve;})}},crypto:require('node:crypto').webcrypto,localStorage:{getItem(key){return stored.get(key)??null;},setItem(key,value){stored.set(key,String(value));}},clearInterval(){},TextEncoder};
 el('voice-toggle').checked=true; // Mirrors the default-on checkbox in the real HTML.
 vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox);
 (async()=>{
@@ -99,6 +100,7 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   sandbox.document.documentElement={};sandbox.document.querySelectorAll=()=>[];
   sandbox.location={protocol:'https:',hash:'',href:'https://test.invalid/'};
   sandbox.URLSearchParams=URLSearchParams;sandbox.URL=URL;
+  vm.runInNewContext(fs.readFileSync('Server/Web/receiver-auth.js','utf8'),sandbox);
   vm.runInNewContext(fs.readFileSync('Server/Web/receiver.js','utf8'),sandbox);
   assert.equal(el('video').muted,false);
   el('video').srcObject={};el('video').play=()=>Promise.resolve();el('video').volume=1;
@@ -115,6 +117,36 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   safari=false;await el('fullscreen').onclick();assert(safari);
   el('video').webkitEnterFullscreen=undefined;
   await el('fullscreen').onclick();assert.match(el('status').textContent,/系统控制栏/);
+  el('code').value='12345678';el('code').events.input();
+  el('password').value='fixture-alpha';el('application').value='fixture application A';el('password').events.input();
+  el('code').value='87654321';el('code').events.input();
+  assert.equal(el('password').value,'');assert.equal(el('application').value,'');
+  el('password').value='fixture-beta';el('application').value='fixture application B';el('application').events.input();
+  el('code').value='12345678';el('code').events.input();
+  assert.equal(el('password').value,'fixture-alpha');assert.equal(el('application').value,'fixture application A');
+  el('video').muted=true;el('video').volume=.4;el('video').events.volumechange();
+  sandbox.location.hash='#invite=87654321';
+  vm.runInNewContext(fs.readFileSync('Server/Web/receiver.js','utf8'),sandbox);
+  assert.equal(el('code').value,'87654321');assert.equal(el('password').value,'fixture-beta');
+  assert.equal(el('video').muted,true);assert.equal(el('video').volume,.4);
+  sandbox.location.hash='#invite=99999999';
+  vm.runInNewContext(fs.readFileSync('Server/Web/receiver.js','utf8'),sandbox);
+  assert.equal(el('password').value,'');assert.equal(el('application').value,'');
+  for(let index=10000000;index<10000040;index++){el('code').value=String(index);el('code').events.input();el('password').value='fixture';el('password').events.input();}
+  assert(Object.keys(JSON.parse(stored.get('touping-receiver-profiles'))).length<=32);
+  el('code').value='000001';el('code').events.input();el('password').value='recent-low-code';el('password').events.input();
+  assert(JSON.parse(stored.get('touping-receiver-profiles')).some(x=>x.code==='000001'&&x.password==='recent-low-code'));
+  sandbox.location.hash='#invite=000001';vm.runInNewContext(fs.readFileSync('Server/Web/receiver.js','utf8'),sandbox);assert.equal(el('password').value,'recent-low-code');
+  const capturedBeforeReload=captures;
+  stored.set('touping-microphone-enabled','false');stored.set('touping-nickname','Remembered fixture');stored.set('touping-input-device','mic-1');stored.set('touping-output-device','fixture-speaker');
+  vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox);
+  assert.equal(el('voice-toggle').checked,false);assert.equal(el('nickname').value,'Remembered fixture');assert.equal(captures,capturedBeforeReload);
+  await el('voice-input').onfocus();assert.equal(el('voice-input').value,'mic-1');
+  let restoredSink='';el('video').setSinkId=async value=>{restoredSink=value;};
+  sandbox.ToupingRoom.attach({pc:{createDataChannel:()=>({close(){}})},connected:false});assert.equal(restoredSink,'fixture-speaker');assert.equal(captures,capturedBeforeReload);
+  sandbox.localStorage={getItem(){throw Error('storage unavailable');},setItem(){throw Error('storage unavailable');}};sandbox.location.hash='';
+  vm.runInNewContext(fs.readFileSync('Server/Web/receiver.js','utf8'),sandbox);assert.equal(el('password').value,'');
+  console.log('PASS per-invitation draft isolation/reload, bounded profiles, remembered volume/mic/nickname and no capture on reload');
   for(const id of decorated)assert.equal(el(id).decorationLost,false,'SVG must survive label changes: '+id);
   console.log('PASS current-state wording, no green pending microphone, retained SVG ornaments');
   console.log('PASS connection-independent mic selection and device access, synchronized default-on speaker controls');

@@ -13,7 +13,9 @@ final class RoomSession: ObservableObject {
     static let shared = RoomSession()
     @Published private(set) var messages: [RoomMessage] = []
     @Published private(set) var peerNicknames: [String: String] = [:]
-    @Published private(set) var receiverCanSpeak = false
+    @Published private(set) var receiverCanSpeak = false {
+        didSet { if receiverCanSpeak && !oldValue { RoomAudioSettings.shared.restoreReceiverMicrophone() } }
+    }
     @Published private(set) var error = ""
     let participant: String = {
         #if os(iOS)

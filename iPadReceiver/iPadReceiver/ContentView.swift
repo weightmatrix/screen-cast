@@ -17,12 +17,15 @@ struct ContentView: View {
     @AppStorage("internetPort") private var internetPortText = "9318"
     @AppStorage("matchCode") private var matchCode = ""
     @AppStorage("room.nickname") private var nickname = ""
-    @State private var connectionPassword = ""
-    @State private var applicationText = ""
+    @StateObject private var formMemory = ReceiverFormMemory()
     @State private var drawerOpen = true
     @State private var autoSearchTimer = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
     @ObservedObject private var diag = ConnectionDiag.shared
 
+    private var credentialTarget: String {
+        ReceiverFormMemory.target(mode: connectMode, invitation: matchCode,
+            host: connectMode == "wanIP" ? internetHost : host, port: connectMode == "wanIP" ? internetPortText : portText)
+    }
     var body: some View {
         GeometryReader { geo in
             ZStack {
@@ -72,6 +75,8 @@ struct ContentView: View {
                             value.translation.width < -60 { closeDrawer() }
                 }
         )
+        .onChange(of: credentialTarget) { value in formMemory.select(value) }
+        .onAppear { formMemory.select(credentialTarget) }
         .task {
             DiscoveryListener.shared.start()
             client.discoveryLookup = { code in
@@ -176,11 +181,11 @@ struct ContentView: View {
                     HStack(alignment: .top, spacing: 12) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("密码·必填").font(.caption)
-                            SecureField("填写连接密码", text: $connectionPassword).textFieldStyle(.roundedBorder)
+                            SecureField("填写连接密码", text: $formMemory.password).textFieldStyle(.roundedBorder)
                         }.frame(maxWidth: .infinity)
                         VStack(alignment: .leading, spacing: 6) {
                             Text("申请·必填").font(.caption)
-                            TextField("告诉投送者你是谁（最多200字）", text: $applicationText).textFieldStyle(.roundedBorder)
+                            TextField("告诉投送者你是谁（最多200字）", text: $formMemory.application).textFieldStyle(.roundedBorder)
                         }.frame(maxWidth: .infinity)
                     }
                     ReceiverAudioControls(sound: Binding(get: { client.receivesPageAudio || client.receivesMicrophone }, set: { client.receivesPageAudio = $0; client.receivesMicrophone = $0 }))
@@ -222,10 +227,10 @@ struct ContentView: View {
         if isConnected || client.status == .connecting || !client.recoveryMessage.isEmpty {
             client.disconnect(); return
         }
-        guard AdmissionCredentials.validPassword(connectionPassword), let text = AdmissionCredentials.application(applicationText) else {
+        guard AdmissionCredentials.validPassword(formMemory.password), let text = AdmissionCredentials.application(formMemory.application) else {
             client.setStatus("请填写连接密码和1至200字申请文字"); return
         }
-        client.connectionPassword = connectionPassword; client.applicationText = text
+        client.connectionPassword = formMemory.password; client.applicationText = text
         let invitation = AdmissionCredentials.invitation(matchCode)
         if connectMode == "wanCode" || connectMode == "code" {
             guard MatchingCode.isValid(invitation) else { client.setStatus("请输入有效邀请链接或编号"); return }

@@ -37,8 +37,8 @@ final class StreamClient: ObservableObject {
     private var autoConnectStarted = false
     let decoder = ImageDecoder()
 
-    @Published var receivesPageAudio = true { didSet { updateAudio() } }
-    @Published var receivesMicrophone = true { didSet { updateAudio() } }
+    @Published var receivesPageAudio = UserDefaults.standard.object(forKey: "receiver.pageAudio") as? Bool ?? true { didSet { UserDefaults.standard.set(receivesPageAudio, forKey: "receiver.pageAudio"); updateAudio() } }
+    @Published var receivesMicrophone = UserDefaults.standard.object(forKey: "receiver.microphoneAudio") as? Bool ?? true { didSet { UserDefaults.standard.set(receivesMicrophone, forKey: "receiver.microphoneAudio"); updateAudio() } }
     private func updateAudio() { nativePeer?.receiveAudio(page: receivesPageAudio, microphone: receivesMicrophone) }
     @Published private(set) var receiveTiming = ReceiveTiming()
     @Published private(set) var connectionInfo: PeerDiagnostic?

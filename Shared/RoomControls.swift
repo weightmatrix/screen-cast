@@ -57,7 +57,7 @@ struct RoomAudioControls: View {
                 HStack(spacing: 8) {
                     AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
                     if receiver {
-                        AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
+                        AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setReceiverMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
                     }
                     AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
                 }
