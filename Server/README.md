@@ -1,3 +1,7 @@
+## 87版线性接收与原生播放器
+
+接入表单包含单行申请和话筒/喇叭控制，默认系统设备、话筒开启意向仅在连接就绪后申请；拒绝不影响观看，断开停采集。video原生controls及媒体全屏取代自制浮层/CSS假全屏；实际控件显隐由UA负责。ops/deploy_receiver87.py更新4份静态资源，回滚backups/before87-web-publish，无服务重启；沿用固定usage脚本的精确HTML校验，不改代理。
+
 ## 86版状态文案与确认纹样
 
 接收页5个声音/话筒状态控件采用独立SVG描边，文案为“声音已开启/已关闭”“话筒已开启/已关闭”；pending话筒无绿纹，文本更新保留SVG。ops/deploy_receiver86.py更新HTML和receiver.js/receiver-room.js/receiver-i18n.js，回滚backups/before86-web-publish；无服务重启。站点共享代理会注入既有/papers/usage.js，HTML校验只允许唯一固定插入片段，3份JS保持原字节摘要检查，不修改代理。

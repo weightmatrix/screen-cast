@@ -16,13 +16,10 @@
   function syncMicrophoneButton() {
     const requested=el('voice-toggle').checked;
     const sending=requested && microphone?.getAudioTracks().some(track=>track.enabled && track.readyState!=='ended' && active?.pc.getSenders().some(sender=>sender.track===track));
-    const button=el('mute-mic'), label=sending?'话筒已开启':'话筒已关闭';
-    button.setAttribute('data-state',sending?'on':requested?'pending':'off');
-    button.setAttribute('aria-label',label);button.setAttribute('title',requested && !sending?'取消开启话筒（等待连接或授权）':sending?'点击关闭话筒':'点击开启话筒');
-    button.setAttribute('aria-pressed',String(Boolean(sending)));
-    for(const id of ['voice-button','screen-mic']) {
-      controlText(el(id),sending?'话筒已开启':'话筒已关闭');el(id).setAttribute('aria-pressed',String(Boolean(sending)));el(id).setAttribute('data-active',String(Boolean(sending)));
-    }
+    const button=el('voice-button'), label=sending?'话筒已开启':requested?'话筒待开启':'话筒已关闭';
+    controlText(button,label);button.setAttribute('aria-label',label);
+    button.setAttribute('title',requested && !sending?'点击取消开启话筒（等待连接或授权）':sending?'点击关闭话筒':'点击开启话筒');
+    button.setAttribute('aria-pressed',String(Boolean(sending)));button.setAttribute('data-active',String(Boolean(sending)));
     controlText(el('voice-test-button'),testing?'停止测试':'测试话筒');
     el('voice-test-button').setAttribute('aria-pressed',String(testing));el('voice-test-button').setAttribute('data-active',String(testing));
   }
@@ -97,7 +94,7 @@
     }
     notes('话筒已关闭。');
   }
-  el('mute-mic').onclick=()=>{
+  el('voice-button').onclick=()=>{
     if(el('voice-toggle').checked) {muteMicrophone();return;}
     el('voice-toggle').checked=true;syncMicrophoneButton();
     return el('voice-toggle').onchange();
@@ -109,7 +106,6 @@
       else {const sender=active?.pc.getSenders().find(x=>x.track?.kind==='audio'); if(sender)await sender.replaceTrack(null);if(!testing)stopCapture();notes('话筒已关闭。');}
     }catch(error){if(action===micAction){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}
   };
-  el('voice-button').onclick=el('screen-mic').onclick=el('mute-mic').onclick;
   syncMicrophoneButton();
   el('voice-test').onchange=async()=>{
     testing=el('voice-test').checked;syncMicrophoneButton();
@@ -160,7 +156,7 @@
       s.outputMeter=setInterval(()=>{const data=new Uint8Array(s.outputAnalyser.fftSize);s.outputAnalyser.getByteTimeDomainData(data);el('speaker-fill').style.height=(el('video').muted||el('video').paused?0:Math.round(Math.max(...Array.from(data,x=>Math.abs(x-128)/128))*100*el('video').volume))+'%';},100);
     },
     prepare(s){for(const transceiver of s.pc.getTransceivers())if(transceiver.receiver.track.kind==='audio')transceiver.direction='sendrecv';},
-    stop(s){if(active!==s)return;active=null;stopCapture();if(s.outputMeter)clearInterval(s.outputMeter);s.outputContext?.close().catch(()=>{});testing=false;el('voice-toggle').checked=false;el('voice-test').checked=false;s.chat?.close();el('chat-messages').replaceChildren();notes('话筒已关闭。');}
+    stop(s){if(active!==s)return;active=null;stopCapture();if(s.outputMeter)clearInterval(s.outputMeter);s.outputContext?.close().catch(()=>{});testing=false;el('voice-test').checked=false;s.chat?.close();el('chat-messages').replaceChildren();notes('已断开，话筒已停止采集。');}
   };
   navigator.mediaDevices?.addEventListener?.('devicechange',devices);devices();
 })();
