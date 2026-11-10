@@ -8,6 +8,7 @@
   const t=text=>catalog.strings[text]?.[locale] || text;
   document.documentElement.lang=locale<0?'zh-Hans':catalog.languages[locale];
   document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n);});
+  const controlText=(node,text)=>{(node.querySelector?.('.control-label')||node).textContent=t(text);};
   document.title='李知本·投屏自由 · '+t('接收工作台');
   const local = location.protocol === 'http:';
   const initial = (new URLSearchParams(location.hash.slice(1)).get('invite') || new URLSearchParams(location.hash.slice(1)).get('code'));
@@ -55,7 +56,7 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：83\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：86\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
@@ -194,7 +195,7 @@
       id=Array.from(crypto.getRandomValues(new Uint8Array(16)), x=>x.toString(16).padStart(2,'0')).join('');
       try { localStorage.setItem('touping-browser-id',id); } catch(_) {}
     }
-    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'83-web'};
+    return {installation_id:id,platform:'browser',model:'Browser',os_version:'0',app_version:'1.4',app_build:'86-web'};
   }
   function report(s, event) {
     if(local || !/^[a-f0-9]{32}$/.test(s.auditSession || '')) return;
@@ -286,7 +287,7 @@
   $('play').onclick=()=>{if(current)playVideo(current,true);};
   const syncSound=()=>{
     const video=$('video'), muted=video.muted || video.volume===0;
-    for(const id of ['sound','speaker-sound']) {$(id).textContent=muted?t('开启声音'):t('关闭声音');$(id).setAttribute('aria-pressed',String(!muted));$(id).setAttribute('data-active',String(!muted));}
+    for(const id of ['sound','speaker-sound']) {controlText($(id),muted?'声音已关闭':'声音已开启');$(id).setAttribute('title',muted?t('开启声音'):t('关闭声音'));$(id).setAttribute('aria-pressed',String(!muted));$(id).setAttribute('data-active',String(!muted));}
   };
   const toggleSound=()=>{
     const video=$('video');

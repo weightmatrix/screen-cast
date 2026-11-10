@@ -3,6 +3,13 @@
 const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
 const nodes=new Map();
 const el=id=>{if(!nodes.has(id))nodes.set(id,{value:'',checked:false,style:{},attrs:{},setAttribute(key,value){this.attrs[key]=value;},addEventListener(){},replaceChildren(){}});return nodes.get(id);};
+// Real controls contain an SVG sibling: changing the label must preserve it.
+const decorated=['voice-button','screen-mic','voice-test-button','sound','speaker-sound'];
+for(const id of decorated) {
+  const node=el(id),label={textContent:''};node.decorationLost=false;
+  node.querySelector=selector=>selector==='.control-label'?label:null;
+  Object.defineProperty(node,'textContent',{get:()=>label.textContent,set:value=>{label.textContent=value;node.decorationLost=true;}});
+}
 let resolveCapture,stopped=0,detached=0;
 const track={kind:'audio',enabled:true,stop(){stopped++;}};
 const stream={getTracks:()=>[track],getAudioTracks:()=>[track]};
@@ -13,6 +20,7 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   el('voice-toggle').checked=true;
   await el('voice-toggle').onchange();
   assert.equal(el('voice-toggle').checked,true);assert.equal(resolveCapture,undefined);
+  assert.equal(el('voice-button').textContent,'话筒已关闭');assert.equal(el('voice-button').attrs['data-active'],'false');
   assert.match(el('voice-status').textContent,/连接就绪/);
   el('voice-toggle').checked=false;
   el('voice-input').value='chosen-before-connection';await el('voice-input').onchange();
@@ -32,7 +40,7 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   assert.equal(el('voice-toggle').checked,true);assert.equal(el('mute-mic').attrs['data-state'],'pending');
   el('mute-mic').onclick();
   assert.equal(el('voice-toggle').checked,false);assert.equal(el('mute-mic').attrs['data-state'],'off');
-  assert.equal(el('voice-status').textContent,'麦克风已关闭。');
+  assert.equal(el('voice-status').textContent,'话筒已关闭。');
   sandbox.navigator.mediaDevices.getUserMedia=async()=>stream;
   sandbox.navigator.mediaDevices.enumerateDevices=async()=>[{kind:'audioinput',deviceId:'mic-1',label:'测试设备'}];
   sandbox.Option=function(text,value){this.text=text;this.value=value;};
@@ -63,15 +71,16 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   liveSession.connected=true;sandbox.ToupingRoom.ready(liveSession);
   await new Promise(setImmediate);
   assert.equal(captures,1);assert.equal(liveSender.track,liveTrack);assert.equal(el('mute-mic').attrs['data-state'],'on');
+  assert.equal(el('voice-button').textContent,'话筒已开启');assert.equal(el('voice-button').attrs['data-active'],'true');
   sandbox.ToupingRoom.ready(liveSession);assert.equal(captures,1);
   el('screen-mic').onclick();assert.equal(liveSender.track,null);
-  assert.equal(el('voice-button').textContent,'开启麦克');
+  assert.equal(el('voice-button').textContent,'话筒已关闭');
   assert.equal(el('screen-mic').attrs['data-active'],'false');
-  assert.equal(el('mute-mic').attrs['aria-label'],'打开麦克风');
+  assert.equal(el('mute-mic').attrs['aria-label'],'话筒已关闭');
   await el('voice-button').onclick();assert.equal(liveSender.track,liveTrack);
-  assert.equal(el('screen-mic').textContent,'关闭麦克');
+  assert.equal(el('screen-mic').textContent,'话筒已开启');
   assert.equal(el('screen-mic').attrs['data-active'],'true');
-  assert.equal(el('mute-mic').attrs['aria-label'],'关闭麦克风');
+  assert.equal(el('mute-mic').attrs['aria-label'],'话筒已开启');
   el('mute-mic').onclick();assert.equal(liveSender.track,null);
   sandbox.ToupingRoom.stop(liveSession);
   const events={},classes=new Set();
@@ -84,8 +93,8 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   vm.runInNewContext(fs.readFileSync('Server/Web/receiver.js','utf8'),sandbox);
   assert.equal(el('video').muted,false);
   el('video').srcObject={};el('video').play=()=>Promise.resolve();el('video').volume=1;
-  el('sound').onclick();assert.equal(el('video').muted,true);assert.equal(el('speaker-sound').textContent,'开启声音');
-  el('speaker-sound').onclick();assert.equal(el('video').muted,false);assert.equal(el('sound').textContent,'关闭声音');
+  el('sound').onclick();assert.equal(el('video').muted,true);assert.equal(el('speaker-sound').textContent,'声音已关闭');
+  el('speaker-sound').onclick();assert.equal(el('video').muted,false);assert.equal(el('sound').textContent,'声音已开启');
   el('viewer-maximize').onclick();assert(classes.has('expanded'));
   el('exit-viewer').onclick();assert(!classes.has('expanded'));
   el('fullscreen').onclick();events.keydown({key:'Escape'});assert(!classes.has('expanded'));
@@ -93,6 +102,8 @@ vm.runInNewContext(fs.readFileSync('Server/Web/receiver-room.js','utf8'),sandbox
   el('fullscreen').onclick();assert(requested);assert(!classes.has('expanded'));
   el('viewer').requestFullscreen=()=>Promise.reject(Error('denied'));
   el('fullscreen').onclick();await Promise.resolve();assert(classes.has('expanded'));
+  for(const id of decorated)assert.equal(el(id).decorationLost,false,'SVG must survive label changes: '+id);
+  console.log('PASS current-state wording, no green pending microphone, retained SVG ornaments');
   console.log('PASS connection-independent mic selection and device access, synchronized default-on speaker controls');
   console.log('PASS container fullscreen, fallback and exit');
   console.log('PASS overlay mute: immediate sender disable, detach, pending permission cancellation, disconnected action');

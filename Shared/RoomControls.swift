@@ -53,25 +53,25 @@ struct RoomAudioControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("麦克风").font(.headline)
+                Text("话筒").font(.headline)
                 HStack(spacing: 8) {
                     AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
                     if receiver {
-                        AudioActionButton(title: audio.microphoneEnabled ? "关闭麦克" : "开启麦克", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
+                        AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
                     }
-                    AudioActionButton(title: audio.testing ? "停止测试" : "测试麦克", active: audio.testing) { audio.setTesting(!audio.testing) }
+                    AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
                 }
-                Picker("麦克风设备", selection: $input) {
+                Picker("话筒设备", selection: $input) {
                     Text("系统默认").tag(""); ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) }
                 }
                 if !receiver { Text("投屏话筒请在对应投屏源的设置中开启。").font(.caption).foregroundStyle(.secondary) }
-                if receiver && !room.receiverCanSpeak { Text("连接就绪后可开启麦克；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
+                if receiver && !room.receiverCanSpeak { Text("连接就绪后可开启话筒；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
             }.padding(16).overlay(RoundedRectangle(cornerRadius: 5).stroke(.secondary.opacity(0.25)))
             VStack(alignment: .leading, spacing: 12) {
                 Text("喇叭").font(.headline)
                 HStack(spacing: 8) {
                     AudioLevelIcon(symbol: "speaker.wave.2.fill", level: audio.outputLevel)
-                    AudioActionButton(title: audio.receivesVoices ? "关闭声音" : "开启声音", active: audio.receivesVoices) { audio.receivesVoices.toggle() }
+                    AudioActionButton(title: audio.receivesVoices ? "声音已开启" : "声音已关闭", active: audio.receivesVoices) { audio.receivesVoices.toggle() }
                     AudioActionButton(title: "测试喇叭", active: false) { audio.testSpeaker() }
                 }
                 #if os(macOS)
@@ -161,6 +161,21 @@ struct StateFlourish: Shape {
             path.move(to: pt(25, 17))
             path.addQuadCurve(to: pt(31, 25), control: pt(20, 27))
             path.addQuadCurve(to: pt(25, 17), control: pt(36, 19))
+            path.move(to: pt(15, 11))
+            path.addCurve(to: pt(28, 5), control1: pt(15, 0), control2: pt(32, 0))
+            path.addCurve(to: pt(22, 6), control1: pt(29, 12), control2: pt(18, 12))
+            path.addQuadCurve(to: pt(26, 5), control: pt(21, 1))
+            path.move(to: pt(31, 19))
+            path.addCurve(to: pt(40, 30), control1: pt(45, 15), control2: pt(49, 29))
+            path.addCurve(to: pt(36, 25), control1: pt(31, 31), control2: pt(30, 20))
+            path.addQuadCurve(to: pt(39, 27), control: pt(43, 22))
+            path.move(to: pt(8, 23))
+            path.addCurve(to: pt(20, 32), control1: pt(7, 33), control2: pt(25, 39))
+            path.addQuadCurve(to: pt(17, 28), control: pt(13, 36))
+            for (base, tip, bend) in [(pt(18, 8), pt(23, 1), pt(15, 1)), (pt(26, 17), pt(33, 13), pt(28, 11)), (pt(36, 20), pt(44, 24), pt(43, 17))] {
+                path.move(to: base); path.addQuadCurve(to: tip, control: bend)
+                path.addQuadCurve(to: base, control: CGPoint(x: (base.x + tip.x) / 2, y: (base.y + tip.y) / 2))
+            }
         }
         return path
     }

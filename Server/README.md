@@ -1,3 +1,7 @@
+## 86版状态文案与确认纹样
+
+接收页5个声音/话筒状态控件采用独立SVG描边，文案为“声音已开启/已关闭”“话筒已开启/已关闭”；pending话筒无绿纹，文本更新保留SVG。ops/deploy_receiver86.py更新HTML和receiver.js/receiver-room.js/receiver-i18n.js，回滚backups/before86-web-publish；无服务重启。站点共享代理会注入既有/papers/usage.js，HTML校验只允许唯一固定插入片段，3份JS保持原字节摘要检查，不修改代理。
+
 ## 83版实际媒体路径诊断
 
 receiver.js按WebRTC transport.selectedCandidatePairId显示真正被选中的路径、接口（可用时）、UDP/TCP及端点，按RTP/DataChannel字节增量显示采样传输。mDNS或浏览器未公开接口时不猜测USB；公网候选可能同网回环。网页不能强制USB接口择路；实际由ICE决定，不改变服务器职责或审计结构。ops/deploy_receiver83.py仅原子发布两份静态文件，回滚backups/before83-web，无服务重启。

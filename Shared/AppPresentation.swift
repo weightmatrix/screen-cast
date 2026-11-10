@@ -291,20 +291,20 @@ struct ReceiverAudioControls: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("麦克风").font(.headline)
+                Text("话筒").font(.headline)
                 HStack {
                     AudioLevelIcon(symbol: "mic.fill", level: audio.inputLevel)
-                    AudioActionButton(title: audio.microphoneEnabled ? "关闭麦克" : "开启麦克", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
-                    AudioActionButton(title: audio.testing ? "停止测试" : "测试麦克", active: audio.testing) { audio.setTesting(!audio.testing) }
+                    AudioActionButton(title: audio.microphoneEnabled ? "话筒已开启" : "话筒已关闭", active: audio.microphoneEnabled) { audio.setMicrophone(!audio.microphoneEnabled) }.disabled(!room.receiverCanSpeak)
+                    AudioActionButton(title: audio.testing ? "停止测试" : "测试话筒", active: audio.testing) { audio.setTesting(!audio.testing) }
                 }
-                Picker("麦克风设备", selection: $input) { Text("系统默认").tag(""); ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) } }
-                if !room.receiverCanSpeak { Text("连接就绪后可开启麦克；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
+                Picker("话筒设备", selection: $input) { Text("系统默认").tag(""); ForEach(audio.inputs) { Text(verbatim: $0.name).tag($0.id) } }
+                if !room.receiverCanSpeak { Text("连接就绪后可开启话筒；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
             }.padding(16).appPanelStyle()
             VStack(alignment: .leading, spacing: 12) {
                 Text("喇叭").font(.headline)
                 HStack {
                     AudioLevelIcon(symbol: "speaker.wave.2.fill", level: audio.outputLevel)
-                    AudioActionButton(title: sound ? "关闭声音" : "开启声音", active: sound) { sound.toggle() }
+                    AudioActionButton(title: sound ? "声音已开启" : "声音已关闭", active: sound) { sound.toggle() }
                     AudioActionButton(title: "测试喇叭", active: false) { audio.testSpeaker() }
                 }
                 #if os(macOS)

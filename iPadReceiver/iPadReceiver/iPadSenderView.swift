@@ -132,8 +132,8 @@ struct iPadSenderView: View {
                             }
                         }
                     }
-                    Toggle("发送页面声音", isOn: $pageAudio).toggleStyle(OrnamentalToggleStyle())
-                    Toggle("发送话筒声音", isOn: $micAudio).toggleStyle(OrnamentalToggleStyle())
+                    Toggle(pageAudio ? "声音已开启" : "声音已关闭", isOn: $pageAudio).toggleStyle(OrnamentalToggleStyle())
+                    Toggle(micAudio ? "话筒已开启" : "话筒已关闭", isOn: $micAudio).toggleStyle(OrnamentalToggleStyle())
                     Text("话筒需先在系统广播面板打开麦克风；此处可随时静音或恢复。").foregroundStyle(.secondary)
                     HStack(spacing: 18) {
                         SystemBroadcastButton().frame(width: 64, height: 64)

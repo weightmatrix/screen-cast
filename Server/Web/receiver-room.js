@@ -6,6 +6,7 @@
   const language=(navigator.languages||[navigator.language||'en']).map(x=>x.toLowerCase()).find(x=>x.startsWith('zh') || ['en','es','de','fr','it','ja','ko'].includes(x.split('-')[0]))||'en';
   const key=/^zh-(tw|hk|mo|hant)/.test(language)?'zh-Hant':language.split('-')[0], locale=window.ToupingI18n?.languages.indexOf(key)??-1;
   const t=text=>window.ToupingI18n?.strings[text]?.[locale]||text;
+  const controlText=(node,text)=>{(node.querySelector?.('.control-label')||node).textContent=t(text);};
   const participant=random(), fallback='访客-'+participant.slice(0,4);
   let active=null, microphone=null, context=null, analyser=null, meter=null, testing=false, generation=0, micAction=0;
   el('nickname').value=read('touping-nickname','');
@@ -15,14 +16,14 @@
   function syncMicrophoneButton() {
     const requested=el('voice-toggle').checked;
     const sending=requested && microphone?.getAudioTracks().some(track=>track.enabled && track.readyState!=='ended' && active?.pc.getSenders().some(sender=>sender.track===track));
-    const button=el('mute-mic'), label=requested?'关闭麦克风':'打开麦克风';
+    const button=el('mute-mic'), label=sending?'话筒已开启':'话筒已关闭';
     button.setAttribute('data-state',sending?'on':requested?'pending':'off');
-    button.setAttribute('aria-label',label);button.setAttribute('title',requested && !sending?'取消开启麦克风（等待连接或授权）':label);
+    button.setAttribute('aria-label',label);button.setAttribute('title',requested && !sending?'取消开启话筒（等待连接或授权）':sending?'点击关闭话筒':'点击开启话筒');
     button.setAttribute('aria-pressed',String(Boolean(sending)));
     for(const id of ['voice-button','screen-mic']) {
-      el(id).textContent=requested?'关闭麦克':'开启麦克';el(id).setAttribute('aria-pressed',String(Boolean(requested)));el(id).setAttribute('data-active',String(Boolean(sending)));
+      controlText(el(id),sending?'话筒已开启':'话筒已关闭');el(id).setAttribute('aria-pressed',String(Boolean(sending)));el(id).setAttribute('data-active',String(Boolean(sending)));
     }
-    el('voice-test-button').textContent=testing?'停止测试':'测试麦克';
+    controlText(el('voice-test-button'),testing?'停止测试':'测试话筒');
     el('voice-test-button').setAttribute('aria-pressed',String(testing));el('voice-test-button').setAttribute('data-active',String(testing));
   }
   const notes=text=>{el('voice-status').textContent=text;syncMicrophoneButton();};
@@ -43,7 +44,7 @@
     el('chat-messages').scrollTop=el('chat-messages').scrollHeight;
   }
   async function devices() {
-    if(!navigator.mediaDevices?.enumerateDevices) {notes('当前浏览器或地址不支持麦克风设备选择；局域网HTTP通常需改用App或HTTPS。'); return;}
+    if(!navigator.mediaDevices?.enumerateDevices) {notes('当前浏览器或地址不支持话筒设备选择；局域网HTTP通常需改用App或HTTPS。'); return;}
     try {
       const list=await navigator.mediaDevices.enumerateDevices();
       for(const [id,kind] of [['voice-input','audioinput'],['voice-output','audiooutput']]) {
@@ -56,10 +57,10 @@
   }
   async function startCapture() {
     const currentGeneration=++generation;
-    if(!navigator.mediaDevices?.getUserMedia) throw Error('麦克风需要浏览器权限和安全地址；请使用HTTPS或原生App。');
+    if(!navigator.mediaDevices?.getUserMedia) throw Error('话筒需要浏览器权限和安全地址；请使用HTTPS或原生App。');
     const id=el('voice-input').value;
     const stream=await navigator.mediaDevices.getUserMedia({audio:{deviceId:id?{exact:id}:undefined,echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false});
-    if(currentGeneration!==generation) {stream.getTracks().forEach(x=>x.stop());throw Error('麦克风操作已取消');}
+    if(currentGeneration!==generation) {stream.getTracks().forEach(x=>x.stop());throw Error('话筒操作已取消');}
     if(microphone) microphone.getTracks().forEach(x=>x.stop()); microphone=stream;
     if(context) await context.close().catch(()=>{});
     context=new (window.AudioContext||window.webkitAudioContext)(); analyser=context.createAnalyser(); analyser.fftSize=256;
@@ -70,15 +71,15 @@
   }
   async function replaceMic() {
     const session=active;
-    if(!session || session.closed || !session.connected || !session.roomReady) {notes('已选择发送，连接就绪后会请求麦克风授权。');return;}
+    if(!session || session.closed || !session.connected || !session.roomReady) {notes('已选择发送，连接就绪后会请求话筒授权。');return;}
     const stream=await startCapture(), track=stream.getAudioTracks()[0];
     if(active!==session || session.closed || stream!==microphone) {track.stop();return;}
     const transceiver=session.pc.getTransceivers().find(x=>x.receiver.track.kind==='audio');
-    if(!el('voice-toggle').checked) {track.stop();throw Error('麦克风操作已取消');}
+    if(!el('voice-toggle').checked) {track.stop();throw Error('话筒操作已取消');}
     if(!transceiver) {track.stop();throw Error('当前连接没有双向音频，请更新投送端。');}
     await transceiver.sender.replaceTrack(track);
     if(!el('voice-toggle').checked || active!==session || session.closed || stream!==microphone) {track.enabled=false;track.stop();return;}
-    notes('麦克风已开启，主控及其他接收者都能听见。');
+    notes('话筒已开启，主控及其他接收者都能听见。');
   }
   function stopCapture() {
     generation++;
@@ -94,7 +95,7 @@
     for(const sender of active?.pc.getSenders()||[]) {
       if(sender.track?.kind==='audio') {sender.track.enabled=false;sender.replaceTrack(null).catch(()=>{});}
     }
-    notes('麦克风已关闭。');
+    notes('话筒已关闭。');
   }
   el('mute-mic').onclick=()=>{
     if(el('voice-toggle').checked) {muteMicrophone();return;}
@@ -105,7 +106,7 @@
     const action=++micAction;syncMicrophoneButton();
     try {
       if(el('voice-toggle').checked) await replaceMic();
-      else {const sender=active?.pc.getSenders().find(x=>x.track?.kind==='audio'); if(sender)await sender.replaceTrack(null);if(!testing)stopCapture();notes('麦克风已关闭。');}
+      else {const sender=active?.pc.getSenders().find(x=>x.track?.kind==='audio'); if(sender)await sender.replaceTrack(null);if(!testing)stopCapture();notes('话筒已关闭。');}
     }catch(error){if(action===micAction){el('voice-toggle').checked=false;stopCapture();notes(error.message);}}
   };
   el('voice-button').onclick=el('screen-mic').onclick=el('mute-mic').onclick;
@@ -159,7 +160,7 @@
       s.outputMeter=setInterval(()=>{const data=new Uint8Array(s.outputAnalyser.fftSize);s.outputAnalyser.getByteTimeDomainData(data);el('speaker-fill').style.height=(el('video').muted||el('video').paused?0:Math.round(Math.max(...Array.from(data,x=>Math.abs(x-128)/128))*100*el('video').volume))+'%';},100);
     },
     prepare(s){for(const transceiver of s.pc.getTransceivers())if(transceiver.receiver.track.kind==='audio')transceiver.direction='sendrecv';},
-    stop(s){if(active!==s)return;active=null;stopCapture();if(s.outputMeter)clearInterval(s.outputMeter);s.outputContext?.close().catch(()=>{});testing=false;el('voice-toggle').checked=false;el('voice-test').checked=false;s.chat?.close();el('chat-messages').replaceChildren();notes('麦克风已关闭。');}
+    stop(s){if(active!==s)return;active=null;stopCapture();if(s.outputMeter)clearInterval(s.outputMeter);s.outputContext?.close().catch(()=>{});testing=false;el('voice-toggle').checked=false;el('voice-test').checked=false;s.chat?.close();el('chat-messages').replaceChildren();notes('话筒已关闭。');}
   };
   navigator.mediaDevices?.addEventListener?.('devicechange',devices);devices();
 })();
