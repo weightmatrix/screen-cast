@@ -137,10 +137,11 @@ struct PeerDiagnosticsView: View {
 enum AppSkin {
     static let key = "appearance.skin"
     static func victorian(_ value: String) -> Bool { value != "minimal" }
-    static let choices: [(String, String)] = [("minimal","极简皮肤"),("victorian","维多利亚花饰"),("tang","中国唐式"),("song","中国宋式"),("ming","中国明式"),("scifi","科幻式"),("gothic","哥特式"),("baroque","巴洛克式")]
+    static let choices: [(String, String)] = [("minimal","极简皮肤"),("victorian","维多利亚花饰"),("spring","春天 · 网页同款绿色维多利亚风"),("tang","中国唐式"),("song","中国宋式"),("ming","中国明式"),("scifi","科幻式"),("gothic","哥特式"),("baroque","巴洛克式")]
     private static var selected: String { UserDefaults.standard.string(forKey: key) ?? "victorian" }
     static func colors(_ style: String) -> [Color] {
         switch style {
+        case "spring": return [Color(red:0.969,green:0.973,blue:0.949), Color(red:0.929,green:0.949,blue:0.890), Color(red:0.545,green:0.643,blue:0.471), Color(red:0.141,green:0.353,blue:0.263)]
         case "tang": return [Color(red:1,green:0.96,blue:0.85), Color(red:0.96,green:0.86,blue:0.64), Color(red:0.68,green:0.39,blue:0.12), Color(red:0.53,green:0.12,blue:0.12)]
         case "song": return [Color(red:0.96,green:0.98,blue:0.93), Color(red:0.86,green:0.91,blue:0.84), Color(red:0.42,green:0.56,blue:0.45), Color(red:0.19,green:0.32,blue:0.27)]
         case "ming": return [Color(red:0.99,green:0.96,blue:0.88), Color(red:0.92,green:0.87,blue:0.76), Color(red:0.57,green:0.20,blue:0.17), Color(red:0.30,green:0.20,blue:0.16)]

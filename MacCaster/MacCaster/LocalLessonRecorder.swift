@@ -427,14 +427,16 @@ struct RecordingFolderSettings: View {
             }
             Text("下次录课生效；不放大原画面。约3.5GB自动分段，同一课程放入同名网盘文件夹；完成的分段自动上传；上传成功自动删除本地文件，失败保留。百度上传当前支持单文件最多4GB。").font(.caption).foregroundStyle(.secondary)
             TextField("录课名字前缀", text: $prefix)
-            HStack {
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 360, alignment: .leading)
+            VStack(alignment: .leading, spacing: 8) {
                 Toggle("年份", isOn: $year).toggleStyle(OrnamentalToggleStyle())
                 Toggle("月份", isOn: $month).toggleStyle(OrnamentalToggleStyle())
                 Toggle("时间（小时和分）", isOn: $time).toggleStyle(OrnamentalToggleStyle())
             }
-            Text("示例：" + RecordingNameFormat(prefix: prefix, year: year, month: month, time: time).name(at: Date()) + ".mp4").font(.caption)
+            Text("示例：" + RecordingNameFormat(prefix: prefix, year: year, month: month, time: time).name(at: Date()) + ".mp4").font(.caption).fixedSize(horizontal: false, vertical: true)
             Button("选择录课文件夹") { preferences.chooseFolder() }
-            Text(preferences.folder?.path ?? "尚未选择录课文件夹").font(.caption).textSelection(.enabled)
+            Text(preferences.folder?.path ?? "尚未选择录课文件夹").font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
             Text("录课中的文件缓存在此目录的tmp子文件夹；保存完成后移到主目录。更换目录前请先停止所有录课并等待保存完成。")
                 .font(.caption).foregroundStyle(.secondary)
             if !preferences.errorMessage.isEmpty { Text(preferences.errorMessage).font(.caption).foregroundStyle(.red) }

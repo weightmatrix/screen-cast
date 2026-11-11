@@ -78,7 +78,7 @@ private struct AppearanceSettingsView: View {
     @AppStorage("appearance.colorScheme") private var appearance = "system"
 
     var body: some View {
-        ScrollView { Form {
+        Form {
             Section("皮肤") {
                 AppSkinPicker()
                 if AppSkin.victorian(skin) { VictorianHeading(title: "投屏自由") }
@@ -109,17 +109,17 @@ private struct AppearanceSettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
-        .formStyle(.columns)
+        .formStyle(.grouped)
         .toggleStyle(OrnamentalToggleStyle())
         .scrollContentBackground(AppSkin.victorian(skin) ? .hidden : .visible)
         .background(AppPaperBackground())
         .preferredColorScheme(AppSkin.victorian(skin) ? .light : nil)
         .font(.system(size: 16))
         .controlSize(.large)
-        }
+        .padding(.horizontal, 16)
         .background(AppPaperBackground())
         .overlay { if AppSkin.victorian(skin) { VictorianFrame() } }
-        .frame(width: 620, height: 720)
+        .frame(width: 680, height: 760)
         .navigationTitle("设置")
     }
 }
