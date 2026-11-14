@@ -65,3 +65,10 @@ for (name, size) in [("icons/iPadReceiver-1024.png", 1024), ("icons/iPadReceiver
 // Keep the asset-catalog source byte-identical to the approved opaque master.
 try Data(contentsOf: approved).write(to: root.appendingPathComponent("iPadReceiver/iPadReceiver/Assets.xcassets/AppIcon.appiconset/李知本·投屏.png"))
 print("Generated approved blue ornamental icon: rounded macOS ICNS/PNG and opaque iOS assets")
+
+// Apply the shared Dock size policy after native exports.
+let normalize = Process()
+normalize.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+normalize.arguments = ["python3", root.appendingPathComponent("Tools/NormalizeMacIcons.py").path]
+try normalize.run(); normalize.waitUntilExit()
+precondition(normalize.terminationStatus == 0)
