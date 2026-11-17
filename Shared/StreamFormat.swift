@@ -460,40 +460,10 @@ enum MediaPath {
         return false
     }
     #endif
-    static func usbInterface(for address: String? = nil, sameSubnet: Bool = false) -> Interface? {
-        #if os(macOS)
-        var list: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&list) == 0 else { return nil }
-        defer { freeifaddrs(list) }
-        var item = list
-        while let current = item {
-            defer { item = current.pointee.ifa_next }
-            let value = current.pointee
-            guard value.ifa_flags & UInt32(IFF_UP) != 0, let addr = value.ifa_addr,
-                  addr.pointee.sa_family == AF_INET || addr.pointee.sa_family == AF_INET6 else { continue }
-            let name = String(cString: value.ifa_name)
-            if let address {
-                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                guard getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0,
-                      let local = bytes(String(cString: host)), let target = bytes(address), local.count == target.count else { continue }
-                if local != target {
-                    guard sameSubnet, let mask = value.ifa_netmask else { continue }
-                    var maskHost = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                    guard getnameinfo(mask, socklen_t(mask.pointee.sa_len), &maskHost, socklen_t(maskHost.count), nil, 0, NI_NUMERICHOST) == 0,
-                          let bits = bytes(String(cString: maskHost)), bits.count == local.count, bits.contains(where: { $0 != 0 }),
-                          zip(zip(local, target), bits).allSatisfy({ ($0.0.0 & $0.1) == ($0.0.1 & $0.1) }) else { continue }
-                }
-            }
-            if isDeviceUSB(name) { return Interface(name: name, detail: "iPad/iPhone USB NCM（\(name)）", deviceUSB: true) }
-        }
-        #endif
-        return nil
-    }
-
     static func matchesUSBReport(local: String, remote: String, reportedLocal: String, reportedRemote: String, age: TimeInterval) -> Bool {
         age >= 0 && age < 6 && !local.isEmpty && !remote.isEmpty && reportedLocal == remote && reportedRemote == local
     }
-    static let preference = "优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准"
+    static let preference = "自动择路：先比较连通与收发状态，再按底层网络偏好和RTT选路；USB不再抢先，以实际路径为准"
     struct Interface {
         var name: String
         var detail: String

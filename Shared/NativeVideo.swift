@@ -482,25 +482,6 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var connected = false
     private var frames = 0
     private let receivePerf = StreamPerformance("native.receive")
-    // Give a detected device USB network a bounded head start; retain Wi-Fi/public fallback.
-    private var usbPreferenceDeadline: TimeInterval?
-    private var deferredCandidateCount = 0
-    private func preferUSB(_ candidate: RTCIceCandidate, deliver: @escaping (NativeVideoPeer) -> Void) {
-        let fields = candidate.sdp.split(separator: " ")
-        let address = fields.count > 4 ? String(fields[4]) : ""
-        guard MediaPath.usbInterface() != nil else { deliver(self); return }
-        let now = ProcessInfo.processInfo.systemUptime
-        if usbPreferenceDeadline == nil { usbPreferenceDeadline = now + 2 }
-        let delay = (usbPreferenceDeadline ?? now) - now
-        guard delay > 0, MediaPath.usbInterface(for: address, sameSubnet: true) == nil else { deliver(self); return }
-        guard deferredCandidateCount < 64 else { return }
-        deferredCandidateCount += 1
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self, !self.closed else { return }
-            self.deferredCandidateCount -= 1
-            deliver(self)
-        }
-    }
     private let remoteUSBLock = NSLock()
     private var remoteUSBPath: (local: String, remote: String, received: TimeInterval)?
     private static func pathEndpoint(_ candidate: [String: Any]) -> String {
@@ -656,10 +637,9 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                   !sdp.contains(" typ relay"), let line = object["line"] as? Int32 else { return }
             if internet { PerformanceDisk.shared.write("native.iceCandidate id=\(id) remote \(Self.candidateSummary(sdp))") }
             let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: line, sdpMid: object["mid"] as? String)
-            preferUSB(candidate) { owner in
-                if owner.remoteSet { owner.peer?.add(candidate, completionHandler: { _ in }) }
-                else if owner.candidates.count < 64 { owner.candidates.append(candidate) }
-            }
+            // All paths enter ICE immediately; do not bias the race by delaying Wi-Fi.
+            if remoteSet { peer?.add(candidate, completionHandler: { _ in }) }
+            else if candidates.count < 64 { candidates.append(candidate) }
         default: break
         }
     }
@@ -890,9 +870,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.closed else { return }
             if self.internet { PerformanceDisk.shared.write("native.iceCandidate id=\(self.id) local \(Self.candidateSummary(candidate.sdp))") }
-            self.preferUSB(candidate) { owner in
-                owner.sendSignal?(["type":"candidate", "candidate":candidate.sdp, "mid":candidate.sdpMid as Any? ?? NSNull(), "line":candidate.sdpMLineIndex])
-            }
+            self.sendSignal?(["type":"candidate", "candidate":candidate.sdp, "mid":candidate.sdpMid as Any? ?? NSNull(), "line":candidate.sdpMLineIndex])
         }
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
