@@ -11,10 +11,18 @@ enum ChatCorner: String, CaseIterable, Identifiable {
 }
 
 struct RoomPreferences: View {
+    @AppStorage("connections.autoAllow") private var autoAllow = false
     @AppStorage("room.nickname") private var nickname = ""
     @AppStorage("room.chatCorner") private var corner = ChatCorner.bottomLeft.rawValue
     @AppStorage("room.chatOpacity") private var opacity = 0.9
     var body: some View {
+        Section("接入设置") {
+            Toggle("允许自动连接", isOn: $autoAllow)
+                .onAppear { syncAutoAllow() }
+                .onChange(of: autoAllow) { _ in syncAutoAllow() }
+            Text("开启后，密码验证通过的接收者自动获准接入，无需逐个允许。现有连接数量限制仍然有效。")
+                .font(.caption).foregroundStyle(.secondary)
+        }
         Section("共用聊天室") {
             TextField("昵称（留空自动分配，最多32字）", text: $nickname)
                 .onChange(of: nickname) { value in
@@ -27,6 +35,12 @@ struct RoomPreferences: View {
             Text("昵称由使用者自行填写，不代表真实身份。聊天仅保留当前会话最近200条，不上传服务器。")
                 .font(.caption).foregroundStyle(.secondary)
         }
+    }
+    private func syncAutoAllow() {
+        #if os(iOS)
+        BroadcastSettings.store.set(autoAllow, forKey: "connections.autoAllow")
+        #endif
+        NotificationCenter.default.post(name: Notification.Name("touping.autoAllowChanged"), object: nil)
     }
 }
 

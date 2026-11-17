@@ -2,6 +2,7 @@ import Foundation
 import CoreMedia
 #if os(macOS)
 import SystemConfiguration
+import IOKit
 #endif
 
 /// Capture-side compensation for the inverse quarter-turns reported on iPad.
@@ -440,6 +441,58 @@ enum HostIdentity {
 
 /// Describes only the selected ICE pair; the invitation mode is deliberately ignored.
 enum MediaPath {
+    #if os(macOS)
+    /// Match the BSD interface to its actual USB device ancestor, not a localized name.
+    static func isDeviceUSB(_ name: String) -> Bool {
+        guard let matching = IOBSDNameMatching(kIOMainPortDefault, 0, name) else { return false }
+        var entry = IOServiceGetMatchingService(kIOMainPortDefault, matching)
+        guard entry != 0 else { return false }
+        defer { IOObjectRelease(entry) }
+        for _ in 0..<16 {
+            if IOObjectConformsTo(entry, "IOUSBHostDevice") != 0 {
+                let product = IORegistryEntryCreateCFProperty(entry, "USB Product Name" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? String ?? ""
+                return product.localizedCaseInsensitiveContains("iPad") || product.localizedCaseInsensitiveContains("iPhone")
+            }
+            var parent: io_registry_entry_t = 0
+            guard IORegistryEntryGetParentEntry(entry, kIOServicePlane, &parent) == KERN_SUCCESS else { return false }
+            IOObjectRelease(entry); entry = parent
+        }
+        return false
+    }
+    #endif
+    static func usbInterface(for address: String? = nil, sameSubnet: Bool = false) -> Interface? {
+        #if os(macOS)
+        var list: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&list) == 0 else { return nil }
+        defer { freeifaddrs(list) }
+        var item = list
+        while let current = item {
+            defer { item = current.pointee.ifa_next }
+            let value = current.pointee
+            guard value.ifa_flags & UInt32(IFF_UP) != 0, let addr = value.ifa_addr,
+                  addr.pointee.sa_family == AF_INET || addr.pointee.sa_family == AF_INET6 else { continue }
+            let name = String(cString: value.ifa_name)
+            if let address {
+                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                guard getnameinfo(addr, socklen_t(addr.pointee.sa_len), &host, socklen_t(host.count), nil, 0, NI_NUMERICHOST) == 0,
+                      let local = bytes(String(cString: host)), let target = bytes(address), local.count == target.count else { continue }
+                if local != target {
+                    guard sameSubnet, let mask = value.ifa_netmask else { continue }
+                    var maskHost = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                    guard getnameinfo(mask, socklen_t(mask.pointee.sa_len), &maskHost, socklen_t(maskHost.count), nil, 0, NI_NUMERICHOST) == 0,
+                          let bits = bytes(String(cString: maskHost)), bits.count == local.count, bits.contains(where: { $0 != 0 }),
+                          zip(zip(local, target), bits).allSatisfy({ ($0.0.0 & $0.1) == ($0.0.1 & $0.1) }) else { continue }
+                }
+            }
+            if isDeviceUSB(name) { return Interface(name: name, detail: "iPad/iPhone USB NCM（\(name)）", deviceUSB: true) }
+        }
+        #endif
+        return nil
+    }
+
+    static func matchesUSBReport(local: String, remote: String, reportedLocal: String, reportedRemote: String, age: TimeInterval) -> Bool {
+        age >= 0 && age < 6 && !local.isEmpty && !remote.isEmpty && reportedLocal == remote && reportedRemote == local
+    }
     static let preference = "优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准"
     struct Interface {
         var name: String
@@ -474,9 +527,9 @@ enum MediaPath {
         if lt == "relay" || rt == "relay" { return "中继路径" }
         if let ip = bytes(address(remote)), (ip.count == 4 && ip[0] == 127) || (ip.count == 16 && ip.dropLast().allSatisfy({ $0 == 0 }) && ip.last == 1) { return "本机回环直连" }
         if interface?.tunnel == true || local["networkType"] as? String == "vpn" { return "VPN/隧道直连（底层网络未知）" }
-        if lt == "host", rt == "host", interface?.sameSubnet == true {
-            return interface?.deviceUSB == true ? "USB设备网络直连" : "局域网直连（同子网）"
-        }
+        if interface?.deviceUSB == true, interface?.sameSubnet == true,
+           nonPublic(address(local)) == true, nonPublic(address(remote)) == true { return "USB设备网络直连" }
+        if lt == "host", rt == "host", interface?.sameSubnet == true { return "局域网直连（同子网）" }
         if nonPublic(address(local)) == true && nonPublic(address(remote)) == true { return "内网直连（局域网/VPN待确认）" }
         if nonPublic(address(remote)) == false { return "公网地址直连（可能同网回环）" }
         if lt == "srflx" || rt == "srflx" || lt == "prflx" || rt == "prflx" { return "公网候选直连（范围待确认）" }
@@ -513,6 +566,10 @@ enum MediaPath {
                 // USB Ethernet dongles do not prove a direct USB connection to the receiver.
                 result.deviceUSB = label.localizedCaseInsensitiveContains("USB") && (label.localizedCaseInsensitiveContains("iPhone") || label.localizedCaseInsensitiveContains("iPad"))
                 if type == (kSCNetworkInterfaceTypeIEEE80211 as String) { result.detail = "Wi-Fi · " + result.detail }
+            }
+            if isDeviceUSB(name) {
+                result.deviceUSB = true
+                result.detail = "iPad/iPhone USB NCM（\(name)）"
             }
             #endif
             return result

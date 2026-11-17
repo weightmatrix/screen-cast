@@ -482,6 +482,30 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var connected = false
     private var frames = 0
     private let receivePerf = StreamPerformance("native.receive")
+    // Give a detected device USB network a bounded head start; retain Wi-Fi/public fallback.
+    private var usbPreferenceDeadline: TimeInterval?
+    private var deferredCandidateCount = 0
+    private func preferUSB(_ candidate: RTCIceCandidate, deliver: @escaping (NativeVideoPeer) -> Void) {
+        let fields = candidate.sdp.split(separator: " ")
+        let address = fields.count > 4 ? String(fields[4]) : ""
+        guard MediaPath.usbInterface() != nil else { deliver(self); return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if usbPreferenceDeadline == nil { usbPreferenceDeadline = now + 2 }
+        let delay = (usbPreferenceDeadline ?? now) - now
+        guard delay > 0, MediaPath.usbInterface(for: address, sameSubnet: true) == nil else { deliver(self); return }
+        guard deferredCandidateCount < 64 else { return }
+        deferredCandidateCount += 1
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, !self.closed else { return }
+            self.deferredCandidateCount -= 1
+            deliver(self)
+        }
+    }
+    private let remoteUSBLock = NSLock()
+    private var remoteUSBPath: (local: String, remote: String, received: TimeInterval)?
+    private static func pathEndpoint(_ candidate: [String: Any]) -> String {
+        MediaPath.address(candidate) + ":" + ((candidate["port"] as? NSNumber)?.stringValue ?? "")
+    }
     private var statsWork: DispatchWorkItem?
     private var timeout: DispatchWorkItem?
     private var bitrate: Int
@@ -499,6 +523,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         config.iceTransportPolicy = .all
         config.candidateNetworkPolicy = .all
         config.continualGatheringPolicy = .gatherContinually
+        config.disableLinkLocalNetworks = false
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         _ = NativeVideo.initialize
         let audio = NativeAudioDevice(input: source?.audio, roomPeer: diagnosticID, hosting: source != nil)
@@ -631,8 +656,10 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                   !sdp.contains(" typ relay"), let line = object["line"] as? Int32 else { return }
             if internet { PerformanceDisk.shared.write("native.iceCandidate id=\(id) remote \(Self.candidateSummary(sdp))") }
             let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: line, sdpMid: object["mid"] as? String)
-            if remoteSet { peer?.add(candidate, completionHandler: { _ in }) }
-            else if candidates.count < 64 { candidates.append(candidate) }
+            preferUSB(candidate) { owner in
+                if owner.remoteSet { owner.peer?.add(candidate, completionHandler: { _ in }) }
+                else if owner.candidates.count < 64 { owner.candidates.append(candidate) }
+            }
         default: break
         }
     }
@@ -670,22 +697,28 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         guard !closed else { return }
         peer?.statistics { [weak self] report in
             guard let self, !self.closed else { return }
-            if !self.sending {
-                for stat in report.statistics.values where stat.type == "inbound-rtp" && (stat.values["kind"] as? String == "video" || stat.values["mediaType"] as? String == "video") {
-                    let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]
-                    var values: [String: Any] = ["v":1, "device": HostIdentity.description]
-                    for key in allowed { if let value = stat.values[key] { values[key] = value } }
-                    if let data = NativeVideo.packet(values), data.count <= 2048 {
-                        DispatchQueue.main.async { [weak self] in
-                            guard let self, !self.closed, let channel = self.diagnostics, channel.readyState == .open, channel.bufferedAmount < 4096 else { return }
-                            _ = channel.sendData(RTCDataBuffer(data: data, isBinary: false))
-                        }
-                    }
-                }
-            }
             let transport = report.statistics.values.first { $0.type == "transport" && $0.values["selectedCandidatePairId"] != nil }
             let pathID = transport?.values["selectedCandidatePairId"] as? String
             let pair = pathID.flatMap { report.statistics[$0] }
+            let diagnosticLocal = (pair?.values["localCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
+            let diagnosticRemote = (pair?.values["remoteCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
+            let ownInterface = MediaPath.interface(local: diagnosticLocal, remote: diagnosticRemote)
+            let ownUSB = MediaPath.route(local: diagnosticLocal, remote: diagnosticRemote, interface: ownInterface).contains("USB设备")
+            let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]
+            var values: [String: Any] = ["v":1, "device": HostIdentity.description]
+            if let stat = report.statistics.values.first(where: { $0.type == "inbound-rtp" && ($0.values["kind"] as? String == "video" || $0.values["mediaType"] as? String == "video") }) {
+                for key in allowed { if let value = stat.values[key] { values[key] = value } }
+            }
+            // Bounded diagnostic evidence only; never media bytes. Match both selected endpoints on the receiver.
+            if ownUSB {
+                values["usbPath"] = ["local": Self.pathEndpoint(diagnosticLocal), "remote": Self.pathEndpoint(diagnosticRemote)]
+            }
+            if let data = NativeVideo.packet(values), data.count <= 2048 {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, !self.closed, let channel = self.diagnostics, channel.readyState == .open, channel.bufferedAmount < 4096 else { return }
+                    _ = channel.sendData(RTCDataBuffer(data: data, isBinary: false))
+                }
+            }
             if !self.sending {
                 let inbound = report.statistics.values.first {
                     $0.type == "inbound-rtp" && ($0.values["kind"] as? String == "video" || $0.values["mediaType"] as? String == "video")
@@ -713,8 +746,15 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 let lc = (pair.values["localCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
                 let rc = (pair.values["remoteCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
                 let interface = MediaPath.interface(local: lc, remote: rc)
-                let route = MediaPath.route(local: lc, remote: rc, interface: interface)
-                let interfaceText = MediaPath.interfaceText(interface, candidate: lc)
+                var route = MediaPath.route(local: lc, remote: rc, interface: interface)
+                var interfaceText = MediaPath.interfaceText(interface, candidate: lc)
+                self.remoteUSBLock.lock(); let reportedUSB = self.remoteUSBPath; self.remoteUSBLock.unlock()
+                if route.contains("局域网") || route.contains("内网"), let proof = reportedUSB,
+                   MediaPath.matchesUSBReport(local: Self.pathEndpoint(lc), remote: Self.pathEndpoint(rc), reportedLocal: proof.local, reportedRemote: proof.remote, age: ProcessInfo.processInfo.systemUptime - proof.received),
+                   MediaPath.nonPublic(MediaPath.address(lc)) == true, MediaPath.nonPublic(MediaPath.address(rc)) == true {
+                    route = "USB设备网络直连（对端报告）"
+                    interfaceText += "；对端报告 USB NCM"
+                }
                 var counters: [String: Double] = [:], flowing: [String] = []
                 for stat in report.statistics.values where stat.type == "outbound-rtp" || stat.type == "inbound-rtp" {
                     guard let kind = (stat.values["kind"] ?? stat.values["mediaType"]) as? String, ["video", "audio"].contains(kind) else { continue }
@@ -848,9 +888,11 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
         guard !candidate.sdp.contains(" typ relay") else { return }
         DispatchQueue.main.async { [weak self] in
-            guard let self, !self.closed, !self.connected else { return }
+            guard let self, !self.closed else { return }
             if self.internet { PerformanceDisk.shared.write("native.iceCandidate id=\(self.id) local \(Self.candidateSummary(candidate.sdp))") }
-            self.sendSignal?(["type":"candidate", "candidate":candidate.sdp, "mid":candidate.sdpMid as Any? ?? NSNull(), "line":candidate.sdpMLineIndex])
+            self.preferUSB(candidate) { owner in
+                owner.sendSignal?(["type":"candidate", "candidate":candidate.sdp, "mid":candidate.sdpMid as Any? ?? NSNull(), "line":candidate.sdpMLineIndex])
+            }
         }
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didRemove candidates: [RTCIceCandidate]) {}
@@ -884,6 +926,11 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                   ProcessInfo.processInfo.systemUptime - self.lastRemoteStat >= 1,
                   let object = try? JSONSerialization.jsonObject(with: buffer.data) as? [String: Any], object["v"] as? Int == 1 else { return }
             self.lastRemoteStat = ProcessInfo.processInfo.systemUptime
+            self.remoteUSBLock.lock()
+            if let path = object["usbPath"] as? [String: String], let local = path["local"], let remote = path["remote"], local.utf8.count <= 128, remote.utf8.count <= 128 {
+                self.remoteUSBPath = (local, remote, self.lastRemoteStat)
+            } else { self.remoteUSBPath = nil }
+            self.remoteUSBLock.unlock()
             if let name = object["device"] as? String { self.remoteDevice = String(name.filter { !$0.isNewline }.prefix(80)) }
             self.remoteLost = (object["packetsLost"] as? NSNumber)?.doubleValue ?? self.remoteLost
             let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]

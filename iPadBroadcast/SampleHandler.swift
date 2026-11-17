@@ -38,6 +38,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.isCurrent(token) else { return }
             self.running = true
+            ConnectionNotifications.shared.prepare(requestAuthorization: false)
             VoiceRoom.shared.setEnabled(defaults.bool(forKey: "room.receiveVoices"))
             self.lastDiagnosticSnapshot = ""; self.lastDiagnosticNetwork = ""; self.lastPendingSnapshot = ""
             let server = CastingServer(port: 8318, accessCode: code, nativeSource: self.nativeCapture)
@@ -72,6 +73,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
                 RoomAudioSettings.shared.applyBroadcastInput()
                 RoomSession.shared.serviceBroadcast()
                 if let server = self?.server {
+                    server.approvePendingAutomatically()
                     if let data = try? JSONEncoder().encode(server.pendingConnections) {
                         let pendingJSON = String(decoding: data, as: UTF8.self)
                         if pendingJSON != self?.lastPendingSnapshot {

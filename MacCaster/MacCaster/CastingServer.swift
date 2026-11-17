@@ -26,10 +26,24 @@ final class CastingServer: ObservableObject {
     private var requestAudits: [ObjectIdentifier: DirectConnectionAudit] = [:]
     private var connectionSlots: [ObjectIdentifier: String] = [:]
 
+    static var automaticallyAllowsConnections: Bool {
+        #if os(iOS)
+        return BroadcastSettings.store.bool(forKey: "connections.autoAllow")
+        #else
+        return UserDefaults.standard.bool(forKey: "connections.autoAllow")
+        #endif
+    }
+
+    private var autoAllowObserver: NSObjectProtocol?
+    func approvePendingAutomatically() {
+        guard Self.automaticallyAllowsConnections else { return }
+        for request in pendingConnections { respondToRequest(request.id, accept: true) }
+    }
     private var browserServer: BrowserReceiverServer?
 
     private func requestApproval(id: String, route: String, ip: String, application: String, nickname: String = "访客", action: @escaping (Bool) -> Void) {
         guard pendingActions[id] == nil else { return }
+        if Self.automaticallyAllowsConnections { action(true); return }
         guard pendingActions.count < 64 else { action(false); return }
         pendingActions[id] = action
         pendingConnections.append(PendingConnection(id: id, route: route, ip: ip, application: application, nickname: nickname))
@@ -267,7 +281,10 @@ final class CastingServer: ObservableObject {
         self.nativeSource = nativeSource
         self.port = port
         self.accessCode = accessCode
+        autoAllowObserver = NotificationCenter.default.addObserver(forName: Notification.Name("touping.autoAllowChanged"), object: nil, queue: .main) { [weak self] _ in self?.approvePendingAutomatically() }
     }
+
+    deinit { if let autoAllowObserver { NotificationCenter.default.removeObserver(autoAllowObserver) } }
 
     func start() {
         bindRetryWorkItem?.cancel()

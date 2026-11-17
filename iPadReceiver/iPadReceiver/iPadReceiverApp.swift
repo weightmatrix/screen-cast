@@ -54,7 +54,7 @@ struct RootView: View {
         }
         .overlay { if appMode == "receive" { RoomChatOverlay() } }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in RoomSession.shared.pollBroadcast() }
-        .onAppear { StartupTiming.rootVisible() }
+        .onAppear { StartupTiming.rootVisible(); ConnectionNotifications.shared.prepare() }
         .task {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--verify-native-audio") { await NativeAudioVerification.run() }

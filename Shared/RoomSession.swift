@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UserNotifications
 
 struct RoomMessage: Identifiable, Codable {
     let id: String
@@ -232,5 +233,39 @@ final class VoiceRoom {
         }
         if cursors.count < 32 || cursors[peer] != nil { cursors[peer] = offsets }
         return sums.map { Int16(clamping: $0) }
+    }
+}
+
+/// System banners also appear while the app is in the foreground.
+final class ConnectionNotifications: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = ConnectionNotifications()
+    private var prepared = false
+    private var arrivals: AnyCancellable?
+    private var sequence = 0
+    func prepare(requestAuthorization: Bool = true) {
+        guard !prepared else { return }; prepared = true
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        arrivals = RoomSession.shared.receiverConnected.sink { [weak self] in self?.connected($0) }
+        guard requestAuthorization else { return }
+        center.requestAuthorization(options: [.alert, .sound]) { _, error in
+            if let error { NSLog("投屏系统通知授权失败：%@", error.localizedDescription) }
+        }
+    }
+    func connected(_ nickname: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "有接收者已连接"
+        content.body = String(nickname.prefix(32)) + " 已连接你的投屏。"
+        content.sound = .default
+        sequence = (sequence + 1) % 20
+        let identifier = "receiver-connected-\(sequence)"
+        let center = UNUserNotificationCenter.current()
+        center.removeDeliveredNotifications(withIdentifiers: [identifier])
+        center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil)) { error in
+            if let error { NSLog("投屏系统通知发送失败：%@", error.localizedDescription) }
+        }
+    }
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 }
