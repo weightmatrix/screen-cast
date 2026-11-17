@@ -560,6 +560,12 @@ private struct EditStreamSheet: View {
             HStack {
                 Text("更改投屏内容").font(.title2.bold())
                 Spacer()
+                Button(action: { streamer.loadShareableContent() }) {
+                    Label("刷新", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(AppGlassButtonStyle())
+                .help("刷新应用列表")
+                .accessibilityLabel("刷新应用列表")
                 Text("当前：\(session.contentName)").font(.system(size: 15)).foregroundStyle(.secondary)
                 Text("已选 \(selected.count) 个").font(.system(size: 16)).foregroundStyle(.blue)
                 Button("取消") { dismiss() }
