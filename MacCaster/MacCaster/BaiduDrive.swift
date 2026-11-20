@@ -11,6 +11,13 @@ private enum DriveError: LocalizedError {
 }
 
 enum BaiduTransport {
+    static let recordingsFolder = "投屏录课"
+    static let defaultDestination = "/" + recordingsFolder
+
+    static func recordingDirectory(for destination: String) -> String {
+        destination == "/" ? defaultDestination : destination
+    }
+
     static var session: URLSession = {
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30; config.timeoutIntervalForResource = 180
@@ -138,7 +145,7 @@ enum BaiduTransport {
     @Published private(set) var authenticating = false
     @Published private(set) var directories: [(path: String, name: String)] = []
     @Published var browserPath = "/"
-    @Published var destination = UserDefaults.standard.string(forKey: "lesson.baiduDirectory") ?? "/" {
+    @Published var destination = BaiduTransport.recordingDirectory(for: UserDefaults.standard.string(forKey: "lesson.baiduDirectory") ?? "/") {
         didSet { UserDefaults.standard.set(destination, forKey: "lesson.baiduDirectory") }
     }
     private struct Credentials: Codable { var access: String; var refresh: String; var expires: Date; var account: String; var name: String }
@@ -217,36 +224,64 @@ enum BaiduTransport {
                 guard let access = response["access_token"] as? String, let refresh = response["refresh_token"] as? String else { throw DriveError.message("百度未返回完整授权，请重新登录") }
                 let (account, name) = try await BaiduTransport.user(access)
                 guard authID == epoch else { throw CancellationError() }
-                if credentials?.account != account { enabled = false; destination = "/" }
+                if credentials?.account != account { enabled = false; destination = BaiduTransport.defaultDestination }
                 try save(Credentials(access: access, refresh: refresh, expires: Date().addingTimeInterval(response["expires_in"] as? Double ?? 3600), account: account, name: name))
                 status = "已登录：" + name; startUploads()
             } catch { status = error.localizedDescription }
         }
     }
     func logout() { enabled = false; authID = UUID(); refreshWork?.cancel(); refreshWork = nil; cancelUploads(); webSession?.cancel(); webSession = nil; SecItemDelete(keyQuery as CFDictionary); credentials = nil; accountName = ""; status = "已退出百度网盘，待传录课仍保留在本机" }
+    @Published private(set) var loadingDirectory = false
+    @Published private(set) var directoryError: String?
+    private var browseID = UUID()
+
     func browse(_ path: String) {
-        let epoch = authID
+        let epoch = authID, id = UUID()
+        browseID = id
+        browserPath = path
+        directories = []
+        directoryError = nil
+        loadingDirectory = true
         Task {
+            defer { if browseID == id { loadingDirectory = false } }
             do {
                 let access = try await token()
                 let result = try await BaiduTransport.request(BaiduTransport.url("/rest/2.0/xpan/file", token: access, parameters: ["method": "list", "dir": path, "folder": "1", "order": "name", "start": "0", "limit": "1000"]))
-                guard authID == epoch else { return }
-                directories = (result["list"] as? [[String: Any]] ?? []).compactMap { entry in
-                    guard entry["isdir"] as? Int == 1, let path = entry["path"] as? String, let name = entry["server_filename"] as? String else { return nil }; return (path, name)
+                guard authID == epoch, browseID == id else { return }
+                guard let entries = result["list"] as? [[String: Any]] else {
+                    throw DriveError.message("百度网盘未返回目录列表")
                 }
-                browserPath = path; status = "已读取网盘目录"
-            } catch { status = error.localizedDescription }
+                directories = entries.compactMap { entry in
+                    guard entry["isdir"] as? Int == 1, let child = entry["path"] as? String else { return nil }
+                    let name = (child as NSString).lastPathComponent
+                    guard !name.isEmpty, name != ".", name != "..",
+                          child == (path == "/" ? "" : path) + "/" + name else { return nil }
+                    return (child, name)
+                }
+            } catch {
+                guard authID == epoch, browseID == id else { return }
+                directoryError = error.localizedDescription
+            }
         }
     }
     func createDirectory(_ name: String) {
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !name.contains("/"), !name.contains("\\"), name != ".", name != "..", name.count <= 80 else { status = "请填写有效的新目录名字"; return }
+        let parent = browserPath, epoch = authID, id = UUID()
+        browseID = id
+        directoryError = nil
+        loadingDirectory = true
         Task {
+            defer { if browseID == id { loadingDirectory = false } }
             do {
-                let access = try await token(), path = (browserPath == "/" ? "" : browserPath) + "/" + name
-                _ = try await BaiduTransport.request(BaiduTransport.url("/rest/2.0/xpan/file", token: access, parameters: ["method": "create"]), form: ["path": path, "isdir": "1", "size": "0", "block_list": "[]", "rtype": "0"])
+                let access = try await token()
+                let path = try await BaiduTransport.ensureLessonDirectory(parent: parent, name: name, token: access)
+                guard authID == epoch, browseID == id else { return }
                 browse(path)
-            } catch { status = error.localizedDescription }
+            } catch {
+                guard authID == epoch, browseID == id else { return }
+                directoryError = error.localizedDescription
+            }
         }
     }
     private var queueURL: URL? { RecordingFolderPreferences.shared.folder?.appendingPathComponent("tmp", isDirectory: true).appendingPathComponent("baidu-uploads.json") }
@@ -301,7 +336,10 @@ enum BaiduTransport {
                     guard values.isSymbolicLink != true, values.isRegularFile == true else { throw DriveError.message("本地待传文件不可用，已暂停") }
                     let stamp = try BaiduTransport.localStamp(file)
                     let access = try await token(); status = "正在上传：" + job.file
-                    var directory = job.directory
+                    var directory = BaiduTransport.recordingDirectory(for: job.directory)
+                    if directory == BaiduTransport.defaultDestination {
+                        directory = try await BaiduTransport.ensureLessonDirectory(parent: "/", name: BaiduTransport.recordingsFolder, token: access)
+                    }
                     if let lesson = job.lesson {
                         directory = try await BaiduTransport.ensureLessonDirectory(parent: directory, name: lesson, token: access)
                     }
@@ -345,10 +383,10 @@ struct BaiduDriveSettings: View {
                 Text("出现 redirect_uri_mismatch 时，请在百度网盘开放平台对应应用的安全设置中保存上面的完整地址；普通登录和二维码登录使用同一地址。").font(.caption).foregroundStyle(.secondary)
             }
             Toggle("录课完成后上传百度网盘", isOn: $drive.enabled).disabled(!drive.loggedIn)
-            HStack { Text("网盘目录：" + drive.destination).lineLimit(2); Button("选择网盘目录") { choosing = true; drive.browse(drive.destination) }.disabled(!drive.loggedIn) }
+            HStack { Text("网盘目录：" + drive.destination).lineLimit(2); Button("选择网盘目录") { choosing = true; drive.browse("/") }.disabled(!drive.loggedIn) }
             Text(drive.status).font(.caption).foregroundStyle(.secondary)
             if drive.pendingCount > 0 { HStack { Text("待传 \(drive.pendingCount) 个录课文件"); Button("重试上传") { drive.retryUploads() }; Button("清除待传") { confirmClear = true } } }
-            Text("录课从本机直接上传百度网盘，不经过投屏服务器。约3.5GB自动分段；每次上传先创建或确认同名课程文件夹，把分段放入其中；确认上传成功自动删除本地文件，失败则保留。当前单文件最多4GB；授权有效期内自动续期。")
+            Text("录课从本机直接上传百度网盘，不经过投屏服务器。约3.5GB自动分段；每次上传先创建或确认同名课程文件夹，把分段放入其中。默认目标为 /投屏录课；确认上传成功自动删除本地文件，失败则保留。当前单文件最多4GB；授权有效期内自动续期。")
                 .font(.caption).foregroundStyle(.secondary)
         }
         .confirmationDialog("清除待传记录？本地录像和网盘文件均保留。", isPresented: $confirmClear) {
@@ -361,9 +399,21 @@ struct BaiduDriveSettings: View {
                 Text(drive.browserPath).textSelection(.enabled)
                 Button("上一级") { drive.browse((drive.browserPath as NSString).deletingLastPathComponent.isEmpty ? "/" : (drive.browserPath as NSString).deletingLastPathComponent) }
                 List(drive.directories, id: \.path) { item in Button { drive.browse(item.path) } label: { Label(item.name, systemImage: "folder") } }.frame(minHeight: 220)
-                HStack { TextField("新建目录名字", text: $newDirectory); Button("新建目录") { drive.createDirectory(newDirectory) } }
-                Text(drive.status).font(.caption).foregroundStyle(.secondary)
-                HStack { Button("取消") { choosing = false }; Spacer(); Button("保存到此目录") { drive.destination = drive.browserPath; choosing = false } }
+                HStack { TextField("新建目录名字", text: $newDirectory); Button("新建目录") { drive.createDirectory(newDirectory) }.disabled(drive.loadingDirectory) }
+                if drive.loadingDirectory {
+                    Text("正在读取或创建目录…").font(.caption)
+                } else if let error = drive.directoryError {
+                    Text(error).font(.caption).foregroundStyle(.secondary)
+                } else if drive.directories.isEmpty {
+                    Text("此处没有可见的子目录").font(.caption).foregroundStyle(.secondary)
+                }
+                HStack {
+                    Button("取消") { choosing = false }
+                    Button("使用默认 /投屏录课") { drive.destination = BaiduTransport.defaultDestination; choosing = false }
+                    Spacer()
+                    Button("保存到此目录") { drive.destination = drive.browserPath; choosing = false }
+                        .disabled(drive.browserPath == "/" || drive.loadingDirectory || drive.directoryError != nil)
+                }
             }.padding(28).frame(width: 540, height: 460)
         }
     }

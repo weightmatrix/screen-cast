@@ -63,6 +63,8 @@ final class DriveFixtureProtocol: URLProtocol, @unchecked Sendable {
 
 @main enum BaiduDriveUploadCheck {
     static func main() async throws {
+        precondition(BaiduTransport.recordingDirectory(for: "/") == "/投屏录课")
+        precondition(BaiduTransport.recordingDirectory(for: "/学校/物理") == "/学校/物理")
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [DriveFixtureProtocol.self]
         BaiduTransport.session = URLSession(configuration: config)
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("touping-baidu-fixture-\(UUID().uuidString)")
