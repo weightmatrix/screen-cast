@@ -101,7 +101,9 @@ final class DirectConnectionAudit {
             }
             defer { timeout.cancel(); socket.cancel(with: .normalClosure, reason: nil); session.invalidateAndCancel() }
             do {
-                let data = try JSONSerialization.data(withJSONObject: report)
+                var authenticatedReport = report
+                if role == "sender" { authenticatedReport["access_token"] = await CastAccount.validAccessToken() }
+                let data = try JSONSerialization.data(withJSONObject: authenticatedReport)
                 try await socket.send(.string(String(decoding: data, as: UTF8.self)))
                 let message = try await socket.receive()
                 guard case .string(let text) = message,
@@ -240,6 +242,12 @@ final class CastAccount: ObservableObject {
     private let base = URL(string: "https://zhibenwang.com/api/")!
     private var query: [String: Any] { [kSecClass as String:kSecClassGenericPassword, kSecAttrService as String:"Han.touping.account", kSecAttrAccount as String:"jwt"] }
     private func tokens() -> [String: String] {
+        #if os(iOS)
+        let sharedRefresh = BroadcastSettings.store.string(forKey:"account.refresh") ?? ""
+        if Bundle.main.bundleURL.pathExtension == "appex" || !sharedRefresh.isEmpty {
+            return ["access":BroadcastSettings.store.string(forKey:"account.access") ?? "", "refresh":sharedRefresh]
+        }
+        #endif
         var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
         var value: CFTypeRef?
         guard SecItemCopyMatching(q as CFDictionary, &value) == errSecSuccess, let data = value as? Data,
@@ -247,6 +255,13 @@ final class CastAccount: ObservableObject {
         return result
     }
     private func saveTokens(_ values: [String: String]) throws {
+        #if os(iOS)
+        if Bundle.main.bundleURL.pathExtension == "appex" {
+            guard BroadcastSettings.store.set(values["access"] ?? "", forKey:"account.access"),
+                  BroadcastSettings.store.set(values["refresh"] ?? "", forKey:"account.refresh") else { throw URLError(.cannotWriteToFile) }
+            return
+        }
+        #endif
         let data = try JSONEncoder().encode(values)
         let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String:data] as CFDictionary)
         if status == errSecItemNotFound {
@@ -255,17 +270,44 @@ final class CastAccount: ObservableObject {
         } else if status != errSecSuccess { throw URLError(.cannotWriteToFile) }
         #if os(iOS)
         BroadcastSettings.store.set(values["access"] ?? "", forKey:"account.access")
+        BroadcastSettings.store.set(values["refresh"] ?? "", forKey:"account.refresh")
         #endif
     }
     private func request(_ path: String, method: String = "GET", body: [String:String]? = nil, authenticated: Bool = true) async throws -> (Int, [String:Any]) {
         var request = URLRequest(url: base.appendingPathComponent(path)); request.httpMethod = method; request.timeoutInterval = 20
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        if authenticated { request.setValue("Bearer " + (tokens()["access"] ?? ""), forHTTPHeaderField: "Authorization") }
+        if authenticated { request.setValue("Bearer " + CastAccount.accessToken, forHTTPHeaderField: "Authorization") }
         if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
         let (data, response) = try await URLSession.shared.data(for: request)
         guard data.count <= 65536, let response = response as? HTTPURLResponse,
               let object = try JSONSerialization.jsonObject(with: data) as? [String:Any] else { throw URLError(.badServerResponse) }
         return (response.statusCode, object)
+    }
+    static var hasSession: Bool { !accessToken.isEmpty || !(shared.tokens()["refresh"] ?? "").isEmpty }
+    @MainActor static func validAccessToken() async -> String {
+        let deadline = ProcessInfo.processInfo.systemUptime + 25
+        while shared.busy && ProcessInfo.processInfo.systemUptime < deadline {
+            try? await Task.sleep(nanoseconds:20_000_000)
+        }
+        guard !shared.busy else { return "" }
+        if !accessToken.isEmpty { return accessToken }
+        guard !(shared.tokens()["refresh"] ?? "").isEmpty else { return "" }
+        await shared.restore()
+        return accessToken
+    }
+    static func verifySender() async -> Bool {
+        guard !(await validAccessToken()).isEmpty else { return false }
+        do {
+            let result = try await shared.request("auth/me/")
+            return result.0 == 200 && result.1["id"] is String
+        } catch { return false }
+    }
+    static func relayConfiguration() async -> [String:Any]? {
+        guard !(await validAccessToken()).isEmpty else { return nil }
+        do {
+            let result = try await shared.request("touping/relay/", method:"POST", body:[:])
+            return result.0 == 200 ? result.1 : nil
+        } catch { return nil }
     }
     @MainActor func login(phone: String, password: String, role: String, otp: String) async {
         guard !busy else { return }; busy = true; defer { busy = false }
@@ -306,6 +348,13 @@ final class CastAccount: ObservableObject {
     }
     @MainActor func restore() async {
         guard !tokens().isEmpty, !busy else { return }; busy = true; defer { busy = false }
+        #if os(iOS)
+        if Bundle.main.bundleURL.pathExtension != "appex" {
+            let existing = tokens()
+            BroadcastSettings.store.set(existing["access"] ?? "", forKey:"account.access")
+            BroadcastSettings.store.set(existing["refresh"] ?? "", forKey:"account.refresh")
+        }
+        #endif
         do { try await loadProfile() } catch { message = "登录已过期或账号服务暂不可用，请重新登录" }
     }
     @MainActor func update() async {
@@ -319,6 +368,7 @@ final class CastAccount: ObservableObject {
     @MainActor func logout() {
         #if os(iOS)
         BroadcastSettings.store.set("", forKey:"account.access")
+        BroadcastSettings.store.set("", forKey:"account.refresh")
         #endif
         SecItemDelete(query as CFDictionary); loggedIn = false; nickname = ""; matchingCode = ""; membership = ""; message = "已退出"; roles = []
     }

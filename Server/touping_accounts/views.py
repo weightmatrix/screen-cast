@@ -18,7 +18,7 @@ def code_allowed(value, svip=False):
 def profile_data(profile):
     return {'nickname': profile.nickname, 'matching_code': profile.matching_code or '',
             'membership': 'SVIP' if profile.is_svip else '普通用户',
-            'relay_allowed': profile.is_svip, 'relay_configured': False}
+            'relay_allowed': profile.is_svip, 'relay_configured': __import__('pathlib').Path('/run/touping-relay.json').is_file()}
 
 
 class ProfileView(APIView):
@@ -51,3 +51,30 @@ class ProfileView(APIView):
             return Response(profile_data(profile))
         except IntegrityError:
             return Response({'error': OCCUPIED}, status=409)
+
+class RelayView(APIView):
+    """Issue short-lived TURN credentials to server-authorized SVIP senders only."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        import base64, hashlib, hmac, json, secrets, time
+        from pathlib import Path
+        from django.core.cache import cache
+        profile = CastProfile.objects.filter(user=request.user, is_svip=True).first()
+        if profile is None:
+            return Response({'error': '中转仅向SVIP投屏者开放'}, status=403)
+        rate = 'cast-relay:' + str(request.user.pk)
+        if not cache.add(rate, 1, timeout=60):
+            try: count = cache.incr(rate)
+            except ValueError: count = 1
+            if count > 6: return Response({'error':'中转申请过于频繁'}, status=429)
+        try:
+            config = json.loads(Path('/run/touping-relay.json').read_text())
+            secret = config['secret']
+            urls = config['urls']
+            if not isinstance(secret,str) or len(secret)<32 or not isinstance(urls,list): raise ValueError()
+        except (OSError, ValueError, KeyError):
+            return Response({'error':'中转暂不可用'}, status=503)
+        username = str(int(time.time()) + 43200) + ':' + str(request.user.pk) + ':' + secrets.token_hex(8)
+        password = base64.b64encode(hmac.new(secret.encode(), username.encode(), hashlib.sha1).digest()).decode()
+        return Response({'urls':urls, 'username':username, 'credential':password, 'type':'relay_config'})

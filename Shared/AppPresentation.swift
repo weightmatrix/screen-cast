@@ -82,7 +82,7 @@ struct PendingConnectionsView: View {
 struct ConnectionPrivacyNotice: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("公网服务依法留存必要连接日志，包括投屏者账号与手机号、来源IP、随机应用标识、审批与连接状态；观看无需账号，投屏须登录。客户端报告的连接时长不代表服务器核验。画面与声音不上传。详情及权利申请方式见隐私政策。")
+            Text("公网服务依法留存必要连接日志，包括投屏者账号与手机号、来源IP、随机应用标识、审批与连接状态；观看无需账号，投屏须登录。客户端报告的连接时长不代表服务器核验。局域网也上传有限连接记录；SVIP直连失败时可由境内服务器转发加密媒体。详情及权利申请方式见隐私政策。")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Link("隐私政策", destination: AppPresentation.privacyURL)
@@ -320,7 +320,7 @@ struct ConnectionPathView: View {
             if let value = info?.networkInterface { Text("本机接口：" + value) }
             if let info { Text("媒体地址/协议：\(info.localEndpoint) → \(info.remoteEndpoint)").foregroundStyle(.secondary) }
             if let value = info?.signals { Text("最近采样传输：" + value) }
-            Text("文字聊天及诊断也共用此直连；服务器不转发媒体。")
+            Text(info?.route.contains("服务器中转") == true ? "当前通过境内服务器转发加密画面和声音。" : "当前画面和声音由设备直接传输。")
                 .font(.caption).foregroundStyle(.secondary)
         }.font(.caption).textSelection(.enabled)
     }

@@ -47,7 +47,7 @@
   for(const id of ['password','application'])$(id).addEventListener('input',rememberProfile);
   // Codes stay in the fragment, never in HTTP requests, referrers or page titles.
   $('route').textContent = local ? '局域网接收 · 输入连接密码和申请文字，由投送者批准后接入。' : '公网邀请 · 输入连接密码和申请文字，由投送者批准后接入；画面不经过服务器。';
-  $('notice').textContent += local ? ' 仅在可信局域网使用此 HTTP 地址。' : ' 公网连接记录来源 IP、浏览器类型及随机应用标识；网络无法直连时会失败，不使用视频中继。';
+  $('notice').textContent += local ? ' 仅在可信局域网使用此 HTTP 地址。' : ' 公网连接记录来源 IP、浏览器类型及随机应用标识；SVIP投屏者可在直连失败后为该对象使用境内服务器中转。';
   let current = null;
   function status(text) { $('status').textContent = t(text); }
   function tally(target, candidate) {
@@ -75,7 +75,7 @@
       const [a,b]=parts;return [0,10,127].includes(a)||(a===172&&b>=16&&b<=31)||(a===192&&b===168)||(a===169&&b===254)||(a===100&&b>=64&&b<=127)||a>=224;
     };
     let route='直连（地址隐藏，USB/局域网未确认）';
-    if(local.candidateType==='relay'||remote.candidateType==='relay')route='中继路径';
+    if(local.candidateType==='relay'||remote.candidateType==='relay')route='服务器中转';
     else if(/^127\./.test(address(remote))||address(remote)==='::1')route='本机回环直连';
     else if(local.networkType==='vpn')route='VPN/隧道直连（底层网络未知）';
     else if(nonPublic(address(local))===true&&nonPublic(address(remote))===true)route='内网地址直连（USB/局域网介质未确认）';
@@ -88,7 +88,7 @@
   }
   function diagnostics(s) {
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：96\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n优先顺序：USB可用网络 → 局域网 → 公网；以实际可达路径和链路质量为准\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：104\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
@@ -162,6 +162,12 @@
     } catch(_) {if(current===s && !s.closed){s.statsError=true;mediaStatus(s);}}
     finally {s.statsBusy=false;}
   }
+  function requestRelay(s) {
+    if(s.connected || s.relayEnabled || s.relayFailed) { if(s.relayEnabled)fail(s,Error('服务器中转连接失败')); return; }
+    s.relayFailed=true; s.deadline=Date.now()+45000; clearTimeout(s.timeout);
+    send(s,{type:'relay_failed'}); status('直连失败，等待投屏者SVIP中转授权…');
+    s.timeout=setTimeout(()=>fail(s,Error('直连失败，中转未获授权或不可用')),45000);
+  }
   function send(s, object) {
     if (current !== s || s.closed) return;
     if (++s.messages > 96 || (s.bytes += JSON.stringify(object).length) > 65536) throw Error('连接信息超过限制');
@@ -201,12 +207,22 @@
       s.auditSession = packet.session_id;
       report(s, 'attempt');
       clearTimeout(s.timeout);
-      s.timeout=setTimeout(()=>fail(s,Error('获准接入后未能建立设备直连')),35000);
+      s.timeout=setTimeout(()=>requestRelay(s),35000);
+    } else if(packet.type === 'relay_failed') {
+      // Each side independently waits for its own failed ICE attempt.
+    } else if(packet.type === 'relay_denied') {
+      fail(s,Error('直连失败，投屏者无法使用SVIP中转'));
+    } else if(packet.type === 'relay_config') {
+      if(!s.relayFailed || s.connected || s.relayEnabled) return;
+      if(!Array.isArray(packet.urls)||packet.urls.length>2||!packet.urls.every(url=>typeof url==='string'&&url.startsWith('turn:49.233.174.254:3479?transport=')))throw Error('无效中转配置');
+      s.pc.setConfiguration({...s.pc.getConfiguration(),iceServers:[{urls:packet.urls,username:packet.username,credential:packet.credential}],iceTransportPolicy:'relay'});
+      s.relayEnabled=true; s.deadline=Date.now()+35000; s.relayAwaitingOffer=true; s.ice=[]; clearTimeout(s.timeout); send(s,{type:'relay_ready'});
+      s.timeout=setTimeout(()=>fail(s,Error('服务器中转连接超时')),35000); status('正在连接服务器中转…');
     } else if (packet.type === 'offer') {
-      s.paired=true; s.awaitingApproval=false; clearTimeout(s.timeout); s.deadline=Date.now()+35000; s.timeout=setTimeout(()=>fail(s,Error('获准接入后未能建立设备直连')),35000); status('配对成功，正在检查设备直连…');
+      s.paired=true; s.awaitingApproval=false; clearTimeout(s.timeout); s.deadline=Date.now()+35000; s.timeout=setTimeout(()=>requestRelay(s),35000); status(s.relayEnabled?'正在建立服务器中转…':'配对成功，正在检查设备直连…');
       for(const candidate of packet.sdp.match(/^a=candidate:.*$/gm) || []) tally(s.remoteCandidates,candidate.slice(2));
       diagnostics(s);
-      await s.pc.setRemoteDescription({type:'offer',sdp:packet.sdp});
+      await s.pc.setRemoteDescription({type:'offer',sdp:packet.sdp}); s.relayAwaitingOffer=false;
       window.ToupingRoom?.prepare(s);
       for(const ice of s.ice.splice(0)) await s.pc.addIceCandidate(ice);
       await s.pc.setLocalDescription(await s.pc.createAnswer());
@@ -215,9 +231,10 @@
         ? s.pc.localDescription.sdp.replace('\r\nm=', '\r\na=x-touping-audio:split-v1\r\nm=') : s.pc.localDescription.sdp;
       send(s,{type:'answer',sdp:answer});
     } else if (packet.type === 'candidate') {
+      if(s.relayEnabled && !packet.candidate.includes(' typ relay'))return;
       tally(s.remoteCandidates,packet.candidate); diagnostics(s);
       const ice = {candidate:packet.candidate,sdpMid:packet.mid,sdpMLineIndex:packet.line};
-      if (s.pc.remoteDescription) await s.pc.addIceCandidate(ice); else s.ice.push(ice);
+      if (s.pc.remoteDescription && !s.relayAwaitingOffer) await s.pc.addIceCandidate(ice); else s.ice.push(ice);
     } else if (packet.type === 'error') throw Error(packet.message || '未找到发送端');
   }
   function browserDevice() {
@@ -250,7 +267,7 @@
     // The pairing server deliberately closes once both peers report connected.
     // Some browsers emit an error as that short-lived signaling socket closes.
     ws.onerror=()=>{if(!s.connected) fail(s,Error('无法连接配对服务，请检查网络'));};
-    ws.onclose=()=>{ if(!s.closed && !s.connected) fail(s,Error(s.paired?'配对成功，但本次未建立视频直连；未使用中继，请查看连接诊断':'配对已结束，请确认发送端在线后重试')); };
+    ws.onclose=()=>{ if(!s.closed && !s.connected) fail(s,Error(s.paired?'配对成功，但本次媒体连接失败，请查看直连/服务器中转诊断':'配对已结束，请确认发送端在线后重试')); };
   }
   async function localJoin(s, code) {
     const challenge=await fetch('./challenge',{cache:'no-store',signal:s.abort.signal}).then(response=>response.json());
@@ -308,12 +325,12 @@
       if(state==='connected') {
         s.connected=true; s.connectedAt=performance.now(); report(s, 'connected'); clearTimeout(s.timeout); clearTimeout(s.disconnected); clearInterval(s.clock); diagnostics(s); status('已直连，等待首帧画面…'); sampleMedia(s); window.ToupingRoom?.ready(s);
         if(!local) { try {send(s,{type:'done'});} catch(error){fail(s,error);} }
-      } else if(state==='failed') fail(s,Error('无法直连，请检查网络；此服务不提供视频中继'));
+      } else if(state==='failed') requestRelay(s);
       else if(state==='disconnected') {status('连接中断，正在等待网络恢复…'); s.disconnected=setTimeout(()=>fail(s,Error('连接已中断，请重新接收')),8000);}
     };
     s.deadline=Date.now()+340000;
     s.timeout=setTimeout(()=>fail(s,Error(s.paired?'获准接入后未能建立设备直连，请查看连接诊断':'连接或申请超时，请确认邀请链接、密码及投送者状态')),340000);
-    s.clock=setInterval(()=>{if(current===s && !s.closed && !s.connected) {status(`${s.awaitingApproval?'等待投送者接受接入申请':s.paired?'配对成功，正在检查直连':'正在连接发送端'}（剩余${Math.max(0,Math.ceil((s.deadline-Date.now())/1000))}秒）`); diagnostics(s);}},1000);
+    s.clock=setInterval(()=>{if(current===s && !s.closed && !s.connected) {status(`${s.relayEnabled?'正在连接服务器中转':s.relayFailed?'直连失败，等待SVIP中转授权':s.awaitingApproval?'等待投送者接受接入申请':s.paired?'配对成功，正在检查直连':'正在连接发送端'}（剩余${Math.max(0,Math.ceil((s.deadline-Date.now())/1000))}秒）`); diagnostics(s);}},1000);
     diagnostics(s);
     try { if(local) await localJoin(s,code); else await publicJoin(s,code); } catch(error){fail(s,error);}
   });

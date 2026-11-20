@@ -50,6 +50,49 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('登录', packet['message'])
         self.assertEqual(service.ROOMS, {})
 
+    async def test_relay_is_per_failed_pair(self):
+        a,b,identity = await self.pair()
+        await self.approve(a,b,identity)
+        other = await self.apply(a)
+        await other.receive()
+        other_id = (await a.receive())[1]['id']
+        await self.approve(a,other,other_id)
+        other_state = service.ROOMS['a'*64]['receivers'][other_id]
+        await a.send({'type':'done','id':other_id})
+        await other.send({'type':'done'})
+        await asyncio.sleep(.02)
+        await a.send({'type':'relay_failed','id':identity}); await b.receive()
+        await b.send({'type':'relay_failed'}); await a.receive()
+        with mock.patch.object(service,'relay_authorized',new=mock.AsyncMock(return_value=True)):
+            await a.send({'type':'relay_config','id':identity,'urls':['turn:49.233.174.254:3479?transport=udp'],'username':'fixture','credential':'Zml4dHVyZQ==','access_token':'renewed-private-fixture-token'})
+            forwarded = (await b.receive())[1]
+            self.assertEqual(forwarded['type'],'relay_config')
+            self.assertNotIn('access_token',forwarded)
+            await b.send({'type':'relay_ready'})
+            self.assertEqual((await a.receive())[1]['type'],'relay_ready')
+        self.assertTrue(service.ROOMS['a'*64]['receivers'][identity]['relay'])
+        self.assertFalse(other_state['relay'])
+        self.assertEqual(other_state['done'], {'sender','receiver'})
+
+    async def test_broker_rechecks_svip(self):
+        a,b,identity = await self.pair()
+        await self.approve(a,b,identity)
+        state = service.ROOMS['a'*64]['receivers'][identity]
+        await a.send({'type':'relay_failed','id':identity}); await b.receive()
+        await b.send({'type':'relay_failed'}); await a.receive()
+        with mock.patch.object(service,'relay_authorized',new=mock.AsyncMock(return_value=False)):
+            await a.send({'type':'relay_config','id':identity,'urls':['turn:49.233.174.254:3479?transport=udp'],'username':'fixture','credential':'Zml4dHVyZQ=='})
+            self.assertEqual((await a.receive())[0],8)
+        self.assertFalse(state['relay'])
+
+    async def test_connected_pair_cannot_fallback(self):
+        a,b,identity = await self.pair()
+        await self.approve(a,b,identity)
+        await b.send({'type':'done'})
+        await a.send({'type':'relay_failed','id':identity})
+        await asyncio.sleep(.02)
+        self.assertFalse(service.ROOMS['a'*64]['receivers'][identity]['failed'])
+
     async def test_audit_uses_verified_sender_identity(self):
         client = await self.client('sender', access_token='fixture-token', phone='19999999999')
         await client.receive()
@@ -230,6 +273,16 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         with mock.patch.object(service.secrets,'randbelow',side_effect=[12345678,23456789,34567890]):
             await c.send({'role':'suggest','exclude':[hashlib.sha256(b'23456789').hexdigest()]})
             self.assertEqual((await c.receive())[1],{'type':'suggestion','code':'34567890'})
+
+    async def test_local_sender_audit_has_verified_account(self):
+        client=await Client.open(self.port,path='/audit'); self.clients.append(client)
+        device={'installation_id':'b'*32,'platform':'macOS','model':'Synthetic','os_version':'0','app_version':'1.4','app_build':'104-test'}
+        await client.send({'role':'audit','route':'local_ip','session_id':'d'*32,'peer_role':'sender','event':'connected','device':device,'access_token':'fixture'})
+        self.assertEqual((await client.receive())[1]['type'],'audit_recorded')
+        with open(self.audit_path) as handle: records=[json.loads(line) for line in handle]
+        report=next(r for r in records if r['event']=='direct_connection_reported')
+        self.assertEqual(report['route'],'local_ip')
+        self.assertEqual(report['sender_account']['account_id'],'fixture-user')
 
     async def test_direct_audit_is_metadata_only(self):
         a=await Client.open(self.port,path='/audit'); self.clients.append(a)

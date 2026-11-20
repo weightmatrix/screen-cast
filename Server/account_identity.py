@@ -19,3 +19,15 @@ async def sender_identity(token):
             raise ValueError('Account identity unavailable')
         return {'account_id': identity, 'phone': phone}
     return await asyncio.wait_for(asyncio.to_thread(lookup), timeout=6)
+
+async def relay_authorized(token):
+    """Recheck server-side entitlement; client claims never grant relay access."""
+    if not isinstance(token,str) or not re.fullmatch(r'[A-Za-z0-9_.-]{20,4096}',token): return False
+    def lookup():
+        request=urllib.request.Request('http://touping-accounts:8000/api/touping/profile/',headers={
+            'Authorization':'Bearer '+token,'X-Forwarded-Proto':'https','Host':'zhibenwang.com'})
+        with urllib.request.urlopen(request,timeout=5) as response: data=response.read(8193)
+        if len(data)>8192: return False
+        return json.loads(data).get('relay_allowed') is True
+    try: return await asyncio.wait_for(asyncio.to_thread(lookup),timeout=6)
+    except Exception: return False

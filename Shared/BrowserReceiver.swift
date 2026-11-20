@@ -184,7 +184,7 @@ final class BrowserReceiverServer {
             let events = client.events; client.events.removeAll(); reply(connection, status: 200, object: ["events":events])
         case "/signal":
             guard object.count == 2, let packet = object["packet"] as? [String: Any],
-                  let type = packet["type"] as? String, type == "answer" || type == "candidate" else { reply(connection, status: 400, object: [:]); return }
+                  let type = packet["type"] as? String, type == "answer" || type == "candidate" || type == "relay_failed" || type == "relay_ready" else { reply(connection, status: 400, object: [:]); return }
             client.bytes += body.count; client.messages += 1
             guard client.bytes <= 65536, client.messages <= 96 else { remove(id); reply(connection, status: 413, object: [:]); return }
             guard let video = client.video else { reply(connection, status: 403, object: ["error":"尚未批准"]); return }

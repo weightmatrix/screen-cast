@@ -1,9 +1,9 @@
-"""Bounded pairing and STUN only. No media, TURN, database, or external dependencies."""
+"""Bounded pairing/STUN with account-verified, per-failed-peer SVIP relay signaling."""
 import asyncio, base64, collections, hashlib, hmac, ipaddress, json, os, re, secrets, struct, time, unicodedata, uuid
 from pathlib import Path
 from audit import AuditLog, AuditUnavailable
 import baidu_oauth
-from account_identity import sender_identity
+from account_identity import sender_identity, relay_authorized
 MAX_FRAME = 16384
 MAX_TOTAL = 65536
 ROOMS = {}
@@ -123,9 +123,9 @@ async def exchange(ws):
     if (role == 'audit') != ws.audit_only: raise Rejected()
     if role == 'audit':
         if set(hello) - {'role', 'route', 'session_id', 'peer_role', 'event', 'device', 'duration_ms', 'access_token'}: raise Rejected()
-        if hello.get('route') not in ('internet_ip', 'internet_code') or hello['peer_role'] not in ('sender', 'receiver') or hello['event'] not in ('attempt', 'approved', 'rejected', 'connected', 'ended'): raise Rejected()
+        if hello.get('route') not in ('internet_ip', 'internet_code', 'local_ip') or hello['peer_role'] not in ('sender', 'receiver') or hello['event'] not in ('attempt', 'approved', 'rejected', 'connected', 'ended'): raise Rejected()
         if not isinstance(hello['session_id'], str) or not re.fullmatch('[a-f0-9]{32}', hello['session_id']): raise Rejected()
-        if hello['event'] in ('approved', 'rejected') and (hello['route'] != 'internet_ip' or hello['peer_role'] != 'sender'): raise Rejected()
+        if hello['event'] in ('approved', 'rejected') and (hello['route'] not in ('internet_ip', 'local_ip') or hello['peer_role'] != 'sender'): raise Rejected()
         if hello['peer_role'] == 'sender':
             try: ws.context['sender_account'] = await sender_identity(hello.get('access_token'))
             except Exception: raise Rejected()
@@ -173,7 +173,7 @@ async def exchange(ws):
             await ws.send({'type':'error','code':'code_in_use','message':'邀请编号已占用，请修改邀请编号'}); return
         if len(ROOMS) >= 32:
             await ws.send({'type':'error','message':'配对服务繁忙，请稍后重试'}); return
-        room = {'sender':ws, 'receivers':{}, 'verifier':verifier}
+        room = {'sender':ws, 'receivers':{}, 'verifier':verifier,'access_token':hello.get('access_token')}
         ROOMS[key] = room
         ws.host = True
     else:
@@ -201,7 +201,7 @@ async def exchange(ws):
             await ws.send({'type':'error','message':'投屏已结束或申请队列已满'}); return
         identity = uuid.uuid4().hex
         ws.context['pair_id'] = identity
-        room['receivers'][identity] = {'ws':ws,'approved':False,'done':set(),'bytes':0,'timeout':None,'finished':False}
+        room['receivers'][identity] = {'ws':ws,'approved':False,'done':set(),'bytes':0,'timeout':None,'finished':False,'failed':set(),'relay':False}
     try:
         if role == 'sender':
             audit('sender_waiting', **ws.context)
@@ -240,6 +240,30 @@ async def exchange(ws):
             packet = {name:value for name,value in obj.items() if name != 'id'}
             state['bytes'] += len(json.dumps(packet, separators=(',', ':')).encode())
             if state['bytes'] > MAX_TOTAL: raise Rejected()
+            if kind == 'relay_failed':
+                if set(packet) != {'type'}: raise Rejected()
+                if state['done'] or state['relay']: continue
+                state['failed'].add(role)
+            elif kind == 'relay_config':
+                if role != 'sender' or state['done'] or state['failed'] != {'sender','receiver'} or state['relay']: raise Rejected()
+                current_token = packet.pop('access_token', room.get('access_token'))
+                if current_token != room.get('access_token'):
+                    try: refreshed_identity = await sender_identity(current_token)
+                    except Exception: raise Rejected()
+                    if refreshed_identity['account_id'] != ws.context['sender_account']['account_id']: raise Rejected()
+                    ws.context['sender_account'] = refreshed_identity
+                    room['access_token'] = current_token
+                if set(packet) != {'type','urls','username','credential'} or not isinstance(packet['urls'],list) or len(packet['urls']) > 2: raise Rejected()
+                if not packet['urls'] or any(url not in ('turn:49.233.174.254:3479?transport=udp','turn:49.233.174.254:3479?transport=tcp') for url in packet['urls']): raise Rejected()
+                if not isinstance(packet['username'],str) or not re.fullmatch(r'[A-Za-z0-9:._-]{1,160}',packet['username']): raise Rejected()
+                if not isinstance(packet['credential'],str) or not re.fullmatch(r'[A-Za-z0-9+/=]{1,128}',packet['credential']): raise Rejected()
+                if not await relay_authorized(current_token): raise Rejected()
+                state['relay'] = True
+                audit('relay_fallback_requested', pair_id=pair_id, sender_account=ws.context.get('sender_account'), evidence='both_clients_reported_failure')
+            elif kind == 'relay_ready':
+                if role != 'receiver' or not state['relay'] or set(packet) != {'type'}: raise Rejected()
+            elif kind == 'relay_denied':
+                if role != 'sender': raise Rejected()
             if kind == 'done':
                 if role not in state['done']: audit('peer_reported_connected', **{**ws.context,'pair_id':pair_id}, evidence='client_report_only')
                 state['done'].add(role)
@@ -255,9 +279,10 @@ async def exchange(ws):
             elif kind == 'candidate':
                 if set(packet) != {'type','candidate','mid','line'}: raise Rejected()
                 if not isinstance(packet['candidate'], str) or not packet['candidate'].startswith('candidate:') or len(packet['candidate']) > 2048: raise Rejected()
+                if ' typ relay' in packet['candidate'] and not state['relay']: raise Rejected()
                 if type(packet['line']) is not int or not 0 <= packet['line'] <= 16: raise Rejected()
                 if packet['mid'] is not None and (not isinstance(packet['mid'], str) or len(packet['mid']) > 64): raise Rejected()
-            else: raise Rejected()
+            elif kind not in ('relay_failed','relay_config','relay_ready','relay_denied'): raise Rejected()
             if role == 'sender': await state['ws'].send(packet)
             else: await room['sender'].send({**packet,'id':pair_id})
     finally:
@@ -312,7 +337,7 @@ async def connection(reader, writer):
                 b"\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; connect-src 'self' wss://zhibenwang.com; media-src blob:; base-uri 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n"+body)
             await writer.drain(); return
         if method == 'GET' and path == '/health':
-            body = b'{"service":"pairing-only","mediaRelay":false,"maxSessionBytes":65536,"connectionAudit":true}'
+            body = b'{"service":"pairing-with-svip-relay-fallback","mediaRelay":true,"relayMode":"svip-per-peer-fallback","maxSessionBytes":65536,"connectionAudit":true}'
             writer.write(b'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: '+str(len(body)).encode()+b'\r\nConnection: close\r\n\r\n'+body)
             await writer.drain(); return
         ip = source_ip(peer[0], headers)

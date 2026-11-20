@@ -1,3 +1,13 @@
+## 2026-11-20 · 104版国内SVIP中转与独立账号服务
+
+所有投屏业务文件位于/srv/apps/touping。app/touping_accounts是独立Django账号资料接口，ops/enable_accounts.py构建touping-accounts服务并只添加Nginx的/api/touping/窄前缀；不会重建排课后端。共享数据库和登录/资料加密必要密钥只以secrets/accounts.env私有文件传入容器（采用白名单，不复制短信/备份/管理OTP等无关配置），不能打印或提交。Nginx模板可能是只读bind mount，脚本核对Mounts后备份并只更新对应入口；回滚模板在backups/accounts-isolated-*。不要重用102版accounts.override.yml替换排课镜像。
+
+ops/enable_turn.py使用官方coturn固定digest启动touping-turn，ops/turn.compose.yml，secrets/relay.json和turnserver.conf；临时目录在Docker隔离/run，持久程序/配置不落服务器/tmp或home。腾讯云防火墙仅新增TCP3479、UDP3479、UDP49160–49200。物理带宽5Mbps，视频上限3Mbps；TURN max-bps=450000 bytes/s/会话、user-quota=8、total-quota=16，bps-capacity=7200000是分配预留容量而非物理带宽。保持权限校验，禁止无认证或公开长期凭证。仅服务器核验SVIP的发送端可申请12小时临时凭证，接收者无需账号；已经连通的pair不得改中转。
+
+配对更新使用ops/deploy_sender_auth.py，备份backups/sender-auth-*及最近镜像tag touping-signaling:before-sender-auth103（旧tag名称不代表当前回滚镜像版本）；该脚本只重建投屏signaling。回滚应选择对应备份源文件和镜像，不覆盖其他应用。停用中转可用docker compose -p touping-turn -f /srv/apps/touping/ops/turn.compose.yml down；先确认无活动中转，已直连媒体不由该服务承载。账号服务另由ops/accounts.compose.yml管理，勿执行排课整套回滚。云防火墙规则无需用于普通直连；若撤销功能再单独移除三条明确标注的投屏规则，不一键修改其他端口。
+
+验证包括公网JWT授权、TURN认证和双向数据、原生合成画面默认/TCP-only回退，及局域有限审计attempt核验手机号落盘。测试凭证只留私有临时文件并在检查后删除；不能上传原始日志/账号信息/凭证。真实双设备跨网、网页播放和长课性能仍待验收。
+
 ## 2026-11-05 当前运维要求
 
 境外复制已停止（腾讯timer禁用，service inactive/dead），不新增第二台。保留已有快照待依法核对，不擅自删除。audit_snapshot.py未升级200段格式，且destination_region不是CN时拒绝发送；禁止重启旧境外复制任务。

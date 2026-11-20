@@ -56,6 +56,7 @@ struct RootView: View {
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in RoomSession.shared.pollBroadcast() }
         .onAppear { StartupTiming.rootVisible(); ConnectionNotifications.shared.prepare() }
         .task {
+            await CastAccount.shared.restore()
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("--verify-native-audio") { await NativeAudioVerification.run() }
             if ProcessInfo.processInfo.arguments.contains("--verify-native-routes") { await NativeRoutesVerification.run() }

@@ -463,7 +463,7 @@ enum MediaPath {
     static func matchesUSBReport(local: String, remote: String, reportedLocal: String, reportedRemote: String, age: TimeInterval) -> Bool {
         age >= 0 && age < 6 && !local.isEmpty && !remote.isEmpty && reportedLocal == remote && reportedRemote == local
     }
-    static let preference = "自动择路：先比较连通与收发状态，再按底层网络偏好和RTT选路；USB不再抢先，以实际路径为准"
+    static let preference = "先尝试设备直连；失败后仅SVIP可使用服务器中转，以实际路径为准"
     struct Interface {
         var name: String
         var detail: String
@@ -494,7 +494,7 @@ enum MediaPath {
     }
     static func route(local: [String: Any], remote: [String: Any], interface: Interface?) -> String {
         let lt = local["candidateType"] as? String, rt = remote["candidateType"] as? String
-        if lt == "relay" || rt == "relay" { return "中继路径" }
+        if lt == "relay" || rt == "relay" { return "服务器中转" }
         if let ip = bytes(address(remote)), (ip.count == 4 && ip[0] == 127) || (ip.count == 16 && ip.dropLast().allSatisfy({ $0 == 0 }) && ip.last == 1) { return "本机回环直连" }
         if interface?.tunnel == true || local["networkType"] as? String == "vpn" { return "VPN/隧道直连（底层网络未知）" }
         if interface?.deviceUSB == true, interface?.sameSubnet == true,
@@ -577,7 +577,7 @@ extension MediaPath {
         if route.contains("USB设备") { return "USB电缆" }
         if route.contains("回环") && !route.contains("公网") { return "本机回环" }
         if route.contains("VPN") && !route.contains("待确认") { return "VPN/隧道" }
-        if route.contains("中继") { return "中继路径" }
+        if route.contains("中继") || route.contains("服务器中转") { return "服务器中转" }
         if route.contains("局域网直连（同子网）") {
             if interface.localizedCaseInsensitiveContains("wi-fi") || interface.localizedCaseInsensitiveContains("wifi") { return "Wi-Fi局域网" }
             if interface.localizedCaseInsensitiveContains("ethernet") || interface.contains("以太") || interface.contains("有线") { return "有线局域网" }

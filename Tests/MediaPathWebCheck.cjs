@@ -11,7 +11,7 @@ function path(local,remote){return sandbox.connectionPath(new Map([
 assert.match(path({address:'192.168.1.2',candidateType:'host',networkType:'ethernet'},{address:'192.168.1.3',candidateType:'host'}),/内网地址直连/);
 assert.match(path({candidateType:'host'},{address:'peer.local',candidateType:'host'}),/未确认/);
 assert.match(path({networkType:'ethernet'},{address:'8.8.8.8',candidateType:'srflx'}),/公网地址/);
-assert.match(path({address:'192.168.1.2'},{address:'192.168.1.3',candidateType:'relay'}),/中继路径/);
+assert.match(path({address:'192.168.1.2'},{address:'192.168.1.3',candidateType:'relay'}),/服务器中转/);
 assert.match(path({networkType:'vpn'},{address:'192.168.1.3'}),/VPN/);
 assert.match(path({networkType:'ethernet'},{address:'peer.local'}),/USB未确认/);
 assert.match(sandbox.connectionPath(new Map()),/等待实际路径统计/);

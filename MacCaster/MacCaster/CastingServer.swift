@@ -286,12 +286,19 @@ final class CastingServer: ObservableObject {
 
     deinit { if let autoAllowObserver { NotificationCenter.default.removeObserver(autoAllowObserver) } }
 
+    private var startGeneration = UUID()
     func start() {
-        guard !CastAccount.accessToken.isEmpty else { lastError = "投屏必须登录，请在设置中登录"; return }
+        guard CastAccount.hasSession else { lastError = "投屏必须登录，请在设置中登录"; return }
         bindRetryWorkItem?.cancel()
         bindRetryWorkItem = nil
         guard listener == nil else { return }
-        bindListener(retry: 0)
+        let generation = UUID(); startGeneration = generation
+        Task { @MainActor [weak self] in
+            let allowed = await CastAccount.verifySender()
+            guard let self, self.startGeneration == generation else { return }
+            guard allowed else { self.lastError = "投屏账号验证失败，请联网并在设置中重新登录"; return }
+            self.bindListener(retry: 0)
+        }
     }
 
     private func bindListener(retry: Int) {
@@ -348,6 +355,7 @@ final class CastingServer: ObservableObject {
     }
 
     func stop() {
+        startGeneration = UUID()
         browserServer?.stop(); browserServer = nil; browserListeningPort = nil
         stopInternet()
         DiagLog.log("Connection", "server stop port \(port) connections=\(connections.count)")
@@ -483,7 +491,7 @@ final class CastingServer: ObservableObject {
                 conn.send(content: waiting, completion: .idempotent)
                 let id = UUID().uuidString
                 connectionSlots[key] = id
-                if internetConnections.contains(key) { requestAudits[key] = DirectConnectionAudit(sessionID: id.replacingOccurrences(of: "-", with: "").lowercased(), sending: true) }
+                requestAudits[key] = DirectConnectionAudit(sessionID: id.replacingOccurrences(of: "-", with: "").lowercased(), sending: true, route: internetConnections.contains(key) ? "internet_ip" : "local_ip")
                 authTimeouts.removeValue(forKey: key)?.cancel()
                 buffer.removeFirst(5 + length); controlBuffers[key] = buffer
                 let ip: String
@@ -506,7 +514,7 @@ final class CastingServer: ObservableObject {
                     let suppliedAuditID = object["audit_session"] as? String
                     let auditID = suppliedAuditID.flatMap { $0.range(of: "^[a-f0-9]{32}$", options: .regularExpression) != nil ? $0 : nil }
                     let video = NativeVideoPeer(source: nativeSource, internet: internetConnections.contains(key), bitrate: nativeBitrate, fps: nativeFPS,
-                                                auditDirect: internetConnections.contains(key), auditSessionID: auditID)
+                                                auditDirect: true, auditSessionID: auditID)
                     nativePeers[key] = video
                     watch(video, route: internetConnections.contains(key) ? "app公网直连" : "app局域网接入")
                     video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
@@ -576,7 +584,7 @@ final class CastingServer: ObservableObject {
         guard browserServer == nil, port <= 63535 else { return }
         let browser = BrowserReceiverServer(port: port + 2000, code: { [weak self] in self?.accessCode ?? "" }, addresses: { Self.localIPs }) { [weak self] in
             guard let self else { return NativeVideoPeer(internet: false) }
-            let video = NativeVideoPeer(source: self.nativeSource, internet: false, bitrate: self.nativeBitrate, fps: self.nativeFPS)
+            let video = NativeVideoPeer(source: self.nativeSource, internet: false, bitrate: self.nativeBitrate, fps: self.nativeFPS, auditDirect: true)
             self.watch(video, route: "局域网网页")
             video.onSendingFPS = { [weak self] fps in self?.onNativeFPS?(fps) }
             return video

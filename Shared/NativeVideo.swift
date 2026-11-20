@@ -372,6 +372,12 @@ final class NativeScreenSource: @unchecked Sendable {
     private let perf = StreamPerformance("native.capture")
     private var fps = 60
     private var dimension = 0
+    private let sizeLock = NSLock()
+    private var outputSize = CGSize.zero
+    var relayScale: Double {
+        sizeLock.lock(); defer { sizeLock.unlock() }
+        return max(1, max(max(outputSize.width,outputSize.height)/1920, min(outputSize.width,outputSize.height)/1080))
+    }
     private var paused = false
     var onResolution: ((String) -> Void)?
     func configure(fps: Int, dimension: Int = 0) {
@@ -397,6 +403,7 @@ final class NativeScreenSource: @unchecked Sendable {
             let w = CVPixelBufferGetWidth(pixel), h = CVPixelBufferGetHeight(pixel)
             let scale = self.dimension == 0 ? 1 : min(1, Double(self.dimension) / Double(max(w, h)))
             let outW = max(2, Int(Double(w) * scale) / 2 * 2), outH = max(2, Int(Double(h) * scale) / 2 * 2)
+            self.sizeLock.lock(); self.outputSize = CGSize(width:outW,height:outH); self.sizeLock.unlock()
             let shape = "\(w)x\(h)->\(outW)x\(outH)@\(self.fps) rotation=\(orientation) pixelFormat=\(CVPixelBufferGetPixelFormatType(pixel))"
             if shape != self.shape {
                 self.shape = shape
@@ -483,6 +490,111 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var frames = 0
     private let receivePerf = StreamPerformance("native.receive")
     private let remoteUSBLock = NSLock()
+    private var directFailed = false
+    private var remoteDirectFailed = false
+    private var relayEnabled = false
+    private var appliedRelayScale = 1.0
+    private var relayRequested = false
+    private var pendingRelayConfiguration: [String:Any]?
+    #if DEBUG
+    private var verificationRelayConfiguration: [String:Any]?
+    #endif
+    private func directFailure() {
+        guard !connected, !relayEnabled else { fail("媒体连接失败"); return }
+        if !directFailed {
+            directFailed = true
+            sendSignal?(["type":"relay_failed"])
+            timeout?.cancel(); timeout = nil
+            let work = DispatchWorkItem { [weak self] in self?.fail("直连失败且中转未获授权或未就绪") }
+            timeout = work; DispatchQueue.main.asyncAfter(deadline:.now()+45, execute:work)
+        }
+        requestRelayIfNeeded()
+    }
+    private func requestRelayIfNeeded() {
+        guard sending, directFailed, remoteDirectFailed, !relayRequested, !connected else { return }
+        relayRequested = true
+        Task { @MainActor [weak self] in
+            let configuration: [String:Any]?
+            #if DEBUG
+            if let fixture = self?.verificationRelayConfiguration { configuration = fixture }
+            else { configuration = await CastAccount.relayConfiguration() }
+            #else
+            configuration = await CastAccount.relayConfiguration()
+            #endif
+            guard let self, !self.closed, !self.connected else { return }
+            guard let configuration else {
+                self.sendSignal?(["type":"relay_denied"]); self.fail("直连失败，中转仅供已登录SVIP且服务可用时使用"); return
+            }
+            self.pendingRelayConfiguration = configuration
+            self.remoteSet = false; self.candidates.removeAll()
+            self.sendSignal?(configuration)
+        }
+    }
+    private func enableRelay(_ object: [String:Any]) {
+        guard directFailed, !connected, !relayEnabled, let peer,
+              let urls = object["urls"] as? [String], (1...2).contains(urls.count),
+              urls.allSatisfy({ $0.hasPrefix("turn:49.233.174.254:3479?transport=") }),
+              let username = object["username"] as? String, username.utf8.count < 160,
+              let credential = object["credential"] as? String, credential.utf8.count < 128 else { return }
+        let config = peer.configuration
+        config.iceServers = [RTCIceServer(urlStrings:urls, username:username, credential:credential)]
+        config.iceTransportPolicy = .relay
+        guard peer.setConfiguration(config) else { fail("无法启用服务器中转"); return }
+        relayEnabled = true; remoteSet = false; candidates = candidates.filter { $0.sdp.contains(" typ relay") }; timeout?.cancel(); timeout = nil
+        bitrate = min(bitrate, 3_000_000); fps = min(fps,30); applyQuality()
+        peer.restartIce()
+        armTimeout()
+        if sending { pendingRelayConfiguration = nil; offer() }
+        else { sendSignal?(["type":"relay_ready"]) }
+    }
+    #if DEBUG
+    /// Isolated synthetic media: suppress direct candidates, then exercise the real timeout/restart flow.
+    @MainActor static func verifyRelayFallback(configurationURL: URL) async {
+        guard let data = try? Data(contentsOf:configurationURL),
+              let configuration = try? JSONSerialization.jsonObject(with:data) as? [String:Any] else { exit(2) }
+        let source = NativeScreenSource()
+        source.configure(fps:30)
+        let sender = NativeVideoPeer(source:source, internet:false, bitrate:20_000_000, fps:60)
+        let receiver = NativeVideoPeer(internet:false)
+        sender.configureRoomVerification(); receiver.configureRoomVerification()
+        source.audio.configure(page:false,microphone:false)
+        sender.verificationRelayConfiguration = configuration
+        var frames = 0, failed = false, selectedRelay = false, maxWidth = 0, maxHeight = 0
+        func forward(_ input: [String:Any], to target:NativeVideoPeer) {
+            var packet = input
+            let type = packet["type"] as? String ?? ""
+            if type == "candidate", !(packet["candidate"] as? String ?? "").contains(" typ relay") { return }
+            if let sdp = packet["sdp"] as? String, !sender.relayEnabled {
+                packet["sdp"] = sdp.components(separatedBy:"\r\n").filter { !$0.hasPrefix("a=candidate:") }.joined(separator:"\r\n")
+            }
+            target.receive(packet)
+        }
+        sender.sendSignal = { forward($0,to:receiver) }
+        receiver.sendSignal = { forward($0,to:sender) }
+        sender.onError = { _ in failed = true }
+        receiver.onError = { _ in failed = true }
+        receiver.onDiagnostic = { value in if value.route == "服务器中转" { selectedRelay = true } }
+        receiver.onImage = { image in
+            DispatchQueue.main.async {
+                frames += 1; maxWidth = max(maxWidth,Int(image.extent.width)); maxHeight = max(maxHeight,Int(image.extent.height))
+            }
+        }
+        var pixel:CVPixelBuffer?
+        guard CVPixelBufferCreate(nil,2560,1440,kCVPixelFormatType_32BGRA,[kCVPixelBufferIOSurfacePropertiesKey:[:]] as CFDictionary,&pixel) == kCVReturnSuccess,
+              let pixel else { exit(2) }
+        CIContext().render(CIImage(color:CIColor(red:0.2,green:0.4,blue:0.8)).cropped(to:CGRect(x:0,y:0,width:2560,height:1440)),to:pixel)
+        sender.offer()
+        let started = ProcessInfo.processInfo.systemUptime
+        while ProcessInfo.processInfo.systemUptime - started < 85 && !failed {
+            source.append(pixel)
+            if frames >= 10 && selectedRelay { break }
+            try? await Task.sleep(nanoseconds:33_333_333)
+        }
+        let passed = !failed && sender.directFailed && receiver.directFailed && sender.relayEnabled && receiver.relayEnabled && selectedRelay && frames >= 10 && max(maxWidth,maxHeight) <= 1920 && min(maxWidth,maxHeight) <= 1080
+        NSLog("RelayFallback %@ frames=%d output=%dx%d selectedRelay=%@",passed ? "PASS" : "FAIL",frames,maxWidth,maxHeight,String(selectedRelay))
+        sender.stop();receiver.stop();exit(passed ? 0 : 1)
+    }
+    #endif
     private var remoteUSBPath: (local: String, remote: String, received: TimeInterval)?
     private static func pathEndpoint(_ candidate: [String: Any]) -> String {
         MediaPath.address(candidate) + ":" + ((candidate["port"] as? NSNumber)?.stringValue ?? "")
@@ -495,7 +607,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60, auditDirect: Bool = false, auditSessionID: String? = nil) {
         self.bitrate = bitrate; self.fps = fps; self.internet = internet; sending = source != nil
         connectionOrigin = internet ? .appPublicIP : .appLocalIP
-        directAudit = auditDirect ? DirectConnectionAudit(sessionID: auditSessionID, sending: source != nil) : nil
+        directAudit = auditDirect ? DirectConnectionAudit(sessionID: auditSessionID, sending: source != nil, route: internet ? "internet_ip" : "local_ip") : nil
         super.init()
         captureSource = source
         let config = RTCConfiguration()
@@ -549,20 +661,22 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     }
     private func armTimeout() {
         guard timeout == nil else { return }
-        let work = DispatchWorkItem { [weak self] in self?.fail("视频协商超时，请更新两端并检查网络可达性") }
+        let work = DispatchWorkItem { [weak self] in self?.directFailure() }
         timeout = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 35, execute: work)
     }
-    func quality(bitrate: Int, fps: Int) { self.bitrate = bitrate; self.fps = fps; applyQuality() }
+    func quality(bitrate: Int, fps: Int) { self.bitrate = relayEnabled ? min(bitrate,3_000_000) : bitrate; self.fps = relayEnabled ? min(fps,30) : fps; applyQuality() }
     private func applyQuality() {
         guard let peer, let sender else { return }
         budget.clamp(upper: bitrate)
-        let encoderLimit = internet ? budget.limit : bitrate
+        let encoderLimit = relayEnabled ? min(bitrate, 3_000_000) : (internet ? budget.limit : bitrate)
         let params = sender.parameters
+        if relayEnabled { appliedRelayScale = captureSource?.relayScale ?? 1 }
         params.degradationPreference = NSNumber(value: RTCDegradationPreference.maintainResolution.rawValue)
         for encoding in params.encodings {
+            if relayEnabled { encoding.scaleResolutionDownBy = NSNumber(value:appliedRelayScale) }
             encoding.maxBitrateBps = NSNumber(value: encoderLimit)
-            encoding.maxFramerate = NSNumber(value: fps)
+            encoding.maxFramerate = NSNumber(value: relayEnabled ? min(fps,30) : fps)
         }
         sender.parameters = params
         _ = peer.setBweMinBitrateBps(nil, currentBitrateBps: nil, maxBitrateBps: NSNumber(value: bitrate))
@@ -606,6 +720,14 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     func receive(_ object: [String: Any]) {
         guard !closed else { return }
         switch object["type"] as? String {
+        case "relay_failed":
+            guard !connected, !relayEnabled else { return }
+            remoteDirectFailed = true
+            requestRelayIfNeeded()
+        case "relay_config": if !sending { enableRelay(object) }
+        case "relay_ready":
+            if sending, let configuration = pendingRelayConfiguration { enableRelay(configuration) }
+        case "relay_denied": if !connected { fail("直连失败，投屏者无法使用SVIP中转") }
         case "offer", "answer":
             armTimeout()
             guard let sdp = object["sdp"] as? String, sdp.utf8.count <= 12288,
@@ -634,8 +756,9 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             }
         case "candidate":
             guard let sdp = object["candidate"] as? String, sdp.utf8.count <= 2048,
-                  !sdp.contains(" typ relay"), let line = object["line"] as? Int32 else { return }
+                  (relayEnabled || pendingRelayConfiguration != nil || !sdp.contains(" typ relay")), let line = object["line"] as? Int32 else { return }
             if internet { PerformanceDisk.shared.write("native.iceCandidate id=\(id) remote \(Self.candidateSummary(sdp))") }
+            if relayEnabled && !sdp.contains(" typ relay") { return }
             let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: line, sdpMid: object["mid"] as? String)
             // All paths enter ICE immediately; do not bias the race by delaying Wi-Fi.
             if remoteSet { peer?.add(candidate, completionHandler: { _ in }) }
@@ -807,6 +930,11 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 PerformanceDisk.shared.write("native.stats id=\(self.id) \(stat.type) \(values)")
             }
         }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.relayEnabled, !self.closed,
+                  self.appliedRelayScale != (self.captureSource?.relayScale ?? 1) else { return }
+            self.applyQuality()
+        }
         let work = DispatchWorkItem { [weak self] in self?.stats() }; statsWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
     }
@@ -846,7 +974,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 }
                 PerformanceDisk.shared.write("native.connected media=SRTP codec=H264 videoDataChannel=false diagnosticsChannel=true")
             }
-            if newState == .failed { self.fail("视频直连失败，当前网络可能无法穿透；未使用视频中继") }
+            if newState == .failed { self.directFailure() }
             if newState == .disconnected, self.disconnectedWork == nil {
                 let work = DispatchWorkItem { [weak self] in self?.fail("网络连接中断") }
                 self.disconnectedWork = work
@@ -866,7 +994,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         if internet { PerformanceDisk.shared.write("native.iceGather id=\(id) state=\(newState.rawValue)") }
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
-        guard !candidate.sdp.contains(" typ relay") else { return }
+        guard relayEnabled || !candidate.sdp.contains(" typ relay") else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.closed else { return }
             if self.internet { PerformanceDisk.shared.write("native.iceCandidate id=\(self.id) local \(Self.candidateSummary(candidate.sdp))") }
@@ -951,8 +1079,19 @@ final class NativeVideoHost: @unchecked Sendable {
     init(code: String, password: String, makePeer: @escaping () -> NativeVideoPeer) {
         self.code = code; self.password = password; self.makePeer = makePeer
     }
+    private var starting = false
     func start() {
-        guard !stopped, socket == nil, AdmissionCredentials.validPassword(password) else { return }
+        guard !stopped, socket == nil, !starting, AdmissionCredentials.validPassword(password) else { return }
+        starting = true
+        Task { @MainActor [weak self] in
+            let token = await CastAccount.validAccessToken()
+            guard let self else { return }; self.starting = false
+            guard !self.stopped, self.socket == nil else { return }
+            guard !token.isEmpty else { self.onError?("投屏必须登录，请在设置中重新登录"); return }
+            self.register(token:token)
+        }
+    }
+    private func register(token:String) {
         bytes = 0
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 610; configuration.urlCache = nil
@@ -960,7 +1099,7 @@ final class NativeVideoHost: @unchecked Sendable {
         let socket = session.webSocketTask(with: InternetSettings.signalingURL); self.socket = socket
         socket.maximumMessageSize = 16384; socket.resume()
         send(["role":"sender", "protocol":2, "room":InternetSettings.room(code),
-              "verifier":AdmissionCredentials.verifier(password: password, invitation: code), "device":DeviceAuditMetadata.value, "access_token":CastAccount.accessToken])
+              "verifier":AdmissionCredentials.verifier(password: password, invitation: code), "device":DeviceAuditMetadata.value, "access_token":token])
         read(socket)
     }
     func respond(_ id: String, accept: Bool) {
@@ -1024,7 +1163,11 @@ final class NativeVideoHost: @unchecked Sendable {
                         self.pending.remove(id)
                         let peer = self.makePeer(); self.peers[id] = peer
                         self.audits[id] = DirectConnectionAudit(sessionID: id, sending: true, route: "internet_code")
-                        peer.sendSignal = { [weak self] packet in var object = packet; object["id"] = id; self?.send(object) }
+                        peer.sendSignal = { [weak self] packet in
+                            var object = packet; object["id"] = id
+                            if packet["type"] as? String == "relay_config" { object["access_token"] = CastAccount.accessToken }
+                            self?.send(object)
+                        }
                         peer.onConnected = { [weak self, weak peer] in
                             guard let self, let peer, self.peers[id] === peer else { return }
                             self.connected.insert(id); self.audits[id]?.record("connected")

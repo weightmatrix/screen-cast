@@ -13,6 +13,10 @@ struct MacCasterApp: App {
     init() {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of:"--verify-relay-fallback"), index + 1 < arguments.count {
+            let url = URL(fileURLWithPath:arguments[index+1])
+            Task { @MainActor in await NativeVideoPeer.verifyRelayFallback(configurationURL:url) }
+        }
         if arguments.contains("--verify-native-scenario"), let index = arguments.firstIndex(of: "--scenario-control"), index + 1 < arguments.count {
             let url = URL(fileURLWithPath: arguments[index + 1])
             Task { @MainActor in await NativeBenchmark.run(controlURL: url) }
@@ -35,6 +39,7 @@ struct MacCasterApp: App {
                 .environmentObject(streamer)
                 .overlay { if activeMode == "receive" { RoomChatOverlay() } }
                 .task {
+                    await CastAccount.shared.restore()
                     _ = BaiduDrive.shared
                     #if DEBUG
                     if ProcessInfo.processInfo.arguments.contains("--verify-native-motion") { await NativeRoutesVerification.motion() }

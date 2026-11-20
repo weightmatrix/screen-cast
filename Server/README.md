@@ -1,3 +1,11 @@
+## 104版当前部署：投屏账号核验、局域审计及SVIP中转
+
+常规连接仍直传；只对双方直连失败的单个接收对象开放SVIP TURN回退，已连通对象不切换。临时凭证由独立账号服务核验等级后颁发，观看无需账号；账号API已从排课后端叠加镜像改为独立touping-accounts服务，继续复用排课身份和数据库，避免排课发布覆盖投屏API。局域网投屏也需在线验证账号，有限审计含核验账号/手机号，令牌不落日志。
+
+腾讯云实际套餐5Mbps/500GB月，中转视频最高3Mbps/30fps/1080p边界，实际路径显示“服务器中转”。coturn通过原生WebRTC H.264/Opus转发端到端加密流量；不增加DataChannel音视频隧道。所有投屏程序/配置/密钥/回滚材料在/srv/apps/touping内，只有共享Nginx窄入口引用独立服务；Docker隔离运行目录照旧。部署/回滚与端口见ops/README.md。历史章节的“无TURN/局域网不上报”描述已由本段及用户2026-11-20授权例外替代。
+
+coturn使用官方镜像固定digest，遵循其[BSD许可证](https://github.com/coturn/coturn/blob/master/LICENSE)。真实公网TURN数据及原生合成H.264回退通过，真机跨网/网页/长课尚待验收。
+
 ## 92版默认昵称与网页来源
 
 网页本地保留默认访客昵称，申请/hello采用一致昵称；hello在既有P2P文字通道增加publicWeb/localWeb来源白名单字段，无服务器聊天/媒体中继变化。ops/deploy_receiver92.py发布四份静态资源，回滚backups/before92-web-publish，无服务重启；来源仅客户端自报，实际媒体路径仍以ICE统计为准。
