@@ -16,6 +16,7 @@ struct RoomPreferences: View {
     @AppStorage("room.chatCorner") private var corner = ChatCorner.bottomLeft.rawValue
     @AppStorage("room.chatOpacity") private var opacity = 0.9
     var body: some View {
+        CastAccountSettings()
         Section("接入设置") {
             Toggle("允许自动连接", isOn: $autoAllow)
                 .onAppear { syncAutoAllow() }
@@ -249,3 +250,35 @@ struct SystemAudioRoutePicker: UIViewRepresentable {
     func updateUIView(_ view: AVRoutePickerView, context: Context) {}
 }
 #endif
+
+struct CastAccountSettings: View {
+    @ObservedObject private var account = CastAccount.shared
+    @State private var phone = ""
+    @State private var password = ""
+    @State private var role = ""
+    @State private var otp = ""
+    var body: some View {
+        Section("投屏账号 · 与排课共用") {
+            if account.loggedIn {
+                Text("用户等级：" + account.membership)
+                TextField("昵称", text: $account.nickname)
+                TextField("匹配码（6至36位数字）", text: $account.matchingCode)
+                Button("保存用户信息") { Task { await account.update() } }.disabled(account.busy)
+                Button("退出登录") { account.logout() }.disabled(account.busy)
+            } else {
+                TextField("手机号", text: $phone)
+                SecureField("排课账号密码", text: $password)
+                if !account.roles.isEmpty {
+                    Picker("账号身份", selection: $role) {
+                        Text("请选择").tag("")
+                        ForEach(account.roles, id: \.self) { Text($0).tag($0) }
+                    }
+                }
+                SecureField("管理账号动态口令（如需）", text: $otp)
+                Button("登录") { Task { await account.login(phone:phone, password:password, role:role, otp:otp); if account.loggedIn { password = ""; otp = "" } } }.disabled(account.busy)
+                Link("注册或管理排课账号", destination: URL(string:"https://zhibenwang.com/app/")!)
+            }
+            if !account.message.isEmpty { Text(account.message).font(.caption).foregroundStyle(.secondary) }
+        }.task { await account.restore() }
+    }
+}

@@ -364,7 +364,7 @@ struct AddStreamSheet: View {
         self._isPresented = isPresented
         self._bitrate = State(initialValue: streamer.defaultBitrate)
         self._fps = State(initialValue: streamer.defaultFPS)
-        self._code = State(initialValue: streamer.lastCode)
+        self._code = State(initialValue: CastAccount.shared.loggedIn && !CastAccount.shared.matchingCode.isEmpty ? CastAccount.shared.matchingCode : streamer.lastCode)
     }
 
     var body: some View {

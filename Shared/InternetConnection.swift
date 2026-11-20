@@ -208,3 +208,94 @@ enum InternetSettings {
         return NWParameters(tls: tls, tcp: tcp)
     }
 }
+
+/// Uses the scheduling service's JWTs; credentials stay in the platform Keychain.
+final class CastAccount: ObservableObject {
+    static let shared = CastAccount()
+    @Published var loggedIn = false
+    @Published var nickname = ""
+    @Published var matchingCode = ""
+    @Published var membership = ""
+    @Published var message = ""
+    @Published var busy = false
+    @Published var roles: [String] = []
+    private let base = URL(string: "https://zhibenwang.com/api/")!
+    private var query: [String: Any] { [kSecClass as String:kSecClassGenericPassword, kSecAttrService as String:"Han.touping.account", kSecAttrAccount as String:"jwt"] }
+    private func tokens() -> [String: String] {
+        var q = query; q[kSecReturnData as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &value) == errSecSuccess, let data = value as? Data,
+              let result = try? JSONDecoder().decode([String:String].self, from: data) else { return [:] }
+        return result
+    }
+    private func saveTokens(_ values: [String: String]) throws {
+        let data = try JSONEncoder().encode(values)
+        let status = SecItemUpdate(query as CFDictionary, [kSecValueData as String:data] as CFDictionary)
+        if status == errSecItemNotFound {
+            var q = query; q[kSecValueData as String] = data; q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            guard SecItemAdd(q as CFDictionary, nil) == errSecSuccess else { throw URLError(.cannotWriteToFile) }
+        } else if status != errSecSuccess { throw URLError(.cannotWriteToFile) }
+    }
+    private func request(_ path: String, method: String = "GET", body: [String:String]? = nil, authenticated: Bool = true) async throws -> (Int, [String:Any]) {
+        var request = URLRequest(url: base.appendingPathComponent(path)); request.httpMethod = method; request.timeoutInterval = 20
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if authenticated { request.setValue("Bearer " + (tokens()["access"] ?? ""), forHTTPHeaderField: "Authorization") }
+        if let body { request.httpBody = try JSONSerialization.data(withJSONObject: body) }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard data.count <= 65536, let response = response as? HTTPURLResponse,
+              let object = try JSONSerialization.jsonObject(with: data) as? [String:Any] else { throw URLError(.badServerResponse) }
+        return (response.statusCode, object)
+    }
+    @MainActor func login(phone: String, password: String, role: String, otp: String) async {
+        guard !busy else { return }; busy = true; defer { busy = false }
+        do {
+            let (status, object) = try await request("token/", method: "POST", body: ["phone":phone, "password":password, "role":role, "otp":otp], authenticated: false)
+            if status == 409, let accounts = object["accounts"] as? [[String:Any]] {
+                roles = accounts.compactMap { $0["role"] as? String }; message = "请选择账号身份后重新登录"; return
+            }
+            guard status == 200, let access = object["access"] as? String, let refresh = object["refresh"] as? String else {
+                message = object["detail"] as? String ?? (status == 428 ? "请输入管理账号动态口令" : "登录失败"); return
+            }
+            try saveTokens(["access":access, "refresh":refresh]); try await loadProfile(); message = "已登录"
+        } catch { message = "登录失败，请检查网络或稍后重试" }
+    }
+    @MainActor private func loadProfile() async throws {
+        var result = try await request("touping/profile/")
+        if result.0 == 401, let refresh = tokens()["refresh"] {
+            let renewed = try await request("token/refresh/", method: "POST", body: ["refresh":refresh], authenticated: false)
+            if renewed.0 == 200, let access = renewed.1["access"] as? String {
+                try saveTokens(["access":access,"refresh":renewed.1["refresh"] as? String ?? refresh])
+                result = try await request("touping/profile/")
+            }
+        }
+        guard result.0 == 200 else { throw URLError(.userAuthenticationRequired) }
+        apply(result.1)
+    }
+    @MainActor private func apply(_ object: [String:Any]) {
+        loggedIn = true; nickname = object["nickname"] as? String ?? ""; matchingCode = object["matching_code"] as? String ?? ""; membership = object["membership"] as? String ?? ""
+        if !nickname.isEmpty {
+            UserDefaults.standard.set(nickname, forKey:"room.nickname"); RoomSession.shared.refreshNickname()
+        }
+        if !matchingCode.isEmpty {
+            UserDefaults.standard.set(matchingCode, forKey:"lastCode")
+            #if os(iOS)
+            BroadcastSettings.store.set(matchingCode, forKey:"broadcastCode")
+            #endif
+        }
+    }
+    @MainActor func restore() async {
+        guard !tokens().isEmpty, !busy else { return }; busy = true; defer { busy = false }
+        do { try await loadProfile() } catch { message = "登录已过期或账号服务暂不可用，请重新登录" }
+    }
+    @MainActor func update() async {
+        guard !busy else { return }; busy = true; defer { busy = false }
+        do {
+            let (status, object) = try await request("touping/profile/", method:"PATCH", body:["nickname":nickname,"matching_code":matchingCode])
+            guard status == 200 else { message = object["error"] as? String ?? "保存失败，请重新登录后重试"; return }
+            apply(object); message = "已保存；新的投屏任务使用绑定码，已有任务保持原码"
+        } catch { message = "保存失败，请稍后重试" }
+    }
+    @MainActor func logout() {
+        SecItemDelete(query as CFDictionary); loggedIn = false; nickname = ""; matchingCode = ""; membership = ""; message = "已退出"; roles = []
+    }
+}

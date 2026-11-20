@@ -1,0 +1,4 @@
+ARG BASE_IMAGE=paike-backend:portal-v2-20261111
+FROM ${BASE_IMAGE}
+COPY touping_accounts /app/touping_accounts
+RUN python -c "from pathlib import Path; p=Path('/app/config/settings.py'); p.write_text(p.read_text()+'\nINSTALLED_APPS += [\"touping_accounts\"]\n'); p=Path('/app/config/urls.py'); p.write_text(p.read_text()+'\nurlpatterns += [path(\"api/touping/\", include(\"touping_accounts.urls\"))]\n')"
