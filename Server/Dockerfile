@@ -3,6 +3,7 @@ FROM ${RUNTIME_IMAGE}
 WORKDIR /app
 COPY signaling.py /app/signaling.py
 COPY audit.py /app/audit.py
+COPY account_identity.py /app/account_identity.py
 COPY baidu_oauth.py /app/baidu_oauth.py
 COPY Web /app/Web
 USER 65534:65534

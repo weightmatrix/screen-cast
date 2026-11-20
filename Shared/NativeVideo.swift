@@ -960,7 +960,7 @@ final class NativeVideoHost: @unchecked Sendable {
         let socket = session.webSocketTask(with: InternetSettings.signalingURL); self.socket = socket
         socket.maximumMessageSize = 16384; socket.resume()
         send(["role":"sender", "protocol":2, "room":InternetSettings.room(code),
-              "verifier":AdmissionCredentials.verifier(password: password, invitation: code), "device":DeviceAuditMetadata.value])
+              "verifier":AdmissionCredentials.verifier(password: password, invitation: code), "device":DeviceAuditMetadata.value, "access_token":CastAccount.accessToken])
         read(socket)
     }
     func respond(_ id: String, accept: Bool) {

@@ -82,7 +82,7 @@ struct PendingConnectionsView: View {
 struct ConnectionPrivacyNotice: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("公网服务依法留存必要连接日志，包括来源IP、随机应用标识、审批与连接状态；客户端报告的连接时长不代表服务器核验。画面与声音不上传。详情及权利申请方式见隐私政策。")
+            Text("公网服务依法留存必要连接日志，包括投屏者账号与手机号、来源IP、随机应用标识、审批与连接状态；观看无需账号，投屏须登录。客户端报告的连接时长不代表服务器核验。画面与声音不上传。详情及权利申请方式见隐私政策。")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
                 Link("隐私政策", destination: AppPresentation.privacyURL)

@@ -3,6 +3,7 @@ import asyncio, base64, collections, hashlib, hmac, ipaddress, json, os, re, sec
 from pathlib import Path
 from audit import AuditLog, AuditUnavailable
 import baidu_oauth
+from account_identity import sender_identity
 MAX_FRAME = 16384
 MAX_TOTAL = 65536
 ROOMS = {}
@@ -121,10 +122,13 @@ async def exchange(ws):
     role, key = hello.get('role'), hello.get('room')
     if (role == 'audit') != ws.audit_only: raise Rejected()
     if role == 'audit':
-        if set(hello) - {'role', 'route', 'session_id', 'peer_role', 'event', 'device', 'duration_ms'}: raise Rejected()
+        if set(hello) - {'role', 'route', 'session_id', 'peer_role', 'event', 'device', 'duration_ms', 'access_token'}: raise Rejected()
         if hello.get('route') not in ('internet_ip', 'internet_code') or hello['peer_role'] not in ('sender', 'receiver') or hello['event'] not in ('attempt', 'approved', 'rejected', 'connected', 'ended'): raise Rejected()
         if not isinstance(hello['session_id'], str) or not re.fullmatch('[a-f0-9]{32}', hello['session_id']): raise Rejected()
         if hello['event'] in ('approved', 'rejected') and (hello['route'] != 'internet_ip' or hello['peer_role'] != 'sender'): raise Rejected()
+        if hello['peer_role'] == 'sender':
+            try: ws.context['sender_account'] = await sender_identity(hello.get('access_token'))
+            except Exception: raise Rejected()
         duration = hello.get('duration_ms')
         if duration is not None and (hello['event'] != 'ended' or type(duration) is not int or not 0 <= duration <= 31 * 86400000): raise Rejected()
         device = device_metadata(hello['device'])
@@ -149,6 +153,11 @@ async def exchange(ws):
         await ws.send({'type': 'error', 'message': '暂时无法生成建议码，请稍后重试'})
         return
     if role not in ('sender', 'receiver') or not isinstance(key, str) or not re.fullmatch('[a-f0-9]{64}', key): raise Rejected()
+    if role == 'sender':
+        try: ws.context['sender_account'] = await sender_identity(hello.get('access_token'))
+        except Exception:
+            await ws.send({'type':'error','message':'投屏必须登录，请在设置中登录后重试'})
+            return
     ws.context['role'] = role
     device = device_metadata(hello.get('device'))
     audit('device_reported', **ws.context, device=device, evidence='client_report_only',
@@ -219,6 +228,7 @@ async def exchange(ws):
                     state['ws'].writer.close()
                     continue
                 state['approved'] = True
+                state['ws'].context['sender_account'] = room['sender'].context.get('sender_account')
                 if state['timeout']: state['timeout'].cancel()
                 await ws.send({'type':'approved','id':pair_id})
                 await state['ws'].send({'type':'approved','session_id':pair_id})
@@ -234,7 +244,7 @@ async def exchange(ws):
                 if role not in state['done']: audit('peer_reported_connected', **{**ws.context,'pair_id':pair_id}, evidence='client_report_only')
                 state['done'].add(role)
                 if len(state['done']) == 2:
-                    audit('pairing_completed', pair_id=pair_id, evidence='both_clients_reported', media_end_observed=False)
+                    audit('pairing_completed', pair_id=pair_id, sender_account=room['sender'].context.get('sender_account'), evidence='both_clients_reported', media_end_observed=False)
                     state['finished'] = True
                     await state['ws'].frame(8, struct.pack('!H', 1000))
                     state['ws'].writer.close()

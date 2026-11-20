@@ -287,6 +287,7 @@ final class CastingServer: ObservableObject {
     deinit { if let autoAllowObserver { NotificationCenter.default.removeObserver(autoAllowObserver) } }
 
     func start() {
+        guard !CastAccount.accessToken.isEmpty else { lastError = "投屏必须登录，请在设置中登录"; return }
         bindRetryWorkItem?.cancel()
         bindRetryWorkItem = nil
         guard listener == nil else { return }

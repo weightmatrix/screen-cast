@@ -30,6 +30,10 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
     verifier = hashlib.sha256(b'touping-auth-v2:61328407:Fixture-only-71').hexdigest()
 
     async def asyncSetUp(self):
+        self.identity_mock = mock.AsyncMock(return_value={'account_id':'fixture-user','phone':'13000000000'})
+        self.identity_patch = mock.patch.object(service, 'sender_identity', self.identity_mock)
+        self.identity_patch.start()
+        self.addCleanup(self.identity_patch.stop)
         self.audit_dir = tempfile.TemporaryDirectory()
         self.audit_path = os.path.join(self.audit_dir.name, 'connections.jsonl')
         service.AUDIT = AuditLog(self.audit_path)
@@ -37,6 +41,24 @@ class PairingTests(unittest.IsolatedAsyncioTestCase):
         self.server = await asyncio.start_server(service.connection,'127.0.0.1',0,limit=8192)
         self.port = self.server.sockets[0].getsockname()[1]
         self.clients=[]
+
+    async def test_sender_requires_verified_account(self):
+        self.identity_mock.side_effect = ValueError('invalid login')
+        client = await self.client('sender')
+        _, packet = await client.receive()
+        self.assertEqual(packet['type'], 'error')
+        self.assertIn('登录', packet['message'])
+        self.assertEqual(service.ROOMS, {})
+
+    async def test_audit_uses_verified_sender_identity(self):
+        client = await self.client('sender', access_token='fixture-token', phone='19999999999')
+        await client.receive()
+        with open(self.audit_path) as handle:
+            records = [json.loads(line) for line in handle]
+        waiting = next(record for record in records if record['event'] == 'sender_waiting')
+        self.assertEqual(waiting['sender_account'], {'account_id':'fixture-user','phone':'13000000000'})
+        self.assertNotIn('fixture-token', json.dumps(records))
+        self.assertNotIn('19999999999', json.dumps(records))
 
     async def asyncTearDown(self):
         for client in reversed(self.clients): await client.close()

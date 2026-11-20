@@ -132,6 +132,7 @@ final class ScreenStreamer: NSObject, ObservableObject {
     }
 
     func addSession(filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "", touchEnabled: Bool = false, pageAudio: Bool = UserDefaults.standard.object(forKey: "sender.pageAudio") as? Bool ?? true, microphone: Bool = UserDefaults.standard.object(forKey: "sender.microphone") as? Bool ?? true, internet: Bool = true, internetMatching: Bool = true) {
+        guard !CastAccount.accessToken.isEmpty else { contentError = "投屏必须登录，请在设置中登录"; return }
         let port = nextAvailablePort()
         let finalCode = uniqueCode(for: code)
         if #available(macOS 15.2, *) {

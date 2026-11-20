@@ -84,6 +84,7 @@ final class DirectConnectionAudit {
         if event == "connected" { connectedAt = ProcessInfo.processInfo.systemUptime }
         var packet: [String: Any] = ["role": "audit", "route": route, "session_id": sessionID,
                                     "peer_role": role, "event": event, "device": DeviceAuditMetadata.value]
+        if role == "sender" { packet["access_token"] = CastAccount.accessToken }
         if event == "ended", let connectedAt { packet["duration_ms"] = Int((ProcessInfo.processInfo.systemUptime - connectedAt) * 1000) }
         let report = packet
         Task {
@@ -219,6 +220,23 @@ final class CastAccount: ObservableObject {
     @Published var message = ""
     @Published var busy = false
     @Published var roles: [String] = []
+    static var accessToken: String {
+        let token: String
+        #if os(iOS)
+        if Bundle.main.bundleURL.pathExtension == "appex" { token = BroadcastSettings.store.string(forKey: "account.access") ?? "" }
+        else { token = shared.tokens()["access"] ?? "" }
+        #else
+        token = shared.tokens()["access"] ?? ""
+        #endif
+        // This only detects expiry locally. The server verifies JWT signatures and account status.
+        let parts = token.split(separator: ".")
+        guard parts.count == 3 else { return "" }
+        var encoded = String(parts[1]).replacingOccurrences(of:"-", with:"+").replacingOccurrences(of:"_", with:"/")
+        encoded += String(repeating:"=", count:(4 - encoded.count % 4) % 4)
+        guard let data = Data(base64Encoded:encoded), let object = try? JSONSerialization.jsonObject(with:data) as? [String:Any],
+              let expires = object["exp"] as? Double, expires > Date().timeIntervalSince1970 else { return "" }
+        return token
+    }
     private let base = URL(string: "https://zhibenwang.com/api/")!
     private var query: [String: Any] { [kSecClass as String:kSecClassGenericPassword, kSecAttrService as String:"Han.touping.account", kSecAttrAccount as String:"jwt"] }
     private func tokens() -> [String: String] {
@@ -235,6 +253,9 @@ final class CastAccount: ObservableObject {
             var q = query; q[kSecValueData as String] = data; q[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
             guard SecItemAdd(q as CFDictionary, nil) == errSecSuccess else { throw URLError(.cannotWriteToFile) }
         } else if status != errSecSuccess { throw URLError(.cannotWriteToFile) }
+        #if os(iOS)
+        BroadcastSettings.store.set(values["access"] ?? "", forKey:"account.access")
+        #endif
     }
     private func request(_ path: String, method: String = "GET", body: [String:String]? = nil, authenticated: Bool = true) async throws -> (Int, [String:Any]) {
         var request = URLRequest(url: base.appendingPathComponent(path)); request.httpMethod = method; request.timeoutInterval = 20
@@ -296,6 +317,9 @@ final class CastAccount: ObservableObject {
         } catch { message = "保存失败，请稍后重试" }
     }
     @MainActor func logout() {
+        #if os(iOS)
+        BroadcastSettings.store.set("", forKey:"account.access")
+        #endif
         SecItemDelete(query as CFDictionary); loggedIn = false; nickname = ""; matchingCode = ""; membership = ""; message = "已退出"; roles = []
     }
 }

@@ -18,6 +18,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
     }
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+        guard !CastAccount.accessToken.isEmpty else { fail("投屏必须登录，请先在投屏App设置中登录"); return }
         let token = UUID()
         lifecycleLock.lock(); lifecycle = token; lifecycleLock.unlock()
         PerformanceDisk.shared.write("broadcast.lifecycle started token=\(token) version=\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "unknown") build=\(Bundle.main.infoDictionary?["CFBundleVersion"] ?? "unknown")")
