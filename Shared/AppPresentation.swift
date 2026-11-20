@@ -106,6 +106,26 @@ struct ReceiveTimingView: View {
     }
 }
 
+struct SenderPeerStatus: View {
+    let peer: PeerDiagnostic
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(peer.localEndpoint == "—" ? peer.route : "媒体已连通")
+            HStack(spacing: 12) {
+                indicator("对方话筒回传", icon: "mic.fill", active: peer.inboundAudio)
+                indicator("发往对方喇叭", icon: "speaker.wave.2.fill", active: peer.outboundAudio)
+            }
+        }.font(.caption).foregroundStyle(.secondary)
+    }
+
+    private func indicator(_ label: String, icon: String, active: Bool?) -> some View {
+        Label(label, systemImage: icon)
+            .foregroundStyle(active == true ? Color.green : Color.secondary)
+            .help(active == true ? "检测到音频数据" : "暂未检测到音频数据")
+    }
+}
+
 struct PeerDiagnosticsView: View {
     @ObservedObject private var room = RoomSession.shared
     let peers: [PeerDiagnostic]
@@ -119,6 +139,7 @@ struct PeerDiagnosticsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(room.peerNicknames[peer.id] ?? peer.nickname ?? "访客·" + peer.id.prefix(4).uppercased())
                         ConnectionEntryView(peer: peer)
+                        SenderPeerStatus(peer: peer)
                         ConnectionPathView(info: peer)
                         Text("网络 RTT \(ReceiveTiming.text(peer.rttMS))")
                     }.font(.system(size: 14, design: .monospaced))

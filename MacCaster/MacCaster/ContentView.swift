@@ -94,11 +94,6 @@ private struct StreamListView: View {
     }
 }
 
-private struct CodeEditorFrameKey: PreferenceKey {
-    static var defaultValue = CGRect.zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) { value = nextValue() }
-}
-
 private struct BrowserSenderAddresses: View {
     @ObservedObject var server: CastingServer
     let code: String
@@ -139,13 +134,6 @@ private struct SessionRow: View {
     @ObservedObject var streamer: ScreenStreamer
     let onStop: () -> Void
     let onEdit: () -> Void
-    @State private var editingCode = false
-    @State private var codeDraft = ""
-    @State private var codeError = false
-    @FocusState private var codeFocused: Bool
-    @State private var codeEditorFrame = CGRect.zero
-    @StateObject private var codeSuggestion = MatchingCodeSuggestion()
-    @State private var localCodeSuggestion: String?
     @State private var showSettings = false
     @State private var showConnections = false
 
@@ -195,59 +183,16 @@ private struct SessionRow: View {
                 }
             }
             if session.internetEnabled && session.internetCodeConflict {
-                Text(session.internetStatus).font(.system(size: 14))
-                    .foregroundStyle(session.internetCodeConflict ? Color.red : Color.secondary)
-                if session.internetCodeConflict {
-                    Text("另一台发送设备正在使用这个邀请编号。请停止那台设备的广播，或为本机换码后让接收端输入新码。")
-                        .font(.system(size: 14)).foregroundStyle(.red)
-                    if codeSuggestion.isLoading {
-                        ProgressView("正在查找未占用的新码…")
-                    } else if let candidate = codeSuggestion.code {
-                        Text("建议新码：\(candidate)").font(.system(size: 20, design: .monospaced)).textSelection(.enabled)
-                        HStack {
-                            Button("采用建议码并重试") { codeDraft = candidate; commitCode() }
-                            Button("换一个建议") { requestSuggestion(force: true) }
-                        }
-                        Text("服务器检查时未被占用；采用后请让接收端输入新码。")
-                            .font(.system(size: 13)).foregroundStyle(.secondary)
-                    } else {
-                        Text(codeSuggestion.errorText ?? "正在准备建议码").font(.system(size: 14)).foregroundStyle(.secondary)
-                        Button("重新获取建议码") { requestSuggestion(force: true) }
-                    }
-                }
+                Text("邀请编号已占用。请停止另一台投屏设备，或在设置更改匹配码后重新投屏。")
+                    .font(.caption).foregroundStyle(.red)
             }
             HStack(alignment: .top, spacing: 20) {
                 VStack(alignment: .leading, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("邀请编号 · 邀请设备连接").font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
-                        if editingCode {
-                            HStack {
-                                TextField("6–36 位数字", text: $codeDraft).textFieldStyle(.roundedBorder)
-                                    .font(.system(size: 24, design: .monospaced)).frame(width: 230)
-                                    .onChange(of: codeDraft) { _, newValue in
-                                        codeError = !streamer.canChangeCode(session, to: codeDraft) && codeDraft != session.code
-                                    }.focused($codeFocused)
-                                    .background(GeometryReader { proxy in
-                                        Color.clear.preference(key: CodeEditorFrameKey.self, value: proxy.frame(in: .named("code-card")))
-                                    })
-                                    .onAppear { codeFocused = true }
-                                    .onSubmit { commitCode() }
-                                    .onExitCommand { editingCode = false; codeError = false }
-                            }
-                        } else {
-                            Button { codeDraft = session.code; editingCode = true } label: {
-                                Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
-                                    .lineLimit(1).minimumScaleFactor(0.35)
-                                    .tracking(3).foregroundStyle(.primary)
-                            }.buttonStyle(AppGlassButtonStyle()).help("修改邀请编号")
-                        }
-                        if codeError {
-                            Text("邀请编号已占用或格式有误").font(.system(size: 13)).foregroundStyle(.red)
-                            if let candidate = localCodeSuggestion {
-                                Button("采用本机未使用的新码 \(candidate)") { codeDraft = candidate; commitCode() }
-                                    .font(.system(size: 13))
-                            }
-                        }
+                        Text(session.code).font(.system(size: 36, weight: .medium, design: .rounded))
+                            .lineLimit(1).minimumScaleFactor(0.35).tracking(3).textSelection(.enabled)
+                        Text(session.senderNickname).foregroundStyle(.secondary).textSelection(.enabled)
                     }
                     Text(AdmissionCredentials.validPassword(streamer.connectionPassword) ? "邀请链接不含密码；请另行告知接收者连接密码" : "请先在设置中设置连接密码")
                         .font(.caption).foregroundStyle(.secondary)
@@ -275,17 +220,6 @@ private struct SessionRow: View {
             }
         }
         .onReceive(session.server.$pendingConnections) { if !$0.isEmpty { showConnections = true } }
-        .onChange(of: codeFocused) { _, focused in if !focused && editingCode { commitCode() } }
-        .onChange(of: codeError) { _, invalid in localCodeSuggestion = invalid ? streamer.suggestedLocalCode() : nil }
-        .onChange(of: session.internetCodeConflict) { _, conflict in if conflict { requestSuggestion() } }
-        .onChange(of: session.code) { _, _ in codeSuggestion.reset() }
-        .onAppear { if session.internetCodeConflict { requestSuggestion() } }
-        .onDisappear { codeSuggestion.reset() }
-        .onPreferenceChange(CodeEditorFrameKey.self) { codeEditorFrame = $0 }
-        .simultaneousGesture(SpatialTapGesture(coordinateSpace: .named("code-card")).onEnded { event in
-            if codeFocused && !codeEditorFrame.contains(event.location) { codeFocused = false }
-        })
-        .coordinateSpace(name: "code-card")
         .padding(.horizontal, 24).padding(.vertical, 16)
         .appPanelStyle()
         .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
@@ -321,24 +255,6 @@ private struct SessionRow: View {
         }.toggleStyle(OrnamentalToggleStyle())
     }
 
-    private func commitCode() {
-        guard MatchingCode.isValid(codeDraft) else { codeError = true; editingCode = false; return }
-        if streamer.canChangeCode(session, to: codeDraft) {
-            session.code = codeDraft
-            streamer.lastCode = codeDraft
-            codeError = false
-            editingCode = false
-            streamer.refreshBroadcast()
-        } else {
-            codeError = true
-            editingCode = false
-        }
-    }
-
-    private func requestSuggestion(force: Bool = false) {
-        codeSuggestion.request(for: session.code, excluding: streamer.sessions.map(\.code), force: force)
-    }
-
     private var statusDot: some View {
         Circle().fill(session.phase == .streaming ? (session.clientCount > 0 ? Color.green : Color.orange) : Color.red).frame(width: 7, height: 7)
     }
@@ -357,14 +273,13 @@ struct AddStreamSheet: View {
     @State private var bitrate: Int
     @State private var fps: Int
     @State private var showsCursor: Bool = true
-    @State private var code: String = ""
+    @ObservedObject private var account = CastAccount.shared
 
     init(streamer: ScreenStreamer, isPresented: Binding<Bool>) {
         self.streamer = streamer
         self._isPresented = isPresented
         self._bitrate = State(initialValue: streamer.defaultBitrate)
         self._fps = State(initialValue: streamer.defaultFPS)
-        self._code = State(initialValue: CastAccount.shared.loggedIn && !CastAccount.shared.matchingCode.isEmpty ? CastAccount.shared.matchingCode : streamer.lastCode)
     }
 
     var body: some View {
@@ -459,9 +374,9 @@ struct AddStreamSheet: View {
                     Spacer()
                     HStack(spacing: 4) {
                         Text("邀请编号").font(.system(size: 15))
-                        TextField("6–36 位数字", text: $code)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 230)
+                        Text(account.senderConfigured ? account.savedMatchingCode : "请在设置填写匹配码和昵称")
+                            .textSelection(.enabled)
+                        if account.senderConfigured { Text(account.savedNickname).foregroundStyle(.secondary) }
                     }
                 }
                 }.padding(.top, 8)
@@ -469,8 +384,12 @@ struct AddStreamSheet: View {
 
                 HStack {
                     Spacer()
+                    if (selectedApps.isEmpty ? 0 : 1) + selectedWindows.count + selectedDisplays.count > 1 {
+                        Text("一个匹配码对应一路投屏，请只选一个来源；多个应用可合并为一路。")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Button("开始投屏") {
-                        let useCode = code.isEmpty ? MatchingCode.generate() : code
+                        let useCode = account.savedMatchingCode
                         streamer.lastCode = useCode
                         streamer.defaultBitrate = bitrate
                         streamer.defaultFPS = fps
@@ -497,7 +416,8 @@ struct AddStreamSheet: View {
                         isPresented = false
                     }
                     .buttonStyle(AppGlassButtonStyle(prominent: true))
-                    .disabled(!code.isEmpty && !MatchingCode.isValid(code))
+                    .disabled(!account.senderConfigured || !streamer.sessions.isEmpty ||
+                              (selectedApps.isEmpty ? 0 : 1) + selectedWindows.count + selectedDisplays.count != 1)
                     Button("清除选择") {
                         selected.removeAll()
                         selectedApps.removeAll()
@@ -610,6 +530,7 @@ private struct EditStreamSheet: View {
                         applyChanges()
                     }
                     .buttonStyle(AppGlassButtonStyle(prominent: true))
+                    .disabled((selectedApps.isEmpty ? 0 : 1) + selectedWindows.count + selectedDisplays.count != 1)
                     Button("清除选择") {
                         selected.removeAll()
                         selectedApps.removeAll()
@@ -834,6 +755,7 @@ private struct SessionDiagnosticsView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(room.peerNicknames[peer.id] ?? peer.nickname ?? "访客·" + peer.id.prefix(4).uppercased()).font(.system(size: 18, weight: .semibold)).lineLimit(2)
                                     ConnectionEntryView(peer: peer)
+                                    SenderPeerStatus(peer: peer)
                                 }
                                 Spacer()
                                 Button("断开", role: .destructive) { server.disconnectPeer(peer.id) }

@@ -425,6 +425,8 @@ struct PeerDiagnostic: Codable, Identifiable {
     var rttMS: Double?
     var networkInterface: String? = nil
     var signals: String? = nil
+    var inboundAudio: Bool? = nil
+    var outboundAudio: Bool? = nil
     var source: String? = nil
     var nickname: String? = nil
     var connectionLabel: String { MediaPath.connectionLabel(route: route, interface: networkInterface ?? "") }

@@ -134,7 +134,13 @@ final class ScreenStreamer: NSObject, ObservableObject {
     func addSession(filter: SCContentFilter, name: String, bitrate: Int, fps: Int, showsCursor: Bool, screenOrigin: CGPoint = .zero, code: String = "", touchEnabled: Bool = false, pageAudio: Bool = UserDefaults.standard.object(forKey: "sender.pageAudio") as? Bool ?? true, microphone: Bool = UserDefaults.standard.object(forKey: "sender.microphone") as? Bool ?? true, internet: Bool = true, internetMatching: Bool = true) {
         guard CastAccount.hasSession else { contentError = "投屏必须登录，请在设置中登录"; return }
         let port = nextAvailablePort()
-        let finalCode = uniqueCode(for: code)
+        let account = CastAccount.shared
+        guard account.senderConfigured else { contentError = "请先在设置保存投屏匹配码和昵称"; return }
+        let finalCode = account.savedMatchingCode
+        guard sessions.isEmpty, finalCode != connectionPassword else {
+            contentError = "请先停止当前投屏，并确认匹配码与连接密码不同"
+            return
+        }
         if #available(macOS 15.2, *) {
             for app in filter.includedApplications { recordUsage(for: app) }
         }
@@ -264,6 +270,7 @@ final class StreamSession: NSObject, ObservableObject, Identifiable {
     private let recordingAudioConsumer = UUID()
     let port: UInt16
     @Published var contentName: String
+    let senderNickname = CastAccount.shared.savedNickname
     @Published var code: String {
         didSet {
             if oldValue != code, internetEnabled { internetStatus = "正在注册新匹配码…" }

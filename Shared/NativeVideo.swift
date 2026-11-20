@@ -432,6 +432,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var id: String { String(diagnosticID.prefix(8)) }
     private var remoteDevice = "接收设备"
     var onDiagnostic: ((PeerDiagnostic) -> Void)?
+    var senderNickname: String?
     var connectionOrigin: ConnectionOrigin = .appLocalIP
     private let sending: Bool
     private let internet: Bool
@@ -499,10 +500,16 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     #if DEBUG
     private var verificationRelayConfiguration: [String:Any]?
     #endif
+    private func reportConnectionProgress(_ status: String) {
+        onDiagnostic?(PeerDiagnostic(id: diagnosticID, device: remoteDevice, route: status,
+                                     localEndpoint: "—", remoteEndpoint: "—", rttMS: nil))
+    }
+
     private func directFailure() {
         guard !connected, !relayEnabled else { fail("媒体连接失败"); return }
         if !directFailed {
             directFailed = true
+            reportConnectionProgress("直连未成功，等待中转条件")
             sendSignal?(["type":"relay_failed"])
             timeout?.cancel(); timeout = nil
             let work = DispatchWorkItem { [weak self] in self?.fail("直连失败且中转未获授权或未就绪") }
@@ -513,6 +520,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private func requestRelayIfNeeded() {
         guard sending, directFailed, remoteDirectFailed, !relayRequested, !connected else { return }
         relayRequested = true
+        reportConnectionProgress("正在申请服务器中转")
         Task { @MainActor [weak self] in
             let configuration: [String:Any]?
             #if DEBUG
@@ -542,6 +550,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         guard peer.setConfiguration(config) else { fail("无法启用服务器中转"); return }
         relayEnabled = true; remoteSet = false; candidates = candidates.filter { $0.sdp.contains(" typ relay") }; timeout?.cancel(); timeout = nil
         bitrate = min(bitrate, 3_000_000); fps = min(fps,30); applyQuality()
+        reportConnectionProgress("正在连接服务器中转")
         peer.restartIce()
         armTimeout()
         if sending { pendingRelayConfiguration = nil; offer() }
@@ -639,7 +648,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         let chat = RTCDataChannelConfiguration(); chat.isNegotiated = true; chat.channelId = 1; chat.isOrdered = true
         conversation = peer?.dataChannel(forLabel: "touping-room-text-v1", configuration: chat)
         conversation?.delegate = self
-        RoomSession.shared.attach(diagnosticID, host: sending) { [weak self] packet in
+        RoomSession.shared.attach(diagnosticID, host: sending, senderNickname: senderNickname) { [weak self] packet in
             guard let self, !self.closed, let channel = self.conversation, channel.readyState == .open,
                   channel.bufferedAmount < 32768 else { return false }
             var packet = packet
@@ -859,12 +868,16 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     interfaceText += "；对端报告 USB NCM"
                 }
                 var counters: [String: Double] = [:], flowing: [String] = []
+                var inboundAudio = false, outboundAudio = false
                 for stat in report.statistics.values where stat.type == "outbound-rtp" || stat.type == "inbound-rtp" {
                     guard let kind = (stat.values["kind"] ?? stat.values["mediaType"]) as? String, ["video", "audio"].contains(kind) else { continue }
                     let outbound = stat.type == "outbound-rtp"
                     let count = (stat.values[outbound ? "bytesSent" : "bytesReceived"] as? NSNumber)?.doubleValue ?? 0
                     counters[stat.id] = count
                     guard count > (self.mediaCounters[stat.id] ?? 0) else { continue }
+                    if kind == "audio" {
+                        if outbound { outboundAudio = true } else { inboundAudio = true }
+                    }
                     let codec = (stat.values["codecId"] as? String).flatMap { report.statistics[$0]?.values["mimeType"] as? String } ?? kind
                     let label = (outbound ? "发送" : "接收") + (kind == "video" ? "画面" : "声音") + "（" + String(codec.prefix(32)) + "）"
                     if !flowing.contains(label) { flowing.append(label) }
@@ -881,12 +894,14 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     }
                 }
                 self.mediaCounters = counters
+                let audioActivity = (inbound: inboundAudio, outbound: outboundAudio)
                 let signals = flowing.isEmpty ? "本次采样无新增可统计数据" : flowing.sorted().joined(separator: "、")
                 DispatchQueue.main.async { [weak self] in
                     guard let self, !self.closed else { return }
                     self.onDiagnostic?(PeerDiagnostic(id: self.diagnosticID, device: self.remoteDevice,
                         route: route, localEndpoint: local, remoteEndpoint: remote,
                         rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals,
+                        inboundAudio: audioActivity.inbound, outboundAudio: audioActivity.outbound,
                         source: RoomSession.shared.peerOrigins[self.diagnosticID], nickname: RoomSession.shared.peerNicknames[self.diagnosticID]))
                 }
             }

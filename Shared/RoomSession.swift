@@ -34,6 +34,7 @@ final class RoomSession: ObservableObject {
         let send: ([String: Any]) -> Bool
         var participant: String
         var nickname: String
+        var senderNickname: String? = nil
         var ready = false
         var arrivals: [Double] = []
     }
@@ -57,12 +58,13 @@ final class RoomSession: ObservableObject {
         let value = String(String.UnicodeScalarView(text.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) && !CharacterSet.newlines.contains($0) }.prefix(32))).trimmingCharacters(in: .whitespaces)
         return value.isEmpty ? fallback : value
     }
-    func attach(_ id: String, host: Bool, send: @escaping ([String: Any]) -> Bool) {
+    func attach(_ id: String, host: Bool, senderNickname: String? = nil, send: @escaping ([String: Any]) -> Bool) {
         dispatchPrecondition(condition: .onQueue(.main))
-        links[id] = Link(host: host, send: send, participant: id, nickname: "用户-" + id.prefix(4))
+        links[id] = Link(host: host, send: send, participant: id, nickname: "用户-" + id.prefix(4), senderNickname: senderNickname)
     }
     func opened(_ id: String) {
-        _ = links[id]?.send(["kind":"hello", "participant":participant, "nickname":nickname])
+        guard let link = links[id] else { return }
+        _ = link.send(["kind":"hello", "participant":participant, "nickname":link.senderNickname ?? nickname])
     }
     func detach(_ id: String) {
         links.removeValue(forKey: id); peerNicknames.removeValue(forKey: id); peerOrigins.removeValue(forKey: id)
@@ -82,7 +84,7 @@ final class RoomSession: ObservableObject {
             receiverCanSpeak = links.values.contains { !$0.host && $0.ready }
             VoiceRoom.shared.identify(id, participant: link.participant)
             if shouldNotify { receiverConnected.send(link.nickname) }
-            if link.host { _ = link.send(["kind":"host", "participant":participant, "nickname":nickname]) }
+            if link.host { _ = link.send(["kind":"host", "participant":participant, "nickname":link.senderNickname ?? nickname]) }
             return
         }
         if kind == "host", !link.host, let value = object["participant"] as? String, UUID(uuidString: value) != nil {

@@ -70,9 +70,11 @@ final class CastingServer: ObservableObject {
         }
     }
     var listeningPort: UInt16? { isRunning ? listener?.port?.rawValue : nil }
+    private var senderNickname: String?
     private var diagnosticValues: [String: PeerDiagnostic] = [:]
     private func watch(_ video: NativeVideoPeer, route: String) {
-        diagnosticValues[video.diagnosticID] = PeerDiagnostic(id: video.diagnosticID, device: "接收设备", route: "等待实际路径统计", localEndpoint: "—", remoteEndpoint: "—", rttMS: nil, source: route)
+        video.senderNickname = senderNickname
+        diagnosticValues[video.diagnosticID] = PeerDiagnostic(id: video.diagnosticID, device: "接收设备", route: "正在测试直连", localEndpoint: "—", remoteEndpoint: "—", rttMS: nil, source: route)
         video.onDiagnostic = { [weak self, weak video] value in
             guard let self, let video,
                 self.nativePeers.values.contains(where: { $0 === video }) ||
@@ -293,10 +295,12 @@ final class CastingServer: ObservableObject {
         bindRetryWorkItem = nil
         guard listener == nil else { return }
         let generation = UUID(); startGeneration = generation
+        let code = accessCode
         Task { @MainActor [weak self] in
-            let allowed = await CastAccount.verifySender()
+            let nickname = await CastAccount.verifiedSenderNickname(code: code)
             guard let self, self.startGeneration == generation else { return }
-            guard allowed else { self.lastError = "投屏账号验证失败，请联网并在设置中重新登录"; return }
+            guard let nickname else { self.lastError = "无法验证投屏资料，请联网并在设置确认已保存匹配码和昵称"; return }
+            self.senderNickname = nickname
             self.bindListener(retry: 0)
         }
     }

@@ -34,7 +34,7 @@ struct iPadSenderView: View {
     @State private var saveGeneration = UUID()
     @State private var queuedConfiguration = ""
     @State private var refreshing = false
-    @StateObject private var codeSuggestion = MatchingCodeSuggestion()
+    @ObservedObject private var account = CastAccount.shared
     private static let settingsQueue = DispatchQueue(label: "casting.sender.settings", qos: .userInitiated)
     private let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
 
@@ -63,16 +63,9 @@ struct iPadSenderView: View {
                     Label(active ? "正在投屏" : "整屏投屏", systemImage: "rectangle.inset.filled.and.person.filled")
                         .font(.system(size: 23, weight: .semibold))
                     Text("邀请编号").foregroundStyle(.secondary)
-                    TextField("6–36 位数字", text: $code)
-                        .font(.system(size: 42, weight: .medium, design: .monospaced))
-                        .keyboardType(.default)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled().textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 260).disabled(active)
-                        .onChange(of: code) { value in
-                            codeSuggestion.reset()
-                            if !active { internetStatus = "" }
-                            saveConfiguration()
-                        }
+                    Text(code.isEmpty ? "请在设置填写匹配码和昵称" : code)
+                        .font(.system(size: 36, design: .monospaced)).textSelection(.enabled)
+                    Text(account.savedNickname).foregroundStyle(.secondary).textSelection(.enabled)
                     Text("接收设备选择邀请编号连接。投屏包含屏幕上的所有可采集内容，请先关闭不想分享的信息。")
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     VStack(alignment: .leading, spacing: 16) {
@@ -116,20 +109,8 @@ struct iPadSenderView: View {
                         Toggle("允许公网邀请", isOn: $internetMatchingEnabled).toggleStyle(OrnamentalToggleStyle()).disabled(active)
                         Text(active ? internetStatus : "公网 IP 使用端口 9318；邀请编号仅交换连接信息，视频不经服务器。")
                             .foregroundStyle(.secondary)
-                        if internetStatus.contains("邀请编号已占用") || codeSuggestion.code != nil || codeSuggestion.isLoading || codeSuggestion.errorText != nil {
-                            Text("该邀请编号发生冲突，建议修改。").foregroundStyle(.red)
-                            if codeSuggestion.isLoading {
-                                ProgressView("正在查找未占用的新码…")
-                            } else if let candidate = codeSuggestion.code {
-                                Text("建议新码：\(candidate)").font(.system(size: 22, design: .monospaced)).textSelection(.enabled)
-                                Button("采用建议码") { code = candidate }.buttonStyle(.borderedProminent).disabled(active)
-                                Text(active ? "请先通过系统录屏面板停止广播，再采用新码并重新开始。" : "采用后请让接收端输入新码；服务器会在连接时再次检查占用。")
-                                    .foregroundStyle(.secondary)
-                                Button("换一个建议") { requestSuggestion(force: true) }
-                            } else {
-                                Text(codeSuggestion.errorText ?? "正在准备建议码").foregroundStyle(.secondary)
-                                Button("重新获取建议码") { requestSuggestion(force: true) }
-                            }
+                        if internetStatus.contains("邀请编号已占用") {
+                            Text("请停止另一台投屏设备，或在设置更改匹配码后重新投屏。").foregroundStyle(.red)
                         }
                     }
                     Toggle(pageAudio ? "声音已开启" : "声音已关闭", isOn: $pageAudio).toggleStyle(OrnamentalToggleStyle())
@@ -137,7 +118,7 @@ struct iPadSenderView: View {
                     Text("话筒需先在系统广播面板打开麦克风；此处可随时静音或恢复。").foregroundStyle(.secondary)
                     HStack(spacing: 18) {
                         SystemBroadcastButton().frame(width: 64, height: 64)
-                            .allowsHitTesting(MatchingCode.isValid(code) && configurationReady).opacity(MatchingCode.isValid(code) && configurationReady ? 1 : 0.35)
+                            .allowsHitTesting((active || account.senderConfigured) && MatchingCode.isValid(code) && configurationReady).opacity((active || account.senderConfigured) && MatchingCode.isValid(code) && configurationReady ? 1 : 0.35)
                         VStack(alignment: .leading, spacing: 6) {
                             Text(active ? "停止屏幕广播" : "开始屏幕广播").font(.system(size: 21, weight: .semibold))
                             Text("点击左侧系统录屏按钮").foregroundStyle(.secondary)
@@ -199,7 +180,7 @@ struct iPadSenderView: View {
             PerformanceDisk.shared.write("resolution.loaded stored=\(storedResolution ?? "missing") screen=\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")
             let savedCode = initial.code
             connectionPassword = initial.password
-            code = MatchingCode.isValid(savedCode) ? savedCode! : MatchingCode.generate()
+            code = account.senderConfigured ? account.savedMatchingCode : (active ? savedCode ?? "" : "")
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
             if let index = args.firstIndex(of: "--verify-sender-code"), index + 1 < args.count,
@@ -225,25 +206,16 @@ struct iPadSenderView: View {
         .onChange(of: micAudio) { _ in saveConfiguration() }
         .onChange(of: bitrate) { _ in saveConfiguration() }
         .onChange(of: fps) { _ in saveConfiguration() }
-        .onChange(of: internetEnabled) { enabled in
+        .onChange(of: internetEnabled) { _ in saveConfiguration() }
+        .onChange(of: internetMatchingEnabled) { _ in saveConfiguration() }
+        .onChange(of: account.savedMatchingCode) { value in
+            guard !active else { return }
+            code = value
             saveConfiguration()
-            if !enabled { codeSuggestion.reset() }
-            else if internetStatus.contains("邀请编号已占用") { requestSuggestion() }
         }
-        .onChange(of: internetMatchingEnabled) { enabled in
-            saveConfiguration()
-            if !enabled { codeSuggestion.reset() }
-            else if internetStatus.contains("邀请编号已占用") { requestSuggestion() }
+        .onChange(of: active) { running in
+            if !running { code = account.savedMatchingCode; saveConfiguration() }
         }
-        .onChange(of: internetStatus) { value in
-            if value.contains("邀请编号已占用") { requestSuggestion() }
-        }
-        .onDisappear { codeSuggestion.reset() }
-    }
-
-    private func requestSuggestion(force: Bool = false) {
-        guard internetEnabled, internetMatchingEnabled else { return }
-        codeSuggestion.request(for: code, excluding: [code], force: force)
     }
 
     private func saveConfiguration() {
@@ -257,7 +229,7 @@ struct iPadSenderView: View {
         }
         let values: [(String, Any)] = [("broadcastPageAudio", pageAudio), ("broadcastMicAudio", micAudio),
             ("broadcastInternetMode", internetMatchingEnabled ? "both" : "ipOnly"),
-            ("broadcastInternetEnabled", internetEnabled), ("broadcastCode", code), ("broadcastPassword", connectionPassword),
+            ("broadcastInternetEnabled", internetEnabled), ("broadcastPassword", connectionPassword),
             ("broadcastBitrate", bitrate), ("broadcastFPS", fps), ("broadcastResolution", String(resolution)),
             ("broadcastScreenPixels", "\(Int(UIScreen.main.nativeBounds.width))x\(Int(UIScreen.main.nativeBounds.height))")]
         let fingerprint = values.map { "\($0.0)=\($0.0 == "broadcastPassword" ? AdmissionCredentials.verifier(password: connectionPassword, invitation: code) : String(describing: $0.1))" }.joined(separator: ";")

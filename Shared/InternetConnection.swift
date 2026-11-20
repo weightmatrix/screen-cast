@@ -218,6 +218,9 @@ final class CastAccount: ObservableObject {
     @Published var loggedIn = false
     @Published var nickname = ""
     @Published var matchingCode = ""
+    @Published private(set) var savedMatchingCode = ""
+    @Published private(set) var savedNickname = ""
+    var senderConfigured: Bool { loggedIn && MatchingCode.isValid(savedMatchingCode) && !savedNickname.isEmpty }
     @Published var membership = ""
     @Published var message = ""
     @Published var busy = false
@@ -295,12 +298,15 @@ final class CastAccount: ObservableObject {
         await shared.restore()
         return accessToken
     }
-    static func verifySender() async -> Bool {
-        guard !(await validAccessToken()).isEmpty else { return false }
+    static func verifiedSenderNickname(code: String) async -> String? {
+        guard !(await validAccessToken()).isEmpty else { return nil }
         do {
-            let result = try await shared.request("auth/me/")
-            return result.0 == 200 && result.1["id"] is String
-        } catch { return false }
+            let result = try await shared.request("touping/profile/")
+            guard result.0 == 200, result.1["matching_code"] as? String == code,
+                  let nickname = result.1["nickname"] as? String,
+                  !nickname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+            return nickname
+        } catch { return nil }
     }
     static func relayConfiguration() async -> [String:Any]? {
         guard !(await validAccessToken()).isEmpty else { return nil }
@@ -336,14 +342,16 @@ final class CastAccount: ObservableObject {
     }
     @MainActor private func apply(_ object: [String:Any]) {
         loggedIn = true; nickname = object["nickname"] as? String ?? ""; matchingCode = object["matching_code"] as? String ?? ""; membership = object["membership"] as? String ?? ""
+        savedMatchingCode = matchingCode
+        savedNickname = nickname
+        #if os(iOS)
+        BroadcastSettings.store.set(matchingCode, forKey: "broadcastCode")
+        #endif
         if !nickname.isEmpty {
             UserDefaults.standard.set(nickname, forKey:"room.nickname"); RoomSession.shared.refreshNickname()
         }
         if !matchingCode.isEmpty {
             UserDefaults.standard.set(matchingCode, forKey:"lastCode")
-            #if os(iOS)
-            BroadcastSettings.store.set(matchingCode, forKey:"broadcastCode")
-            #endif
         }
     }
     @MainActor func restore() async {
@@ -369,7 +377,8 @@ final class CastAccount: ObservableObject {
         #if os(iOS)
         BroadcastSettings.store.set("", forKey:"account.access")
         BroadcastSettings.store.set("", forKey:"account.refresh")
+        BroadcastSettings.store.set("", forKey:"broadcastCode")
         #endif
-        SecItemDelete(query as CFDictionary); loggedIn = false; nickname = ""; matchingCode = ""; membership = ""; message = "已退出"; roles = []
+        SecItemDelete(query as CFDictionary); loggedIn = false; nickname = ""; matchingCode = ""; savedNickname = ""; savedMatchingCode = ""; membership = ""; message = "已退出"; roles = []
     }
 }

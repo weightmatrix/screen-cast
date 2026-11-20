@@ -24,7 +24,7 @@ final class SampleHandler: RPBroadcastSampleHandler {
         PerformanceDisk.shared.write("broadcast.lifecycle started token=\(token) version=\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] ?? "unknown") build=\(Bundle.main.infoDictionary?["CFBundleVersion"] ?? "unknown")")
         nativeCapture.setPaused(false)
         let defaults = BroadcastSettings.store
-        let code = defaults.string(forKey: "broadcastCode") ?? "67890123"
+        let code = defaults.string(forKey: "broadcastCode") ?? ""
         let password = defaults.string(forKey: "broadcastPassword") ?? ""
         guard MatchingCode.isValid(code), AdmissionCredentials.validPassword(password) else {
             fail("请先在投屏 App 中设置 6–36 位数字匹配码")

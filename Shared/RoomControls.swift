@@ -261,8 +261,9 @@ struct CastAccountSettings: View {
         Section("投屏账号 · 与排课共用") {
             if account.loggedIn {
                 Text("用户等级：" + account.membership)
-                TextField("昵称", text: $account.nickname)
+                TextField("投屏昵称", text: $account.nickname)
                 TextField("匹配码（6至36位数字）", text: $account.matchingCode)
+                Text("开播前请保存昵称和匹配码。更改将在下次投屏生效。").font(.caption).foregroundStyle(.secondary)
                 Button("保存用户信息") { Task { await account.update() } }.disabled(account.busy)
                 Button("退出登录") { account.logout() }.disabled(account.busy)
             } else {
