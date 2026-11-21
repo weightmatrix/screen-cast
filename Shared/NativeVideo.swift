@@ -480,6 +480,173 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private let roomPacketLock = NSLock()
     private var roomPacketTimes: [Double] = []
     private var conversation: RTCDataChannel?
+    private var routeControl: RTCDataChannel?
+    private var routePeerCapable = false
+    private let videoOnly: Bool
+    private var routePeer: NativeVideoPeer?
+    private var routeID: String?
+    private var routeChoice: CastRouteChoice = .automatic
+    private var pendingRoute: CastRouteChoice?
+    private var routeOptions: [CastRouteChoice: (local: String, remote: String)] = [:]
+    private var routeAddresses: (local: String, remote: String)?
+    private var routeTimer: DispatchWorkItem?
+    private var routeWindowStart: TimeInterval = 0
+    private var routeMessages = 0
+    private var lastRouteAttempt: TimeInterval = -.infinity
+    private var routeCommitted = false
+    private var routeProof = false
+    private var routeFrame = false
+    private let routeRenderLock = NSLock()
+    private var renderAlternate = false
+    private var onRouteProof: ((String, String, Double?) -> Void)?
+    private var alternateBandwidth: Double?
+
+    private func forwardsFrame(alternate: Bool) -> Bool {
+        routeRenderLock.lock(); defer { routeRenderLock.unlock() }
+        return renderAlternate == alternate
+    }
+
+    private func useAlternateFrames(_ enabled: Bool) {
+        routeRenderLock.lock(); renderAlternate = enabled; routeRenderLock.unlock()
+    }
+
+    @discardableResult private func sendRoute(_ kind: String, id: String, fields: [String: Any] = [:]) -> Bool {
+        guard let channel = routeControl, channel.readyState == .open, channel.bufferedAmount <= 65536,
+              let data = NativeVideo.packet(["kind": kind, "id": id, "fields": fields]) else { return false }
+        return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
+    }
+
+    func selectRoute(_ choice: CastRouteChoice) {
+        guard sending, captureSource != nil, !videoOnly, !closed else { return }
+        if choice == .automatic { clearRoute(notify: true); return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard pendingRoute == nil, choice != routeChoice, let addresses = routeOptions[choice],
+              now - lastRouteAttempt >= 3, routePeerCapable, routeControl?.readyState == .open else { return }
+        lastRouteAttempt = now
+        clearRoute(notify: true)
+        let id = UUID().uuidString
+        guard sendRoute("start", id: id, fields: ["local": addresses.remote, "remote": addresses.local]) else { return }
+        pendingRoute = choice
+        beginRoute(id: id, addresses: addresses)
+        routePeer?.offer()
+    }
+
+    private func beginRoute(id: String, addresses: (local: String, remote: String)) {
+        let next = NativeVideoPeer(source: captureSource, internet: internet, bitrate: bitrate, fps: fps, videoOnly: true)
+        next.routeAddresses = addresses
+        routeID = id
+        routePeer = next
+        next.sendSignal = { [weak self] packet in
+            guard let self, self.routeID == id else { return }
+            if !self.sendRoute("signal", id: id, fields: packet) { self.clearRoute(notify: true) }
+        }
+        next.onError = { [weak self] _ in
+            guard let self, self.routeID == id else { return }
+            self.clearRoute(notify: true)
+        }
+        next.onRouteProof = { [weak self] local, remote, estimate in
+            guard let self, self.routeID == id else { return }
+            guard local == addresses.local, remote == addresses.remote else {
+                self.clearRoute(notify: true)
+                return
+            }
+            self.alternateBandwidth = estimate
+            self.routeProof = true
+            self.commitRouteIfReady(id: id)
+        }
+        if !sending {
+            next.onImage = { [weak self] image in
+                guard let self else { return }
+                if self.forwardsFrame(alternate: true) { self.onImage?(image) }
+            }
+            next.onFirstRouteFrame = { [weak self] in
+                guard let self, self.routeID == id else { return }
+                self.routeFrame = true
+                self.commitRouteIfReady(id: id)
+            }
+        }
+        let timer = DispatchWorkItem { [weak self] in
+            guard let self, self.routeID == id, !self.routeCommitted else { return }
+            self.clearRoute(notify: true)
+        }
+        routeTimer = timer
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: timer)
+    }
+
+    private var onFirstRouteFrame: (() -> Void)?
+
+    private func commitRouteIfReady(id: String) {
+        guard routeID == id, routeProof, routeFrame, !routeCommitted else { return }
+        if sending {
+            guard sendRoute("commit", id: id), let target = pendingRoute else {
+                clearRoute(notify: true); return
+            }
+            routeChoice = target
+            pendingRoute = nil
+            routeCommitted = true
+            routeTimer?.cancel()
+        } else if !sendRoute("ready", id: id) {
+            clearRoute(notify: false)
+        }
+    }
+
+    private func clearRoute(notify: Bool) {
+        if notify, let id = routeID { sendRoute("stop", id: id) }
+        routeTimer?.cancel()
+        routeTimer = nil
+        useAlternateFrames(false)
+        if routeCommitted && sending {
+            sender?.track?.isEnabled = true
+            captureSource?.requestKeyFrame()
+        }
+        routePeer?.stop()
+        routePeer = nil
+        routeID = nil
+        routeChoice = .automatic
+        pendingRoute = nil
+        routeCommitted = false
+        routeProof = false
+        alternateBandwidth = nil
+        routeFrame = false
+    }
+
+    private func handleRouteMessage(_ packet: [String: Any]) {
+        guard let kind = packet["kind"] as? String, let id = packet["id"] as? String,
+              UUID(uuidString: id) != nil, let fields = packet["fields"] as? [String: Any] else { return }
+        if kind == "hello" { routePeerCapable = true; return }
+        if kind == "start" {
+            let now = ProcessInfo.processInfo.systemUptime
+            guard !sending, connected, routeID == nil, now - lastRouteAttempt >= 3,
+                  let local = fields["local"] as? String, let remote = fields["remote"] as? String,
+                  local.utf8.count <= 64, remote.utf8.count <= 64,
+                  MediaPath.nonPublic(local) != nil, MediaPath.nonPublic(remote) != nil,
+                  MediaPath.interface(local: ["address": local], remote: ["address": remote]) != nil ||
+                    MediaPath.nonPublic(local) == false else { return }
+            lastRouteAttempt = now
+            beginRoute(id: id, addresses: (local, remote))
+            return
+        }
+        guard routeID == id else { return }
+        switch kind {
+        case "signal":
+            guard let type = fields["type"] as? String,
+                  type == "candidate" || type == (sending ? "answer" : "offer") else { return }
+            routePeer?.receive(fields)
+        case "ready":
+            if sending { routeFrame = true; commitRouteIfReady(id: id) }
+        case "commit":
+            guard !sending, routeProof, routeFrame else { return }
+            routeCommitted = true
+            routeTimer?.cancel()
+            useAlternateFrames(true)
+            sendRoute("playing", id: id)
+        case "playing":
+            if sending, routeCommitted { sender?.track?.isEnabled = false }
+        case "stop":
+            clearRoute(notify: false)
+        default: break
+        }
+    }
     private var diagnostics: RTCDataChannel?
     private var lastRemoteStat = 0.0
     private var remoteTrack: RTCVideoTrack?
@@ -506,6 +673,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     }
 
     private func directFailure() {
+        if videoOnly { fail("目标路径连接失败"); return }
         guard !connected, !relayEnabled else { fail("媒体连接失败"); return }
         if !directFailed {
             directFailed = true
@@ -604,6 +772,54 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         sender.stop();receiver.stop();exit(passed ? 0 : 1)
     }
     #endif
+    #if DEBUG
+    @MainActor static func verifyRouteSwitch() async {
+        let source = NativeScreenSource()
+        let sender = NativeVideoPeer(source: source, internet: false)
+        let receiver = NativeVideoPeer(internet: false)
+        sender.configureRoomVerification()
+        receiver.configureRoomVerification()
+        sender.sendSignal = { [weak receiver] in receiver?.receive($0) }
+        receiver.sendSignal = { [weak sender] in sender?.receive($0) }
+        var pixel: CVPixelBuffer?
+        guard CVPixelBufferCreate(nil, 640, 360, kCVPixelFormatType_32BGRA,
+                                  [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pixel) == kCVReturnSuccess,
+              let pixel else { exit(2) }
+        CIContext().render(CIImage(color: CIColor(red: 0, green: 0.4, blue: 1)).cropped(to: CGRect(x: 0, y: 0, width: 640, height: 360)), to: pixel)
+        sender.offer()
+        let start = ProcessInfo.processInfo.systemUptime
+        var requested = false
+        var switched = false
+        var lostAt: TimeInterval?
+        var passed = false
+        while ProcessInfo.processInfo.systemUptime - start < 27 {
+            let now = ProcessInfo.processInfo.systemUptime
+            source.append(pixel)
+            if !requested, sender.routePeerCapable, sender.routeOptions[.lan] != nil {
+                requested = true
+                sender.selectRoute(.lan)
+            }
+            if !switched, sender.routeCommitted, receiver.routeCommitted, receiver.forwardsFrame(alternate: true),
+               sender.sender?.track?.isEnabled == false {
+                switched = true
+                lostAt = now
+                receiver.routePeer?.fail("测试手选线路中断")
+            }
+            if let lostAt, now - lostAt > 0.5, sender.routeChoice == .automatic,
+               sender.sender?.track?.isEnabled == true, receiver.forwardsFrame(alternate: false),
+               sender.routePeer == nil, receiver.routePeer == nil {
+                passed = true
+                break
+            }
+            try? await Task.sleep(nanoseconds: 33_333_333)
+        }
+        NSLog("Route switch %@ capability=%@ requested=%@ switched=%@", passed ? "PASS" : "FAIL",
+              String(sender.routePeerCapable), String(requested), String(switched))
+        sender.stop()
+        receiver.stop()
+        exit(passed ? 0 : 1)
+    }
+    #endif
     private var remoteUSBPath: (local: String, remote: String, received: TimeInterval)?
     private static func pathEndpoint(_ candidate: [String: Any]) -> String {
         MediaPath.address(candidate) + ":" + ((candidate["port"] as? NSNumber)?.stringValue ?? "")
@@ -613,7 +829,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     private var bitrate: Int
     private var fps: Int
     let directAudit: DirectConnectionAudit?
-    init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60, auditDirect: Bool = false, auditSessionID: String? = nil) {
+    init(source: NativeScreenSource? = nil, internet: Bool, bitrate: Int = 100_000_000, fps: Int = 60, auditDirect: Bool = false, auditSessionID: String? = nil, videoOnly: Bool = false) {
+        self.videoOnly = videoOnly
         self.bitrate = bitrate; self.fps = fps; self.internet = internet; sending = source != nil
         connectionOrigin = internet ? .appPublicIP : .appLocalIP
         directAudit = auditDirect ? DirectConnectionAudit(sessionID: auditSessionID, sending: source != nil, route: internet ? "internet_ip" : "local_ip") : nil
@@ -628,33 +845,40 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         config.disableLinkLocalNetworks = false
         let constraints = RTCMediaConstraints(mandatoryConstraints: nil, optionalConstraints: nil)
         _ = NativeVideo.initialize
-        let audio = NativeAudioDevice(input: source?.audio, roomPeer: diagnosticID, hosting: source != nil)
+        let audio = NativeAudioDevice(input: videoOnly ? nil : source?.audio, roomPeer: videoOnly ? nil : diagnosticID, hosting: source != nil)
         audioDevice = audio
         let factory = source?.factory(audioDevice: audio) ?? RTCPeerConnectionFactory(encoderFactory: ScreenH264EncoderFactory(), decoderFactory: ScreenH264DecoderFactory(), audioDevice: audio)
         mediaFactory = factory
         peer = factory.peerConnection(with: config, constraints: constraints, delegate: self)
         let audioOptions = RTCRtpTransceiverInit(); audioOptions.direction = .sendRecv
-        do {
+        if !videoOnly {
             let constraints = RTCMediaConstraints(mandatoryConstraints: ["googEchoCancellation":"false", "googAutoGainControl":"false", "googNoiseSuppression":"false"], optionalConstraints: nil)
             let track = factory.audioTrack(with: factory.audioSource(with: constraints), trackId: "page-left-mic-right-v1")
             audioTrack = track
             if source != nil { _ = peer?.addTransceiver(with: track, init: audioOptions) }
         }
-        let control = RTCDataChannelConfiguration()
-        control.isNegotiated = true; control.channelId = 0
-        control.isOrdered = false; control.maxRetransmits = 0
-        diagnostics = peer?.dataChannel(forLabel: "native-video-stats-v1", configuration: control)
-        diagnostics?.delegate = self
-        let chat = RTCDataChannelConfiguration(); chat.isNegotiated = true; chat.channelId = 1; chat.isOrdered = true
-        conversation = peer?.dataChannel(forLabel: "touping-room-text-v1", configuration: chat)
-        conversation?.delegate = self
-        RoomSession.shared.attach(diagnosticID, host: sending, senderNickname: senderNickname) { [weak self] packet in
-            guard let self, !self.closed, let channel = self.conversation, channel.readyState == .open,
-                  channel.bufferedAmount < 32768 else { return false }
-            var packet = packet
-            if packet["kind"] as? String == "hello" { packet["origin"] = self.connectionOrigin.rawValue }
-            guard let data = try? JSONSerialization.data(withJSONObject: packet), data.count <= 4096 else { return false }
-            return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
+        if !videoOnly {
+            let control = RTCDataChannelConfiguration()
+            control.isNegotiated = true; control.channelId = 0
+            control.isOrdered = false; control.maxRetransmits = 0
+            diagnostics = peer?.dataChannel(forLabel: "native-video-stats-v1", configuration: control)
+            diagnostics?.delegate = self
+            let chat = RTCDataChannelConfiguration(); chat.isNegotiated = true; chat.channelId = 1; chat.isOrdered = true
+            conversation = peer?.dataChannel(forLabel: "touping-room-text-v1", configuration: chat)
+            conversation?.delegate = self
+            RoomSession.shared.attach(diagnosticID, host: sending, senderNickname: senderNickname) { [weak self] packet in
+                guard let self, !self.closed, let channel = self.conversation, channel.readyState == .open,
+                      channel.bufferedAmount < 32768 else { return false }
+                var packet = packet
+                if packet["kind"] as? String == "hello" { packet["origin"] = self.connectionOrigin.rawValue }
+                guard let data = try? JSONSerialization.data(withJSONObject: packet), data.count <= 4096 else { return false }
+                return channel.sendData(RTCDataBuffer(data: data, isBinary: false))
+            }
+            let route = RTCDataChannelConfiguration()
+            route.isNegotiated = true
+            route.channelId = 2
+            routeControl = peer?.dataChannel(forLabel: "touping-route-v1", configuration: route)
+            routeControl?.delegate = self
         }
         if let source {
             let track = factory.videoTrack(with: source.source, trackId: UUID().uuidString)
@@ -768,6 +992,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                   (relayEnabled || pendingRelayConfiguration != nil || !sdp.contains(" typ relay")), let line = object["line"] as? Int32 else { return }
             if internet { PerformanceDisk.shared.write("native.iceCandidate id=\(id) remote \(Self.candidateSummary(sdp))") }
             if relayEnabled && !sdp.contains(" typ relay") { return }
+            if let routeAddresses, Self.candidateAddress(sdp) != routeAddresses.remote { return }
             let candidate = RTCIceCandidate(sdp: sdp, sdpMLineIndex: line, sdpMid: object["mid"] as? String)
             // All paths enter ICE immediately; do not bias the race by delaying Wi-Fi.
             if remoteSet { peer?.add(candidate, completionHandler: { _ in }) }
@@ -778,6 +1003,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     func stop() {
         directAudit?.record("ended")
         guard !closed else { return }; closed = true
+        clearRoute(notify: false)
+        routeControl?.delegate = nil; routeControl?.close(); routeControl = nil
         timeout?.cancel(); statsWork?.cancel(); firstFrameWork?.cancel(); disconnectedWork?.cancel()
         renderLock.lock(); renderClosed = true; imageHandler = nil; renderLock.unlock()
         remoteTrack?.remove(self); remoteTrack = nil
@@ -814,6 +1041,16 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             let pair = pathID.flatMap { report.statistics[$0] }
             let diagnosticLocal = (pair?.values["localCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
             let diagnosticRemote = (pair?.values["remoteCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
+            if self.videoOnly {
+                if pair != nil {
+                    let local = MediaPath.address(diagnosticLocal), remote = MediaPath.address(diagnosticRemote)
+                    let estimate = (pair?.values["availableOutgoingBitrate"] as? NSNumber)?.doubleValue
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onRouteProof?(local, remote, estimate.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
+                    }
+                }
+                return
+            }
             let ownInterface = MediaPath.interface(local: diagnosticLocal, remote: diagnosticRemote)
             let ownUSB = MediaPath.route(local: diagnosticLocal, remote: diagnosticRemote, interface: ownInterface).contains("USB设备")
             let allowed = ["framesDecoded", "framesPerSecond", "frameWidth", "frameHeight", "bytesReceived", "packetsLost", "jitter", "totalDecodeTime", "freezeCount", "totalFreezesDuration", "jitterBufferDelay", "jitterBufferEmittedCount", "jitterBufferTargetDelay", "nackCount", "pliCount"]
@@ -846,6 +1083,20 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 }
             }
             if let pair {
+                var options: [CastRouteChoice: (local: String, remote: String)] = [:]
+                if self.sending {
+                    for candidatePair in report.statistics.values.sorted(by: { $0.id < $1.id })
+                    where candidatePair.type == "candidate-pair" && candidatePair.values["state"] as? String == "succeeded" {
+                        guard let localID = candidatePair.values["localCandidateId"] as? String,
+                              let remoteID = candidatePair.values["remoteCandidateId"] as? String,
+                              let local = report.statistics[localID]?.values, let remote = report.statistics[remoteID]?.values,
+                              let choice = CastRouteChoice.directPath(local: local, remote: remote),
+                              MediaPath.nonPublic(MediaPath.address(local)) != nil,
+                              MediaPath.nonPublic(MediaPath.address(remote)) != nil else { continue }
+                        options[choice] = (MediaPath.address(local), MediaPath.address(remote))
+                    }
+                }
+                let availableOptions = options
                 func endpoint(_ key: String) -> String {
                     guard let cid = pair.values[key] as? String, let candidate = report.statistics[cid] else { return "—" }
                     let address = (candidate.values["address"] as? String) ?? (candidate.values["ip"] as? String) ?? "隐藏地址"
@@ -900,11 +1151,14 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                 let signals = flowing.isEmpty ? "本次采样无新增可统计数据" : flowing.sorted().joined(separator: "、")
                 DispatchQueue.main.async { [weak self] in
                     guard let self, !self.closed else { return }
+                    self.routeOptions = availableOptions
                     self.onDiagnostic?(PeerDiagnostic(id: self.diagnosticID, device: self.remoteDevice,
                         route: route, localEndpoint: local, remoteEndpoint: remote,
                         rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals,
                         inboundAudio: audioActivity.inbound, outboundAudio: audioActivity.outbound,
-                        estimatedOutgoingBitsPerSecond: outgoing,
+                        estimatedOutgoingBitsPerSecond: self.routeCommitted ? self.alternateBandwidth : outgoing,
+                        availableRoutes: self.routePeerCapable && self.routeControl?.readyState == .open ? CastRouteChoice.allCases.filter { availableOptions[$0] != nil } : [],
+                        routeChoice: self.routeChoice, switchingRoute: self.pendingRoute,
                         source: RoomSession.shared.peerOrigins[self.diagnosticID], nickname: RoomSession.shared.peerNicknames[self.diagnosticID]))
                 }
             }
@@ -968,8 +1222,13 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         let first = frames == 1
         let handler = imageHandler
         renderLock.unlock()
-        handler?(image)
-        if first { DispatchQueue.main.async { [weak self] in self?.firstFrameWork?.cancel() } }
+        if forwardsFrame(alternate: false) { handler?(image) }
+        if first {
+            DispatchQueue.main.async { [weak self] in
+                self?.firstFrameWork?.cancel()
+                self?.onFirstRouteFrame?()
+            }
+        }
     }
     func peerConnection(_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState) {}
     func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
@@ -1000,6 +1259,11 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
             }
         }
     }
+    private static func candidateAddress(_ candidate: String) -> String? {
+        let fields = candidate.split(separator: " ")
+        guard fields.count > 4 else { return nil }
+        return String(fields[4])
+    }
     private static func candidateSummary(_ candidate: String) -> String {
         let fields = candidate.split(separator: " ").map(String.init)
         let value = fields.firstIndex(of: "typ").flatMap { $0 + 1 < fields.count ? fields[$0 + 1] : nil } ?? "unknown"
@@ -1015,6 +1279,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
         guard relayEnabled || !candidate.sdp.contains(" typ relay") else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self, !self.closed else { return }
+            if let routeAddresses = self.routeAddresses, Self.candidateAddress(candidate.sdp) != routeAddresses.local { return }
             if self.internet { PerformanceDisk.shared.write("native.iceCandidate id=\(self.id) local \(Self.candidateSummary(candidate.sdp))") }
             self.sendSignal?(["type":"candidate", "candidate":candidate.sdp, "mid":candidate.sdpMid as Any? ?? NSNull(), "line":candidate.sdpMLineIndex])
         }
@@ -1023,12 +1288,30 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
     func peerConnection(_ peerConnection: RTCPeerConnection, didOpen dataChannel: RTCDataChannel) { dataChannel.close() }
     func dataChannelDidChangeState(_ dataChannel: RTCDataChannel) {
         DispatchQueue.main.async { [weak self, weak dataChannel] in
-            guard let self, let dataChannel, self.conversation === dataChannel, dataChannel.readyState == .open else { return }
-            RoomSession.shared.opened(self.diagnosticID)
+            guard let self, let dataChannel, dataChannel.readyState == .open else { return }
+            if self.routeControl === dataChannel { self.sendRoute("hello", id: self.diagnosticID) }
+            if self.conversation === dataChannel { RoomSession.shared.opened(self.diagnosticID) }
         }
     }
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-        guard !buffer.isBinary, buffer.data.count <= 4096 else { return }
+        guard !buffer.isBinary else { return }
+        if routeControl === dataChannel {
+            guard buffer.data.count <= 16384 else { return }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.closed else { return }
+                let now = ProcessInfo.processInfo.systemUptime
+                if now - self.routeWindowStart >= 10 {
+                    self.routeWindowStart = now
+                    self.routeMessages = 0
+                }
+                guard self.routeMessages < 48 else { return }
+                self.routeMessages += 1
+                guard let packet = try? JSONSerialization.jsonObject(with: buffer.data) as? [String: Any] else { return }
+                self.handleRouteMessage(packet)
+            }
+            return
+        }
+        guard buffer.data.count <= 4096 else { return }
         if conversation === dataChannel {
             roomPacketLock.lock()
             let now = ProcessInfo.processInfo.systemUptime

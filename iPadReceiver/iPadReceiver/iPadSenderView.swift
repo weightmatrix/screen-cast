@@ -156,7 +156,9 @@ struct iPadSenderView: View {
                         Text("本机地址：\(localIPs.isEmpty ? "—" : localIPs)")
                         Text("局域网信令端口 \(active && signalPort > 0 ? String(signalPort) : "未监听") · 广域网 IP 信令端口 \(active && internetPort > 0 ? String(internetPort) : "未监听")")
                             .font(.system(size: 14, design: .monospaced))
-                        PeerDiagnosticsView(peers: peers) { id in BroadcastSettings.store.set(id, forKey: "broadcastKick") }
+                        PeerDiagnosticsView(peers: peers, selectRoute: { id, route in
+                            BroadcastSettings.store.set(id + ":" + route.rawValue, forKey: "broadcastRoute")
+                        }) { id in BroadcastSettings.store.set(id, forKey: "broadcastKick") }
                             .disabled(!active)
                     }
                 }

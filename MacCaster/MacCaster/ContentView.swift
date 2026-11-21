@@ -755,7 +755,7 @@ private struct SessionDiagnosticsView: View {
                                 VStack(alignment: .leading, spacing: 5) {
                                     Text(room.peerNicknames[peer.id] ?? peer.nickname ?? "访客·" + peer.id.prefix(4).uppercased()).font(.system(size: 18, weight: .semibold)).lineLimit(2)
                                     ConnectionEntryView(peer: peer)
-                                    SenderPeerStatus(peer: peer)
+                                    SenderPeerStatus(peer: peer) { server.selectRoute($0, for: peer.id) }
                                 }
                                 Spacer()
                                 Button("断开", role: .destructive) { server.disconnectPeer(peer.id) }
