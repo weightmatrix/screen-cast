@@ -112,6 +112,14 @@ struct SenderPeerStatus: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(peer.localEndpoint == "—" ? peer.route : "媒体已连通")
+            if peer.localEndpoint != "—" {
+                if let rate = peer.estimatedOutgoingBitsPerSecond {
+                    Text("当前路径发送带宽估计 \(rate / 1_000_000, specifier: "%.1f") Mbps")
+                        .monospacedDigit()
+                } else {
+                    Text("当前路径暂无带宽估计")
+                }
+            }
             HStack(spacing: 12) {
                 indicator("对方话筒回传", icon: "mic.fill", active: peer.inboundAudio)
                 indicator("发往对方喇叭", icon: "speaker.wave.2.fill", active: peer.outboundAudio)

@@ -39,7 +39,7 @@ import Foundation
         precondition(MediaPath.connectionLabel(route: "USB设备网络直连", interface: "iPhone USB") == "USB电缆")
         precondition(MediaPath.connectionLabel(route: "服务器中转", interface: "Wi-Fi") == "服务器中转")
         precondition(MediaPath.connectionLabel(route: "本机回环直连", interface: "lo0") == "本机回环")
-        precondition(MediaPath.connectionLabel(route: "公网地址直连（可能同网回环）", interface: "Wi-Fi") == "公网直连")
+        precondition(MediaPath.connectionLabel(route: "公网地址直连（可能同网回环）", interface: "Wi-Fi") == "公网地址直连（可能同网回环）")
         precondition(MediaPath.connectionLabel(route: "内网直连（局域网/VPN待确认）", interface: "") == "内网（介质未确认）")
         precondition(MediaPath.connectionLabel(route: "直连（地址隐藏或接口未确认）", interface: "") == "连接方式待确认")
         print("PASS actual-pair routes, USB evidence, VPN/public/mDNS uncertainty, interface matching, IPv6 and legacy diagnostics")

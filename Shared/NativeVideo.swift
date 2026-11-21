@@ -854,6 +854,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     return "\(address.contains(":") ? "[" + address + "]" : address):\(port) \(proto)"
                 }
                 let rtt = (pair.values["currentRoundTripTime"] as? NSNumber)?.doubleValue
+                let estimate = (pair.values["availableOutgoingBitrate"] as? NSNumber)?.doubleValue
+                let outgoing = estimate.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
                 let local = endpoint("localCandidateId"), remote = endpoint("remoteCandidateId")
                 let lc = (pair.values["localCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
                 let rc = (pair.values["remoteCandidateId"] as? String).flatMap { report.statistics[$0] }?.values ?? [:]
@@ -902,6 +904,7 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                         route: route, localEndpoint: local, remoteEndpoint: remote,
                         rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals,
                         inboundAudio: audioActivity.inbound, outboundAudio: audioActivity.outbound,
+                        estimatedOutgoingBitsPerSecond: outgoing,
                         source: RoomSession.shared.peerOrigins[self.diagnosticID], nickname: RoomSession.shared.peerNicknames[self.diagnosticID]))
                 }
             }

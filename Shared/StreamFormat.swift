@@ -427,6 +427,7 @@ struct PeerDiagnostic: Codable, Identifiable {
     var signals: String? = nil
     var inboundAudio: Bool? = nil
     var outboundAudio: Bool? = nil
+    var estimatedOutgoingBitsPerSecond: Double? = nil
     var source: String? = nil
     var nickname: String? = nil
     var connectionLabel: String { MediaPath.connectionLabel(route: route, interface: networkInterface ?? "") }
@@ -585,6 +586,8 @@ extension MediaPath {
             if interface.localizedCaseInsensitiveContains("ethernet") || interface.contains("以太") || interface.contains("有线") { return "有线局域网" }
             return "局域网（介质未确认）"
         }
+        if route.contains("公网地址") { return "公网地址直连（可能同网回环）" }
+        if route.contains("公网候选") { return "直连（网络范围待确认）" }
         if route.contains("公网") { return "公网直连" }
         if route.contains("内网") { return "内网（介质未确认）" }
         return "连接方式待确认"
