@@ -200,6 +200,8 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing:10) {
                     Text("连接信息与诊断").font(.headline)
                     ConnectionPathView(info: client.connectionInfo)
+                    CopyConnectionReport(peers: client.connectionInfo.map { [$0] } ?? [],
+                                         status: statusText, mode: connectMode, frames: client.frameCount)
                     Text(MediaPath.preference).font(.caption).foregroundStyle(.secondary)
                     HStack { Circle().fill(statusColor).frame(width:8,height:8); Text(LocalizedStringKey(statusText)).font(.caption) }
                     if !client.recoveryMessage.isEmpty { Text(client.recoveryMessage).font(.caption) }

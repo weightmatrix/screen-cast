@@ -1,5 +1,10 @@
 import Foundation
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 enum AppLanguage: String, CaseIterable, Identifiable {
     case system, simplified = "zh-Hans", traditional = "zh-Hant"
@@ -363,6 +368,87 @@ struct ReceiverAudioControls: View {
             if !room.receiverCanSpeak { Text("连接就绪后可开启话筒；测试和设备选择无需连接。").font(.caption).foregroundStyle(.secondary) }
             if !audio.error.isEmpty { Text(audio.error).font(.caption).foregroundStyle(.red) }
         }.onAppear { audio.beginMetering() }.onDisappear { audio.setTesting(false) }
+    }
+}
+
+/// Allowlisted support report. Never copy raw diagnostics or arbitrary error text.
+struct CopyConnectionReport: View {
+    let peers: [PeerDiagnostic]
+    var status: String = ""
+    var mode: String = ""
+    var frames: Int? = nil
+    @State private var history: [String] = []
+    @State private var copied = false
+
+    private var stage: String {
+        let categories = [
+            ("发现不到发送端", ["未找到", "未发现"]),
+            ("等待批准", ["审批", "等待允许"]),
+            ("账号验证", ["账号", "登录"]),
+            ("认证或接入失败", ["密码", "认证", "拒绝", "匹配码"]),
+            ("超时", ["超时"]),
+            ("媒体协商或画面异常", ["协商", "画面", "解码"]),
+            ("连接中断", ["中断", "断开"]),
+            ("连接失败", ["失败", "错误"]),
+            ("已连接", ["已连接"]),
+            ("连接中", ["连接中", "重连"]),
+            ("未连接", ["未连接"])
+        ]
+        return categories.first { entry in entry.1.contains { status.contains($0) } }?.0
+            ?? (status.isEmpty ? "发送端" : "其他状态")
+    }
+
+    var body: some View {
+        Button(copied ? "已复制连接诊断" : "复制连接诊断") {
+            let bundle = Bundle.main
+            let version = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+            let build = bundle.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知"
+            #if os(macOS)
+            let platform = "macOS"
+            #else
+            let platform = "iOS/iPadOS"
+            #endif
+            let os = ProcessInfo.processInfo.operatingSystemVersion
+            let modes = ["ip": "局域网地址", "code": "局域网匹配码", "wanIP": "公网地址", "wanCode": "公网匹配码"]
+            var report = ["投屏连接诊断 • \(version)（\(build)）",
+                          "系统 \(platform) \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
+                          "当前阶段 \(stage)", "有路径样本的连接 \(peers.count)"]
+            if let mode = modes[mode] { report.append("入口 " + mode) }
+            if let frames { report.append("已收画面 \(frames) 帧") }
+            if !history.isEmpty { report.append("最近阶段 " + history.joined(separator: " → ")) }
+            for (index, peer) in peers.prefix(16).enumerated() {
+                let route = peer.connectionLabel
+                let speed = peer.estimatedOutgoingBitsPerSecond.map { String(format: "%.1f Mbps", $0 / 1_000_000) } ?? "—"
+                let linkLocal = peer.localEndpoint.hasPrefix("169.254.") || peer.remoteEndpoint.hasPrefix("169.254.")
+                let mediaProtocol = peer.localEndpoint.hasSuffix(" UDP") ? "UDP" : peer.localEndpoint.hasSuffix(" TCP") ? "TCP" : "未知"
+                report.append("连接 \(index + 1) · \(route) · \(mediaProtocol) · 链路本地 IPv4 \(linkLocal ? "有" : "无")")
+                report.append("  RTT \(ReceiveTiming.text(peer.rttMS)) · 发送带宽估计 \(speed) · 收音 \(audio(peer.inboundAudio)) · 发音 \(audio(peer.outboundAudio))")
+                if let choice = peer.switchingRoute { report.append("  正在测试 " + choice.title) }
+                else if let choice = peer.routeChoice { report.append("  视频线路设置 " + choice.title) }
+            }
+            let text = report.joined(separator: "\n")
+            #if os(macOS)
+            NSPasteboard.general.clearContents()
+            copied = NSPasteboard.general.setString(text, forType: .string)
+            #else
+            UIPasteboard.general.setItems([["public.utf8-plain-text": text]],
+                                          options: [.localOnly: true, .expirationDate: Date().addingTimeInterval(600)])
+            copied = true
+            #endif
+        }
+        .help("复制脱敏摘要，供手动分享")
+        .onAppear { remember(stage) }
+        .onChange(of: stage) { value in remember(value) }
+    }
+
+    private func remember(_ stage: String) {
+        guard history.last != stage else { return }
+        history = Array((history + [stage]).suffix(12))
+        copied = false
+    }
+
+    private func audio(_ value: Bool?) -> String {
+        value.map { $0 ? "有数据" : "无数据" } ?? "未知"
     }
 }
 

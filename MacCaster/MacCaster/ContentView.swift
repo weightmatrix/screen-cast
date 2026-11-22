@@ -725,6 +725,7 @@ private struct SessionDiagnosticsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             ConnectionLegalNotice()
+            CopyConnectionReport(peers: server.diagnostics, status: server.lastError ?? "")
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("连接设备").font(.system(size: 24, weight: .bold, design: .rounded))
