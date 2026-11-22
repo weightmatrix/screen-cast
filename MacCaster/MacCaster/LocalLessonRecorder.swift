@@ -322,13 +322,26 @@ final class LocalLessonRecorder: ObservableObject, @unchecked Sendable {
 }
 
 final class RecordingAppDelegate: NSObject, NSApplicationDelegate {
+    private var awakeActivity: (any NSObjectProtocol)?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        awakeActivity = ProcessInfo.processInfo.beginActivity(
+            options: [.idleSystemSleepDisabled, .idleDisplaySleepDisabled],
+            reason: "投屏 App 打开期间保持唤醒"
+        )
         CastingAppearanceIcon.shared.start()
         DispatchQueue.main.async {
             guard let services = NSApp.servicesMenu,
                   let appMenu = NSApp.mainMenu?.items.first?.submenu,
                   let item = appMenu.items.first(where: { $0.submenu === services }) else { return }
             appMenu.removeItem(item)
+        }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let awakeActivity {
+            ProcessInfo.processInfo.endActivity(awakeActivity)
+            self.awakeActivity = nil
         }
     }
 

@@ -1,14 +1,22 @@
 import SwiftUI
+import UIKit
 
 @main
 struct iPadReceiverApp: App {
+    @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppLanguage.storageKey) private var language = AppLanguage.system.rawValue
     init() { StartupTiming.entered = ProcessInfo.processInfo.systemUptime }
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(\.locale, AppLanguage.locale(language))
+                .onAppear { updateIdleTimer(scenePhase) }
         }
+        .onChange(of: scenePhase) { phase in updateIdleTimer(phase) }
+    }
+
+    private func updateIdleTimer(_ phase: ScenePhase) {
+        UIApplication.shared.isIdleTimerDisabled = phase != .background
     }
 }
 
