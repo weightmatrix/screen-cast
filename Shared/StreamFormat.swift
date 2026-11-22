@@ -416,29 +416,6 @@ struct ScreenAudioEdge {
 }
 
 /// Bounded local diagnostics. Ports here are selected ICE media endpoints, not signaling listeners.
-enum CastRouteChoice: String, Codable, CaseIterable {
-    case automatic, usb, lan, publicDirect, relay
-
-    var title: String {
-        switch self {
-        case .automatic: return "自动"
-        case .usb: return "USB"
-        case .lan: return "局域网"
-        case .publicDirect: return "公网直连"
-        case .relay: return "公网中转"
-        }
-    }
-
-    static func directPath(local: [String: Any], remote: [String: Any]) -> Self? {
-        let interface = MediaPath.interface(local: local, remote: remote)
-        let route = MediaPath.route(local: local, remote: remote, interface: interface)
-        if route.contains("USB设备") { return .usb }
-        if route.contains("局域网直连") { return .lan }
-        if route.contains("公网地址直连") { return .publicDirect }
-        return nil
-    }
-}
-
 struct PeerDiagnostic: Codable, Identifiable {
     let id: String
     var device: String
@@ -451,9 +428,6 @@ struct PeerDiagnostic: Codable, Identifiable {
     var inboundAudio: Bool? = nil
     var outboundAudio: Bool? = nil
     var estimatedOutgoingBitsPerSecond: Double? = nil
-    var availableRoutes: [CastRouteChoice]? = nil
-    var routeChoice: CastRouteChoice? = nil
-    var switchingRoute: CastRouteChoice? = nil
     var source: String? = nil
     var nickname: String? = nil
     var connectionLabel: String { MediaPath.connectionLabel(route: route, interface: networkInterface ?? "") }

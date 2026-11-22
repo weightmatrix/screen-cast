@@ -48,7 +48,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
             server.nativeSource.onResolution = { summary in defaults.set(summary, forKey: "broadcastResolutionStatus") }
             self.server = server
             defaults.set("", forKey: "broadcastKick")
-            defaults.set("", forKey: "broadcastRoute")
             defaults.set("[]", forKey: "broadcastPeers")
             defaults.set("[]", forKey: "broadcastPending")
             defaults.set("", forKey: "broadcastApproval")
@@ -102,13 +101,6 @@ final class SampleHandler: RPBroadcastSampleHandler {
                         defaults.set(Int(server.internetListeningPort ?? 0), forKey: "broadcastInternetPort")
                         defaults.set(Int(server.browserListeningPort ?? 0), forKey: "broadcastBrowserPort")
                         self?.lastDiagnosticNetwork = network
-                    }
-                    if let command = defaults.string(forKey: "broadcastRoute"), !command.isEmpty {
-                        defaults.set("", forKey: "broadcastRoute")
-                        let parts = command.split(separator: ":", maxSplits: 1)
-                        if parts.count == 2, let route = CastRouteChoice(rawValue: String(parts[1])) {
-                            server.selectRoute(route, for: String(parts[0]))
-                        }
                     }
                     if let command = defaults.string(forKey: "broadcastKick"), !command.isEmpty {
                         // Consume once; peer UUIDs cannot target a later connection.

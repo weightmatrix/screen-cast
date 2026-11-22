@@ -91,11 +91,6 @@ final class CastingServer: ObservableObject {
         diagnosticValues = diagnosticValues.filter { active.contains($0.key) }
         diagnostics = diagnosticValues.values.sorted { $0.id < $1.id }
     }
-    func selectRoute(_ route: CastRouteChoice, for id: String) {
-        let videos = Array(nativePeers.values) + (nativeHost?.videos ?? [])
-        videos.first { $0.diagnosticID == id }?.selectRoute(route)
-    }
-
     func disconnectPeer(_ id: String) {
         browserServer?.disconnect(id)
         if let connection = connections.first(where: { nativePeers[ObjectIdentifier($0)]?.diagnosticID == id }) {
