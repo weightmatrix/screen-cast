@@ -108,6 +108,7 @@ struct ReceiveTimingView: View {
 
 struct SenderPeerStatus: View {
     let peer: PeerDiagnostic
+    var selectRoute: ((CastRouteChoice) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -118,6 +119,29 @@ struct SenderPeerStatus: View {
                         .monospacedDigit()
                 } else {
                     Text("当前路径暂无带宽估计")
+                }
+            }
+            if let selectRoute {
+                if let pending = peer.switchingRoute {
+                    Text("正在验证\(pending.title)画面")
+                } else if let route = peer.routeChoice, route != .automatic {
+                    Text("视频走\(route.title) · 音频走原连接")
+                }
+                HStack(spacing: 6) {
+                    ForEach(CastRouteChoice.allCases, id: \.self) { route in
+                        let selected = (peer.routeChoice ?? .automatic) == route
+                        Button {
+                            selectRoute(route)
+                        } label: {
+                            if selected { Label(route.title, systemImage: "checkmark") }
+                            else { Text(route.title) }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(selected ? .accentColor : .secondary)
+                        .disabled(route == .automatic
+                            ? selected && peer.switchingRoute == nil
+                            : selected || peer.switchingRoute != nil || !(peer.availableRoutes ?? []).contains(route))
+                    }
                 }
             }
             HStack(spacing: 12) {
@@ -137,6 +161,7 @@ struct SenderPeerStatus: View {
 struct PeerDiagnosticsView: View {
     @ObservedObject private var room = RoomSession.shared
     let peers: [PeerDiagnostic]
+    var selectRoute: ((String, CastRouteChoice) -> Void)? = nil
     let disconnect: (String) -> Void
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -147,7 +172,7 @@ struct PeerDiagnosticsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(room.peerNicknames[peer.id] ?? peer.nickname ?? "访客·" + peer.id.prefix(4).uppercased())
                         ConnectionEntryView(peer: peer)
-                        SenderPeerStatus(peer: peer)
+                        SenderPeerStatus(peer: peer, selectRoute: selectRoute.map { select in { select(peer.id, $0) } })
                         ConnectionPathView(info: peer)
                         Text("网络 RTT \(ReceiveTiming.text(peer.rttMS))")
                     }.font(.system(size: 14, design: .monospaced))
