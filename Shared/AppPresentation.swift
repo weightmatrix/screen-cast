@@ -377,7 +377,10 @@ struct CopyConnectionReport: View {
     var status: String = ""
     var mode: String = ""
     var frames: Int? = nil
-    @State private var history: [String] = []
+    var previousPeer: PeerDiagnostic? = nil
+    var previousFrames: Int? = nil
+    @State private var history: [(stage: String, elapsed: Int)] = []
+    @State private var reportStart = ProcessInfo.processInfo.systemUptime
     @State private var copied = false
 
     private var stage: String {
@@ -415,14 +418,22 @@ struct CopyConnectionReport: View {
                           "当前阶段 \(stage)", "有路径样本的连接 \(peers.count)"]
             if let mode = modes[mode] { report.append("入口 " + mode) }
             if let frames { report.append("已收画面 \(frames) 帧") }
-            if !history.isEmpty { report.append("最近阶段 " + history.joined(separator: " → ")) }
-            for (index, peer) in peers.prefix(16).enumerated() {
+            if let previousFrames { report.append("上次断开前已收画面 \(previousFrames) 帧") }
+            if !history.isEmpty {
+                report.append("最近阶段 " + history.map { "+\($0.elapsed)s \($0.stage)" }.joined(separator: " → "))
+            }
+            let snapshots = Array(peers.prefix(16)) + (previousPeer.map { [$0] } ?? [])
+            for (index, peer) in snapshots.enumerated() {
+                let label = index >= min(peers.count, 16) ? "上次断开前路径" : "连接 \(index + 1)"
                 let route = peer.connectionLabel
                 let speed = peer.estimatedOutgoingBitsPerSecond.map { String(format: "%.1f Mbps", $0 / 1_000_000) } ?? "—"
                 let linkLocal = peer.localEndpoint.hasPrefix("169.254.") || peer.remoteEndpoint.hasPrefix("169.254.")
                 let mediaProtocol = peer.localEndpoint.hasSuffix(" UDP") ? "UDP" : peer.localEndpoint.hasSuffix(" TCP") ? "TCP" : "未知"
-                report.append("连接 \(index + 1) · \(route) · \(mediaProtocol) · 链路本地 IPv4 \(linkLocal ? "有" : "无")")
+                report.append("\(label) · \(route) · \(mediaProtocol) · 链路本地 IPv4 \(linkLocal ? "有" : "无")")
                 report.append("  RTT \(ReceiveTiming.text(peer.rttMS)) · 发送带宽估计 \(speed) · 收音 \(audio(peer.inboundAudio)) · 发音 \(audio(peer.outboundAudio))")
+                if let packets = peer.receivedVideoPackets {
+                    report.append("  视频包 \(packets) · 丢包 \(numeric(peer.lostVideoPackets)) · 解码帧 \(numeric(peer.decodedVideoFrames)) · 卡顿次数 \(numeric(peer.videoFreezeCount)) · 抖动 \(ReceiveTiming.text(peer.videoJitterMS))")
+                }
                 if let choice = peer.switchingRoute { report.append("  正在测试 " + choice.title) }
                 else if let choice = peer.routeChoice { report.append("  视频线路设置 " + choice.title) }
             }
@@ -442,10 +453,13 @@ struct CopyConnectionReport: View {
     }
 
     private func remember(_ stage: String) {
-        guard history.last != stage else { return }
-        history = Array((history + [stage]).suffix(12))
+        guard history.last?.stage != stage else { return }
+        let elapsed = Int(max(0, ProcessInfo.processInfo.systemUptime - reportStart))
+        history = Array((history + [(stage, elapsed)]).suffix(24))
         copied = false
     }
+
+    private func numeric(_ value: Int?) -> String { value.map(String.init) ?? "—" }
 
     private func audio(_ value: Bool?) -> String {
         value.map { $0 ? "有数据" : "无数据" } ?? "未知"

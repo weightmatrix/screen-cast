@@ -57,10 +57,13 @@ struct ContentView: View {
                 }
 
                 if !drawerOpen {
-                    Color.clear
-                        .frame(width: 30, height: geo.size.height)
-                        .contentShape(Rectangle())
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button(action: openDrawer) {
+                        Label("连接", systemImage: "sidebar.leading")
+                            .padding(8)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.leading, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -201,7 +204,8 @@ struct ContentView: View {
                     Text("连接信息与诊断").font(.headline)
                     ConnectionPathView(info: client.connectionInfo)
                     CopyConnectionReport(peers: client.connectionInfo.map { [$0] } ?? [],
-                                         status: statusText, mode: connectMode, frames: client.frameCount)
+                                         status: statusText, mode: connectMode, frames: client.frameCount,
+                                         previousPeer: client.lastConnectionInfo, previousFrames: client.lastConnectionFrames)
                     Text(MediaPath.preference).font(.caption).foregroundStyle(.secondary)
                     HStack { Circle().fill(statusColor).frame(width:8,height:8); Text(LocalizedStringKey(statusText)).font(.caption) }
                     if !client.recoveryMessage.isEmpty { Text(client.recoveryMessage).font(.caption) }

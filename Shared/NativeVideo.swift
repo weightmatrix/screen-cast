@@ -1097,6 +1097,14 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                     }
                 }
                 let availableOptions = options
+                let inboundVideo = report.statistics.values.first {
+                    $0.type == "inbound-rtp" && ($0.values["kind"] ?? $0.values["mediaType"]) as? String == "video"
+                }?.values
+                let packets = (inboundVideo?["packetsReceived"] as? NSNumber)?.intValue
+                let lost = (inboundVideo?["packetsLost"] as? NSNumber)?.intValue
+                let decoded = (inboundVideo?["framesDecoded"] as? NSNumber)?.intValue
+                let freezes = (inboundVideo?["freezeCount"] as? NSNumber)?.intValue
+                let jitter = (inboundVideo?["jitter"] as? NSNumber)?.doubleValue
                 func endpoint(_ key: String) -> String {
                     guard let cid = pair.values[key] as? String, let candidate = report.statistics[cid] else { return "—" }
                     let address = (candidate.values["address"] as? String) ?? (candidate.values["ip"] as? String) ?? "隐藏地址"
@@ -1157,6 +1165,8 @@ final class NativeVideoPeer: NSObject, RTCPeerConnectionDelegate, RTCVideoRender
                         rttMS: rtt.flatMap { $0.isFinite && $0 >= 0 ? $0 * 1000 : nil }, networkInterface: interfaceText, signals: signals,
                         inboundAudio: audioActivity.inbound, outboundAudio: audioActivity.outbound,
                         estimatedOutgoingBitsPerSecond: self.routeCommitted ? self.alternateBandwidth : outgoing,
+                        receivedVideoPackets: packets, lostVideoPackets: lost, decodedVideoFrames: decoded,
+                        videoFreezeCount: freezes, videoJitterMS: jitter.map { $0 * 1000 },
                         availableRoutes: self.routePeerCapable && self.routeControl?.readyState == .open ? CastRouteChoice.allCases.filter { availableOptions[$0] != nil } : [],
                         routeChoice: self.routeChoice, switchingRoute: self.pendingRoute,
                         source: RoomSession.shared.peerOrigins[self.diagnosticID], nickname: RoomSession.shared.peerNicknames[self.diagnosticID]))

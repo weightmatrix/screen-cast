@@ -451,6 +451,11 @@ struct PeerDiagnostic: Codable, Identifiable {
     var inboundAudio: Bool? = nil
     var outboundAudio: Bool? = nil
     var estimatedOutgoingBitsPerSecond: Double? = nil
+    var receivedVideoPackets: Int? = nil
+    var lostVideoPackets: Int? = nil
+    var decodedVideoFrames: Int? = nil
+    var videoFreezeCount: Int? = nil
+    var videoJitterMS: Double? = nil
     var availableRoutes: [CastRouteChoice]? = nil
     var routeChoice: CastRouteChoice? = nil
     var switchingRoute: CastRouteChoice? = nil

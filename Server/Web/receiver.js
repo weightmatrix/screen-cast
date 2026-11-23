@@ -58,7 +58,7 @@
     const address=candidate.split(/\s+/)[4] || '';
     if(address.endsWith('.local')) target.mdns++; else if(address.includes(':')) target.v6++; else if(/^\d+\./.test(address)) target.v4++;
   }
-  function connectionPath(stats) {
+  function connectionPath(stats, s) {
     let transport;
     stats.forEach(item=>{if(item.type==='transport' && item.selectedCandidatePairId)transport=item;});
     const pair=transport && stats.get(transport.selectedCandidatePairId);
@@ -83,13 +83,66 @@
     else if([local.candidateType,remote.candidateType].some(x=>['srflx','prflx'].includes(x)))route='公网候选直连（范围待确认）';
     const network={wifi:'Wi-Fi',ethernet:'有线网络（USB未确认）',cellular:'蜂窝网络',vpn:'VPN/隧道'}[local.networkType]||'浏览器未公开（不能确认USB/Wi-Fi）';
     const protocol=String(local.protocol||remote.protocol||'未知').toUpperCase();
+    if (s) s.safePath = {
+      route, network, protocol: ['UDP','TCP'].includes(protocol)?protocol:'未知',
+      candidates: [local,remote].map(c=>['host','srflx','prflx','relay'].includes(c.candidateType)?c.candidateType:'未知').join(' → '),
+      linkLocal: [local,remote].some(c=>/^169\.254\.|^fe[89ab]/i.test(address(c))),
+      rtt: Number.isFinite(pair.currentRoundTripTime)?Math.round(pair.currentRoundTripTime*1000):null
+    };
     const endpoint=c=>`${address(c)||'地址隐藏'}:${c.port??'—'}`;
     return `当前媒体路径：${route}\n本机接口：${network}\n传输协议：${protocol}\n实际媒体：${endpoint(local)} → ${endpoint(remote)}\n候选类型：${local.candidateType||'未知'} → ${remote.candidateType||'未知'}`;
   }
+  let lastReport = '';
+  document.addEventListener('visibilitychange', () => { if (current && !current.closed) diagnostics(current); });
   function diagnostics(s) {
+    const phase = s.closed?'已结束':s.picture?'已收到画面':s.connected?'媒体已连接':s.awaitingApproval?'等待审批':s.paired?'正在检查直连':'等待配对';
+    const ice = s.pc.iceConnectionState;
+    const entry = phase + ' / ICE ' + ice + ' / ' + document.visibilityState;
+    s.reportStart ??= performance.now();
+    s.reportHistory ??= [];
+    if (s.reportHistory.at(-1)?.entry !== entry) {
+      s.reportHistory.push({entry, seconds: Math.floor((performance.now()-s.reportStart)/1000)});
+      if (s.reportHistory.length > 24) s.reportHistory.shift();
+    }
+    const lines = ['投屏网页连接诊断 • 111', local?'入口 局域网页':'入口 公网页面',
+      '阶段 ' + phase, 'ICE ' + ice + ' / 收集 ' + s.pc.iceGatheringState,
+      'STUN 错误次数 ' + s.stunErrors,
+      '最近阶段 ' + s.reportHistory.map(x=>`+${x.seconds}s ${x.entry}`).join(' → ')];
+    if (s.closed) lines.push('结束原因 ' + (s.safeEnd || '已断开'));
+    if (s.safePath) {
+      const p = s.safePath;
+      lines.push(`最近路径 ${p.route} / ${p.network} / ${p.protocol} / ${p.candidates}`,
+        `链路本地地址 ${p.linkLocal?'有':'未检测到'} / RTT ${p.rtt??'—'} ms`);
+    }
+    for (const key of ['packetsReceived','packetsLost','bytesReceived','framesDecoded','framesDropped','freezeCount','jitter']) {
+      const value = s.media?.[key];
+      if (Number.isFinite(value)) lines.push(key + ' ' + value);
+    }
+    lastReport = lines.join('\n');
+
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：104\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：111\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
+  $('copy-diagnostics')?.addEventListener('click', async () => {
+    const button = $('copy-diagnostics');
+    const text = lastReport || '投屏网页连接诊断 • 111\n尚未开始连接';
+    try {
+      if (!navigator.clipboard) throw Error();
+      await navigator.clipboard.writeText(text);
+      button.textContent = '已复制连接诊断';
+    } catch {
+      const field = $('copy-diagnostics-text');
+      field.hidden = false;
+      field.value = text;
+      field.select();
+      try {
+        if (document.execCommand('copy')) {
+          button.textContent = '已复制连接诊断';
+          field.hidden = true;
+        }
+      } catch {}
+    }
+  });
   function mediaDescription(s) {
     const video=$('video'), track=s.stream?.getVideoTracks()[0], media=s.media;
     const value=key=>Number.isFinite(media?.[key])?media[key]:'未知';
@@ -133,7 +186,7 @@
       if(current!==s || s.closed)return;
       let inbound;
       stats.forEach(item=>{if(item.type==='inbound-rtp' && (item.kind||item.mediaType)==='video' && !item.isRemote)inbound=item;});
-      s.path=connectionPath(stats);
+      s.path=connectionPath(stats, s);
       const counters=new Map(),flowing=[];
       stats.forEach(item=>{
         if(!['inbound-rtp','outbound-rtp'].includes(item.type)||!['video','audio'].includes(item.kind||item.mediaType))return;
@@ -187,9 +240,10 @@
     if (!s || s.closed) return;
     if(s.connected) report(s, 'ended');
     window.ToupingRoom?.stop(s);
+    s.safeEnd = /超时/.test(text || '')?'超时':/中断/.test(text || '')?'网络中断':/拒绝|密码|认证/.test(text || '')?'接入失败':text?'会话结束':'已断开';
     s.closed = true; clearTimeout(s.timeout); clearTimeout(s.disconnected); clearTimeout(s.retry); clearInterval(s.clock); clearInterval(s.mediaClock);
     if (local && s.id) fetch('./leave', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:s.id}),keepalive:true}).catch(()=>{});
-    s.abort.abort(); if(s.ws) s.ws.close(); s.pc.close(); diagnostics(s);
+    s.abort.abort(); if(s.ws) s.ws.close(); diagnostics(s); s.pc.close();
     if (current === s) { current = null; $('video').srcObject = null; $('start').disabled=false; $('stop').disabled=true; $('play').disabled=true; status(text || '已断开'); }
   }
   function fail(s, error) { if (current === s && !s.closed) { console.warn('接收连接失败：', error.message); stop(s, error.message || '连接失败，请重试'); } }

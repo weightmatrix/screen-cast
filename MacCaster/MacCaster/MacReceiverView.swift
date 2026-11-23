@@ -144,7 +144,8 @@ struct MacReceiverView: View {
                     Text("连接信息与诊断").font(.headline)
                     ConnectionPathView(info: client.connectionInfo)
                     CopyConnectionReport(peers: client.connectionInfo.map { [$0] } ?? [],
-                                         status: statusText, mode: connectMode, frames: client.frameCount)
+                                         status: statusText, mode: connectMode, frames: client.frameCount,
+                                         previousPeer: client.lastConnectionInfo, previousFrames: client.lastConnectionFrames)
                     Text(MediaPath.preference).font(.caption).foregroundStyle(.secondary)
                     HStack { Circle().fill(statusColor).frame(width: 8,height: 8); Text(LocalizedStringKey(statusText)).font(.caption) }
                     if !client.recoveryMessage.isEmpty { Text(client.recoveryMessage).font(.caption).foregroundStyle(.secondary) }

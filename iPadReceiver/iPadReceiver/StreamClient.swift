@@ -42,6 +42,8 @@ final class StreamClient: ObservableObject {
     private func updateAudio() { nativePeer?.receiveAudio(page: receivesPageAudio, microphone: receivesMicrophone) }
     @Published private(set) var receiveTiming = ReceiveTiming()
     @Published private(set) var connectionInfo: PeerDiagnostic?
+    @Published private(set) var lastConnectionInfo: PeerDiagnostic?
+    @Published private(set) var lastConnectionFrames: Int?
     private var nativePeer: NativeVideoPeer?
     private var nativeRoom: NativeVideoRoom?
     private var internetDirect = false
@@ -270,6 +272,10 @@ final class StreamClient: ObservableObject {
         RoomAudioSettings.shared.setMicrophone(false)
         waitingForApproval = false
         if userInitiated { autoConnectStarted = true; recovery.stop() }
+        if connectionInfo != nil || frameCount > 0 {
+            lastConnectionInfo = connectionInfo
+            lastConnectionFrames = frameCount
+        }
         receiveTiming = ReceiveTiming(); connectionInfo = nil
         nativeRoom?.stop(); nativeRoom = nil
         nativePeer?.stop(); nativePeer = nil
