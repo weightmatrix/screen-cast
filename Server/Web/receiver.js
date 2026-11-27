@@ -104,7 +104,7 @@
       s.reportHistory.push({entry, seconds: Math.floor((performance.now()-s.reportStart)/1000)});
       if (s.reportHistory.length > 24) s.reportHistory.shift();
     }
-    const lines = ['投屏网页连接诊断 • 111', local?'入口 局域网页':'入口 公网页面',
+    const lines = ['投屏网页连接诊断 • 112', local?'入口 局域网页':'入口 公网页面',
       '阶段 ' + phase, 'ICE ' + ice + ' / 收集 ' + s.pc.iceGatheringState,
       'STUN 错误次数 ' + s.stunErrors,
       '最近阶段 ' + s.reportHistory.map(x=>`+${x.seconds}s ${x.entry}`).join(' → ')];
@@ -121,11 +121,11 @@
     lastReport = lines.join('\n');
 
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：111\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：112\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   $('copy-diagnostics')?.addEventListener('click', async () => {
     const button = $('copy-diagnostics');
-    const text = lastReport || '投屏网页连接诊断 • 111\n尚未开始连接';
+    const text = lastReport || '投屏网页连接诊断 • 112\n尚未开始连接';
     try {
       if (!navigator.clipboard) throw Error();
       await navigator.clipboard.writeText(text);
@@ -156,7 +156,7 @@
     if(current!==s || s.closed || !s.connected) return;
     const video=$('video');
     if(pictureReady(s)) {
-      if(!s.picture) {s.picture=true;status('已连接 · 已收到画面');}
+      if(!s.picture) {s.picture=true;status('已连接 · 已收到画面');void maximize(true, s);}
     } else if(!s.picture && performance.now()-s.connectedAt>=12000) {
       if(s.playError) status('已直连，但播放器尚未播放；请点击“播放画面”');
       else if(!s.stream?.getVideoTracks().length) status('已直连，但没有收到视频轨道；请检查投送端是否仍在分享');
@@ -244,7 +244,7 @@
     s.closed = true; clearTimeout(s.timeout); clearTimeout(s.disconnected); clearTimeout(s.retry); clearInterval(s.clock); clearInterval(s.mediaClock);
     if (local && s.id) fetch('./leave', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:s.id}),keepalive:true}).catch(()=>{});
     s.abort.abort(); if(s.ws) s.ws.close(); diagnostics(s); s.pc.close();
-    if (current === s) { current = null; $('video').srcObject = null; $('start').disabled=false; $('stop').disabled=true; $('play').disabled=true; status(text || '已断开'); }
+    if (current === s) { setPageFullscreen(false); current = null; $('video').srcObject = null; $('start').disabled=false; $('stop').disabled=true; $('play').disabled=true; status(text || '已断开'); }
   }
   function fail(s, error) { if (current === s && !s.closed) { console.warn('接收连接失败：', error.message); stop(s, error.message || '连接失败，请重试'); } }
   async function receive(s, packet) {
@@ -404,22 +404,38 @@
   $('video').volume=Number.isFinite(rememberedVolume)?Math.max(0,Math.min(1,rememberedVolume)):1;
   $('video').addEventListener('volumechange',()=>{syncSound();writePreference('touping-speaker-muted',String($('video').muted));writePreference('touping-speaker-volume',String($('video').volume));});
   $('speaker-sound').onclick=toggleSound;syncSound();
-  // Use the media element's native fullscreen player; no persistent page overlay.
-  const maximize=async()=>{
-    const video=$('video');
-    try {
-      if(document.fullscreenElement) {await document.exitFullscreen();return;}
-      if(video.webkitDisplayingFullscreen) {video.webkitExitFullscreen();return;}
-      if(video.requestFullscreen) {
-        try {await video.requestFullscreen();return;}
-        catch(error) {if(!video.webkitEnterFullscreen && !video.webkitRequestFullscreen)throw error;}
-      }
-      if(video.webkitEnterFullscreen) {video.webkitEnterFullscreen();return;}
-      if(video.webkitRequestFullscreen) {video.webkitRequestFullscreen();return;}
-      status('请使用视频系统控制栏的全屏按钮；当前浏览器未开放网页全屏。');
-    } catch(_) {status('请使用视频系统控制栏的全屏按钮；画面就绪后再试。');}
+  const setPageFullscreen = enabled => {
+    document.documentElement.classList.toggle('watch-fullscreen', enabled);
+    controlText($('fullscreen'), enabled ? '退出全屏' : '全屏观看');
   };
-  $('fullscreen').onclick=maximize;
+  const maximize = async (automatic = false, session = current) => {
+    const video = $('video');
+    if (document.documentElement.classList.contains('watch-fullscreen')) {
+      if (!automatic) setPageFullscreen(false);
+      return;
+    }
+    try {
+      if (document.fullscreenElement) {
+        if (!automatic) await document.exitFullscreen();
+        return;
+      }
+      if (video.webkitDisplayingFullscreen) {
+        if (!automatic) video.webkitExitFullscreen();
+        return;
+      }
+      if (video.requestFullscreen) {
+        try { await video.requestFullscreen(); return; }
+        catch (_) { /* Try the platform player before using the page viewport. */ }
+      }
+      if (video.webkitEnterFullscreen) { video.webkitEnterFullscreen(); return; }
+      if (video.webkitRequestFullscreen) { video.webkitRequestFullscreen(); return; }
+    } catch (_) { /* Native fullscreen may require a user gesture. */ }
+    if (current === session && (!automatic || session && !session.closed)) setPageFullscreen(true);
+  };
+  $('fullscreen').onclick = () => maximize();
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') setPageFullscreen(false);
+  });
   // Keep a visible entry even when native media controls hide their route button.
   const castVideo=$('cast-video'), video=$('video');
   const syncCast=()=>{

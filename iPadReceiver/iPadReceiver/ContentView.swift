@@ -136,7 +136,9 @@ struct ContentView: View {
                 break
             }
         }
-        .onChange(of: isConnected) { connected in if !connected { openDrawer() } }
+        .onChange(of: isConnected) { connected in
+            if connected { closeDrawer() } else { openDrawer() }
+        }
         .onDisappear { RoomAudioSettings.shared.setMicrophone(false); client.disconnect(); DiscoveryListener.shared.stop() }
     }
 

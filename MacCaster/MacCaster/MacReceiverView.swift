@@ -41,6 +41,14 @@ struct MacReceiverView: View {
                     .offset(x: drawerOpen ? 0 : -macDrawerWidth)
                 Spacer()
             }
+            if !drawerOpen {
+                Button(action: openDrawer) {
+                    Label("连接", systemImage: "sidebar.leading")
+                }
+                .buttonStyle(.bordered)
+                .padding(.leading, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
         .background(Color.black)
         .overlay {
@@ -74,7 +82,9 @@ struct MacReceiverView: View {
             let p = UInt16(portText) ?? 8318
             client.autoSearch(mode: connectMode, host: host, port: p, code: matchCode)
         }
-        .onChange(of: isConnected) { connected in if !connected { openDrawer() } }
+        .onChange(of: isConnected) { connected in
+            if connected { closeDrawer() } else { openDrawer() }
+        }
         .onDisappear { RoomAudioSettings.shared.setMicrophone(false); client.disconnect(); client.recorder.stop() }
     }
 
