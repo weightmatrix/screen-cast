@@ -41,14 +41,6 @@ struct MacReceiverView: View {
                     .offset(x: drawerOpen ? 0 : -macDrawerWidth)
                 Spacer()
             }
-            if !drawerOpen {
-                Button(action: openDrawer) {
-                    Label("连接", systemImage: "sidebar.leading")
-                }
-                .buttonStyle(.bordered)
-                .padding(.leading, 12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
         .background(Color.black)
         .overlay {

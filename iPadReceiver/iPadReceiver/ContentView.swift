@@ -56,15 +56,6 @@ struct ContentView: View {
                     Spacer()
                 }
 
-                if !drawerOpen {
-                    Button(action: openDrawer) {
-                        Label("连接", systemImage: "sidebar.leading")
-                            .padding(8)
-                    }
-                    .buttonStyle(.bordered)
-                    .padding(.leading, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
         }
         .preferredColorScheme(AppSkin.victorian(skin) ? .light : .dark)
