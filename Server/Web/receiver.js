@@ -97,16 +97,19 @@
   function diagnostics(s) {
     const phase = s.closed?'已结束':s.picture?'已收到画面':s.connected?'媒体已连接':s.awaitingApproval?'等待审批':s.paired?'正在检查直连':'等待配对';
     const ice = s.pc.iceConnectionState;
-    const entry = phase + ' / ICE ' + ice + ' / ' + document.visibilityState;
+    const entry = phase + ' / ' + (s.signalStage || '等待信令') + ' / ICE ' + ice + ' / ' + document.visibilityState;
     s.reportStart ??= performance.now();
     s.reportHistory ??= [];
     if (s.reportHistory.at(-1)?.entry !== entry) {
       s.reportHistory.push({entry, seconds: Math.floor((performance.now()-s.reportStart)/1000)});
       if (s.reportHistory.length > 24) s.reportHistory.shift();
     }
-    const lines = ['投屏网页连接诊断 • 112', local?'入口 局域网页':'入口 公网页面',
+    const lines = ['投屏网页连接诊断 • 114', local?'入口 局域网页':'入口 公网页面',
       '阶段 ' + phase, 'ICE ' + ice + ' / 收集 ' + s.pc.iceGatheringState,
-      'STUN 错误次数 ' + s.stunErrors,
+      '信令阶段 ' + (s.signalStage || '等待信令'),
+      'WebSocket 关闭码 ' + (s.wsCloseCode ?? '未收到'),
+      '候选（本机/对端） ' + [s.localCandidates,s.remoteCandidates].map(c=>`IPv4=${c.v4||0}, IPv6=${c.v6||0}, mDNS=${c.mdns||0}`).join(' / '),
+      'STUN 错误次数 ' + s.stunErrors + ' / 最近错误码 ' + (s.stunCode || '无'),
       '最近阶段 ' + s.reportHistory.map(x=>`+${x.seconds}s ${x.entry}`).join(' → ')];
     if (s.closed) lines.push('结束原因 ' + (s.safeEnd || '已断开'));
     if (s.safePath) {
@@ -121,11 +124,11 @@
     lastReport = lines.join('\n');
 
     const describe=c=>`host=${c.host||0}, srflx=${c.srflx||0}, IPv4=${c.v4}, IPv6=${c.v6}, mDNS=${c.mdns}`;
-    $('diagnostics').textContent=`网页版本：112\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
+    $('diagnostics').textContent=`网页版本：114\n阶段：${s.closed?'已结束':s.connected?(s.picture?'已收到画面':'已直连，等待画面'):s.paired?'配对完成，直连检查':'等待配对'}\n${s.path||'当前媒体路径：等待实际路径统计'}\n先尝试设备直连；失败后仅SVIP投屏者可为该对象启用服务器中转\n最近采样传输：${s.flowing||'等待采样'}\nICE：${s.pc.iceConnectionState} / 收集：${s.pc.iceGatheringState}\n本机候选：${describe(s.localCandidates)}\n对端候选：${describe(s.remoteCandidates)}\nSTUN错误次数：${s.stunErrors}，最近错误码：${s.stunCode||'无'}\n${mediaDescription(s)}`;
   }
   $('copy-diagnostics')?.addEventListener('click', async () => {
     const button = $('copy-diagnostics');
-    const text = lastReport || '投屏网页连接诊断 • 112\n尚未开始连接';
+    const text = lastReport || '投屏网页连接诊断 • 114\n尚未开始连接';
     try {
       if (!navigator.clipboard) throw Error();
       await navigator.clipboard.writeText(text);
@@ -240,7 +243,7 @@
     if (!s || s.closed) return;
     if(s.connected) report(s, 'ended');
     window.ToupingRoom?.stop(s);
-    s.safeEnd = /超时/.test(text || '')?'超时':/中断/.test(text || '')?'网络中断':/拒绝|密码|认证/.test(text || '')?'接入失败':text?'会话结束':'已断开';
+    s.safeEnd = s.safeEnd || (/超时/.test(text || '')?'超时':/中断/.test(text || '')?'网络中断':/拒绝|密码|认证/.test(text || '')?'接入失败':text?'会话结束':'已断开');
     s.closed = true; clearTimeout(s.timeout); clearTimeout(s.disconnected); clearTimeout(s.retry); clearInterval(s.clock); clearInterval(s.mediaClock);
     if (local && s.id) fetch('./leave', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:s.id}),keepalive:true}).catch(()=>{});
     s.abort.abort(); if(s.ws) s.ws.close(); diagnostics(s); s.pc.close();
@@ -252,6 +255,7 @@
     if ((s.received += JSON.stringify(packet).length) > 65536) throw Error('连接响应超过限制');
     if(packet.type === 'challenge') {
       if(!/^[a-f0-9]{32}$/.test(packet.nonce || '')) throw Error('无效连接验证');
+      s.signalStage = '已收到验证挑战'; diagnostics(s);
       send(s,{type:'apply',proof:ToupingAuth.proof(s.verifier,packet.nonce),application:s.application,nickname:window.ToupingRoom?.nickname?.()||$('nickname').value.trim().slice(0,32)||'访客'});
     } else if(packet.type === 'waiting_approval') {
       status('接入申请已提交，等待投送者接受…');
@@ -289,7 +293,14 @@
       tally(s.remoteCandidates,packet.candidate); diagnostics(s);
       const ice = {candidate:packet.candidate,sdpMid:packet.mid,sdpMLineIndex:packet.line};
       if (s.pc.remoteDescription && !s.relayAwaitingOffer) await s.pc.addIceCandidate(ice); else s.ice.push(ice);
-    } else if (packet.type === 'error') throw Error(packet.message || '未找到发送端');
+    } else if (packet.type === 'error') {
+      s.signalStage = '配对服务已返回错误';
+      if (packet.message === '未找到投屏，请检查邀请链接') s.safeEnd = '配对服务未找到该匹配码的在线发送端';
+      else if (/密码|认证|验证/.test(packet.message || '')) s.safeEnd = '配对服务拒绝接入验证';
+      else if (/队列|繁忙/.test(packet.message || '')) s.safeEnd = '配对服务繁忙或申请队列已满';
+      else s.safeEnd = '配对服务返回其他错误';
+      throw Error(packet.message || '未找到发送端');
+    }
   }
   function browserDevice() {
     let id;
@@ -315,13 +326,21 @@
     const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(code));
     const room=Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
     const url=new URL('./signal',location.href); url.protocol='wss:';
-    const ws=new WebSocket(url); s.ws=ws;
-    ws.onopen=()=>{ if(current!==s) return ws.close(); ws.send(JSON.stringify({role:'receiver',room,device:browserDevice(),protocol:2})); };
+    const ws=new WebSocket(url); s.ws=ws; s.signalStage='正在打开公网信令'; diagnostics(s);
+    ws.onopen=()=>{ if(current!==s) return ws.close(); s.signalStage='公网信令已打开，正在查询发送端'; diagnostics(s); ws.send(JSON.stringify({role:'receiver',room,device:browserDevice(),protocol:2})); };
     ws.onmessage=event=>{ s.chain=s.chain.then(()=>receive(s,JSON.parse(event.data))).catch(error=>fail(s,error)); };
     // The pairing server deliberately closes once both peers report connected.
     // Some browsers emit an error as that short-lived signaling socket closes.
-    ws.onerror=()=>{if(!s.connected) fail(s,Error('无法连接配对服务，请检查网络'));};
-    ws.onclose=()=>{ if(!s.closed && !s.connected) fail(s,Error(s.paired?'配对成功，但本次媒体连接失败，请查看直连/服务器中转诊断':'配对已结束，请确认发送端在线后重试')); };
+    ws.onerror=()=>{s.wsTransportError=true;};
+    ws.onclose=event=>{
+      s.wsCloseCode=event.code;
+      s.chain=s.chain.then(()=>{
+        if(current!==s || s.closed) return;
+        if(s.connected) { diagnostics(s); return; }
+        s.safeEnd=s.wsTransportError?'信令传输异常关闭':'信令在媒体连接前关闭';
+        fail(s,Error(s.paired?'配对成功，但本次媒体连接失败，请查看直连/服务器中转诊断':'配对已结束，请确认发送端在线后重试'));
+      });
+    };
   }
   async function localJoin(s, code) {
     const challenge=await fetch('./challenge',{cache:'no-store',signal:s.abort.signal}).then(response=>response.json());
